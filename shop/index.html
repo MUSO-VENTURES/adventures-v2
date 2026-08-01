@@ -16,6 +16,14 @@
     --cream:#fff7ed;
     --ink:#2a2438;
     --card:#ffffff;
+    --shadow-rgb:42,36,56;
+  }
+  /* Binary day/night (see the shared detector script near the bottom of
+     body) — light by day, dark by night, no gradual transition. Card/ink/
+     bg are used pervasively via var(), so overriding just these three
+     cascades dark mode through nearly the whole page. */
+  :root[data-theme="dark"]{
+    --cream:#0a0912; --ink:#f7f3ff; --card:#1b1730; --shadow-rgb:0,0,0;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; font-size:106.25%;}
@@ -31,9 +39,9 @@
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 6vw;
-    background:rgba(255,247,237,0.9);
+    background:var(--cream);
     backdrop-filter:blur(8px);
-    border-bottom:2px solid rgba(42,36,56,0.06);
+    border-bottom:2px solid rgba(var(--shadow-rgb),0.06);
   }
   .logo{
     font-family:'Fredoka', sans-serif;
@@ -49,12 +57,12 @@
   .shop-account-bar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end; }
   .signin-form{ display:flex; gap:6px; }
   .signin-form input{
-    padding:8px 12px; border-radius:999px; border:1.5px solid rgba(42,36,56,0.15);
+    padding:8px 12px; border-radius:999px; border:1.5px solid rgba(var(--shadow-rgb),0.15);
     font-family:'Nunito', sans-serif; font-size:0.85rem; width:170px;
   }
   .signin-form input:focus{ outline:none; border-color:var(--teal); }
   .signin-btn{
-    padding:8px 16px; border-radius:999px; border:none; background:var(--ink); color:#fff;
+    padding:8px 16px; border-radius:999px; border:none; background:var(--ink); color:var(--cream);
     font-weight:600; font-size:0.85rem; cursor:pointer; font-family:'Nunito', sans-serif;
   }
   .signin-btn:hover{ background:var(--plum); }
@@ -89,7 +97,7 @@
   }
   .unlock-card{
     background:var(--card); border-radius:18px; padding:22px 20px;
-    box-shadow:0 6px 20px rgba(42,36,56,0.08); text-align:center;
+    box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.08); text-align:center;
     display:flex; flex-direction:column; gap:8px;
   }
   .unlock-card .u-emoji{ font-size:2.4rem; }
@@ -109,7 +117,7 @@
   }
   .pack-card{
     position:relative; background:var(--card); border-radius:20px; padding:28px 18px 22px;
-    box-shadow:0 6px 20px rgba(42,36,56,0.08); text-align:center;
+    box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.08); text-align:center;
     display:flex; flex-direction:column; align-items:center; gap:6px;
     border:2px solid transparent; transition:transform .15s;
   }
@@ -145,10 +153,10 @@
   }
   .pass-card{
     background:var(--card); border-radius:22px; padding:32px 28px;
-    box-shadow:0 8px 28px rgba(42,36,56,0.1); display:flex; flex-direction:column; gap:14px;
+    box-shadow:0 8px 28px rgba(var(--shadow-rgb),0.1); display:flex; flex-direction:column; gap:14px;
     border:2px solid transparent;
   }
-  .pass-card.plus{ border-color:var(--plum); background:linear-gradient(180deg, #ffffff 0%, #f7f4fc 100%); }
+  .pass-card.plus{ border-color:var(--plum); background:var(--card); }
   .pass-card .pass-name{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.3rem; display:flex; align-items:center; gap:8px; }
   .pass-card .pass-price{ font-size:2rem; font-weight:700; font-family:'Fredoka',sans-serif; }
   .pass-card .pass-price span{ font-size:0.95rem; font-weight:500; opacity:0.6; }
@@ -175,13 +183,13 @@
      the MUSO Pass sheet, the coin-pack sheet, and the badge celebration —
      each supplies its own inner content classes) ---------- */
   .sheet-backdrop{
-    position:fixed; inset:0; background:rgba(42,36,56,0.32);
+    position:fixed; inset:0; background:rgba(var(--shadow-rgb),0.32);
     opacity:0; transition:opacity .3s ease; z-index:200; pointer-events:none;
   }
   .sheet-backdrop.show{ opacity:1; pointer-events:auto; }
   .expand-sheet{
     position:fixed; overflow:hidden; background:var(--cream);
-    box-shadow:0 24px 60px rgba(42,36,56,0.28);
+    box-shadow:0 24px 60px rgba(var(--shadow-rgb),0.28);
     transition:top .42s cubic-bezier(.22,.85,.32,1), left .42s cubic-bezier(.22,.85,.32,1),
       width .42s cubic-bezier(.22,.85,.32,1), height .42s cubic-bezier(.22,.85,.32,1),
       border-radius .42s cubic-bezier(.22,.85,.32,1);
@@ -198,8 +206,8 @@
   }
   .expand-sheet.content-in .pass-sheet-topbar{ opacity:1; transform:translateY(0); }
   .pass-sheet-back{
-    width:36px; height:36px; border-radius:50%; background:#fff; border:none;
-    box-shadow:0 3px 10px rgba(42,36,56,0.12); cursor:pointer; font-size:1rem;
+    width:36px; height:36px; border-radius:50%; background:var(--card); border:none;
+    box-shadow:0 3px 10px rgba(var(--shadow-rgb),0.12); cursor:pointer; font-size:1rem;
     display:flex; align-items:center; justify-content:center;
   }
   .pass-sheet-icon{
@@ -223,8 +231,8 @@
 
   .pass-sheet-perks{
     list-style:none; display:flex; flex-direction:column; gap:12px;
-    background:#fff; border-radius:18px; padding:20px; margin-bottom:22px;
-    box-shadow:0 6px 20px rgba(42,36,56,0.06);
+    background:var(--card); border-radius:18px; padding:20px; margin-bottom:22px;
+    box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.06);
   }
   .pass-sheet-perks li{ display:flex; align-items:center; justify-content:space-between; font-size:0.94rem; gap:10px; }
   .pass-sheet-perks li .label{ display:flex; align-items:center; gap:8px; }
@@ -240,14 +248,14 @@
 
   .pass-sheet-tier{
     display:flex; align-items:center; justify-content:space-between; gap:14px;
-    background:#fff; border:2px solid rgba(42,36,56,0.1); border-radius:16px;
+    background:var(--card); border:2px solid rgba(var(--shadow-rgb),0.1); border-radius:16px;
     padding:16px 18px; margin-bottom:12px; cursor:pointer; transition:border-color .2s, box-shadow .2s;
   }
   .pass-sheet-tier.selected{ border-color:var(--coral); box-shadow:0 4px 16px rgba(232,80,63,0.18); }
   .pass-sheet-tier .pt-name{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; display:flex; align-items:center; gap:8px; }
   .pass-sheet-tier .pt-price{ font-size:0.85rem; opacity:0.65; margin-top:2px; }
   .pass-sheet-tier .pt-radio{
-    width:22px; height:22px; border-radius:50%; border:2px solid rgba(42,36,56,0.25);
+    width:22px; height:22px; border-radius:50%; border:2px solid rgba(var(--shadow-rgb),0.25);
     flex-shrink:0; position:relative; transition:border-color .2s;
   }
   .pass-sheet-tier.selected .pt-radio{ border-color:var(--coral); }
@@ -279,7 +287,7 @@
   .faq-list{ display:flex; flex-direction:column; gap:14px; margin-top:32px; }
   .faq-item{
     background:var(--card); border-radius:16px; padding:18px 22px;
-    box-shadow:0 4px 14px rgba(42,36,56,0.06);
+    box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.06);
   }
   .faq-q{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.98rem; margin-bottom:6px; }
   .faq-a{ font-size:0.88rem; opacity:0.75; line-height:1.5; }
@@ -287,6 +295,17 @@
   footer{ padding:6vh 6vw 5vh; text-align:center; }
   footer p{ opacity:0.55; font-size:0.85rem; max-width:520px; margin:0 auto; line-height:1.5; }
 </style>
+<script>
+  // Binary day/night, driven by the viewer's own device clock (always
+  // local time already — no geolocation needed). Runs synchronously
+  // before paint so there's no flash of the wrong theme. Same 6am/8pm
+  // boundary used across every MUSO Adventures page.
+  (function(){
+    var h = new Date().getHours();
+    var isDay = h >= 6 && h < 20;
+    document.documentElement.setAttribute('data-theme', isDay ? 'light' : 'dark');
+  })();
+</script>
 </head>
 <body>
 

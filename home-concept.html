@@ -782,16 +782,13 @@
   <button type="button" class="time-control-close" id="time-control-close" aria-label="Close preview control">&times;</button>
   <div class="time-control-eyebrow">PREVIEW CONTROL — NOT PART OF THE APP</div>
   <div class="time-control-row">
-    <span class="time-control-label">Scrub through the day to preview the theme</span>
+    <span class="time-control-label">Interface follows your device's local time</span>
     <span class="time-control-value" id="time-value">9:41 PM</span>
   </div>
-  <input type="range" class="time-slider" id="time-slider" min="0" max="23.98" step="0.05" value="21.68">
   <div class="time-presets">
-    <button class="time-preset-btn" data-hour="6">Dawn</button>
-    <button class="time-preset-btn" data-hour="13">Midday</button>
-    <button class="time-preset-btn" data-hour="18.5">Sunset</button>
-    <button class="time-preset-btn" data-hour="23">Night</button>
-    <button class="time-preset-btn play" id="play-btn">▶ Play a full day</button>
+    <button class="time-preset-btn" id="theme-preview-day">☀️ Preview Day</button>
+    <button class="time-preset-btn" id="theme-preview-night">🌙 Preview Night</button>
+    <button class="time-preset-btn" id="theme-preview-auto">🕐 Use real time</button>
   </div>
 </div>
 
@@ -891,91 +888,44 @@
     recapOverlay.classList.remove('show');
   });
 
-  // ---------- DAY/NIGHT TIME-OF-DAY ENGINE ----------
-  // Keyframe stops (hour -> theme). Colors interpolate linearly between the
-  // two nearest stops. h:0 and h:24 are identical so the cycle loops.
-  // Night leans into deep purple/blue glow (frosted-glass, glowing accent
-  // aesthetic); day keeps the warm brand accents but the sky itself reads
-  // as a cooler daytime blue fading to a warm horizon.
-  const warm = { primary:'#e8503f', secondary:'#f2994a', tertiary:'#0ea5a0', tertiaryDeep:'#0b6e68', quaternary:'#5b4b8a', quaternaryLight:'#8a76c9' };
-  const nightAccent = { primary:'#8b7cf6', secondary:'#5eb8f0', tertiary:'#2dd4bf', tertiaryDeep:'#1a9c8f', quaternary:'#4c3d99', quaternaryLight:'#8677d9' };
+  // ---------- DAY/NIGHT (binary, real local device time) ----------
+  // Exactly two fixed interface states — light by day, dark by night —
+  // switching at a fixed local-clock boundary rather than gradually
+  // animating through a color gradient. Uses the *viewer's own device*
+  // clock (JS Date is always local time, so this already respects
+  // whatever timezone they're actually in — no geolocation needed).
+  // Greeting copy still varies by time of day since that's just content,
+  // not a color decision.
+  const DAY_START_HOUR = 6;    // 6:00am local
+  const NIGHT_START_HOUR = 20; // 8:00pm local
 
-  const STOPS = [
-    { h:0,    bg:'#0a0912', headerTop:'#151029', text:'#f1eefb', ...nightAccent, skyTop:'#07060d', skyBottom:'#221a42', orb:'#e8e2ff', glow:'rgba(139,124,246,0.4)',  stars:1,   greet:'Good night' },
-    { h:5,    bg:'#2e2246', headerTop:'#5a3f6b', text:'#f5eef0', primary:'#c76fa8', secondary:'#e0824f', tertiary:'#5b93d9', tertiaryDeep:'#3f6bb0', quaternary:'#7c6cf0', quaternaryLight:'#a897f5', skyTop:'#332356', skyBottom:'#e88a5c', orb:'#ffcf9c', glow:'rgba(255,180,140,0.5)', stars:0.3, greet:'Good morning' },
-    // Sunrise midpoint — a straight RGB blend between the deep-violet
-    // dawn stop and the bright-cream day stop passes through a muddy,
-    // "uneasy" gray-brown around 6:15-7:30am (same failure mode as the
-    // text-contrast bug: linear interpolation between very different
-    // hues degrades in the middle). This stop routes the transition
-    // through an actual warm sunrise-peach instead.
-    { h:6.25, bg:'#ffd9b8', headerTop:'#ffcba3', text:'#2a2438', primary:'#e06a5f', secondary:'#f0924a', tertiary:'#4a9dc9', tertiaryDeep:'#337aa3', quaternary:'#8a6ecf', quaternaryLight:'#b3a0e8', skyTop:'#f5b98a', skyBottom:'#fff0dc', orb:'#ffdca0', glow:'rgba(255,200,140,0.5)', stars:0.05, greet:'Good morning' },
-    { h:7.5,  bg:'#fff2e4', headerTop:'#c9e6f7', text:'#2a2438', ...warm,        skyTop:'#bfe0f5', skyBottom:'#fff2e0', orb:'#ffcf7a', glow:'rgba(255,200,120,0.45)', stars:0,   greet:'Good morning' },
-    { h:13,   bg:'#fffaf3', headerTop:'#a9d8f0', text:'#2a2438', ...warm,        skyTop:'#a9d8f0', skyBottom:'#fffaf3', orb:'#ffdf8a', glow:'rgba(255,223,140,0.5)',  stars:0,   greet:'Good afternoon' },
-    { h:17.5, bg:'#fbe0c9', headerTop:'#f2a15c', text:'#3a2438', primary:'#e0563f', secondary:'#c94f7c', tertiary:'#7c5ba6', tertiaryDeep:'#5b3f80', quaternary:'#4a3566', quaternaryLight:'#7a5c9c', skyTop:'#8a5a8c', skyBottom:'#f2924f', orb:'#ffb15c', glow:'rgba(255,140,90,0.55)', stars:0.15, greet:'Good evening' },
-    { h:20,   bg:'#160f2a', headerTop:'#241a42', text:'#f1eefb', ...nightAccent, skyTop:'#0f0a20', skyBottom:'#332156', orb:'#cbb8f5', glow:'rgba(139,124,246,0.42)', stars:0.6, greet:'Good evening' },
-    { h:24,   bg:'#0a0912', headerTop:'#151029', text:'#f1eefb', ...nightAccent, skyTop:'#07060d', skyBottom:'#221a42', orb:'#e8e2ff', glow:'rgba(139,124,246,0.4)',  stars:1,   greet:'Good night' },
-  ];
+  const THEME = {
+    day: {
+      bg:'#fffaf3', text:'#2a2438',
+      primary:'#e8503f', secondary:'#f2994a', tertiary:'#0ea5a0', tertiaryDeep:'#0b6e68',
+      quaternary:'#5b4b8a', quaternaryLight:'#8a76c9',
+      cardBg:'rgba(255,255,255,0.6)', cardBorder:'rgba(255,255,255,0.7)',
+      raisedBg:'#2a2438', raisedFg:'#ffffff', starsOpacity:0,
+    },
+    night: {
+      bg:'#0a0912', text:'#f7f3ff',
+      primary:'#8b7cf6', secondary:'#5eb8f0', tertiary:'#2dd4bf', tertiaryDeep:'#1a9c8f',
+      quaternary:'#4c3d99', quaternaryLight:'#8677d9',
+      cardBg:'rgba(255,255,255,0.07)', cardBorder:'rgba(255,255,255,0.12)',
+      raisedBg:'#8b7cf6', raisedFg:'#0a0912', starsOpacity:1,
+    },
+  };
 
   function hexToRgb(hex){
     const n = parseInt(hex.replace('#',''), 16);
     return [(n>>16)&255, (n>>8)&255, n&255];
   }
-  function rgbToHex(r,g,b){
-    return '#' + [r,g,b].map(v => Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('');
-  }
-  function lerpColor(a, b, t){
-    const [ar,ag,ab] = hexToRgb(a), [br,bg,bb] = hexToRgb(b);
-    return rgbToHex(ar+(br-ar)*t, ag+(bg-ag)*t, ab+(bb-ab)*t);
-  }
-  function lerpRgba(a, b, t){
-    const pa = a.match(/[\d.]+/g).map(Number), pb = b.match(/[\d.]+/g).map(Number);
-    const r = pa.map((v,i) => v + (pb[i]-v)*t);
-    return `rgba(${Math.round(r[0])},${Math.round(r[1])},${Math.round(r[2])},${r[3].toFixed(2)})`;
-  }
-  function lerpNum(a,b,t){ return a + (b-a)*t; }
-
-  // Relative luminance (WCAG-style, simplified sRGB gamma). Used to pick
-  // text ink from the *actual current* background rather than
-  // interpolating text color as its own channel — blending two text
-  // colors in lockstep with a blending background produces a gray-on-gray
-  // dead zone right at the dawn/dusk crossover, which is unreadable.
-  function luminance(hex){
-    const [r,g,b] = hexToRgb(hex).map(v => {
-      const c = v / 255;
-      return c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
-    });
-    return 0.2126*r + 0.7152*g + 0.0722*b;
-  }
-  const DARK_INK = '#2a2438';
-  const LIGHT_INK = '#f7f3ff';
-
-  function themeAt(hour){
-    for(let i=0; i<STOPS.length-1; i++){
-      const lo = STOPS[i], hi = STOPS[i+1];
-      if(hour >= lo.h && hour <= hi.h){
-        const t = (hour - lo.h) / (hi.h - lo.h);
-        const bg = lerpColor(lo.bg, hi.bg, t);
-        return {
-          bg,
-          headerTop: lerpColor(lo.headerTop, hi.headerTop, t),
-          text: luminance(bg) > 0.4 ? DARK_INK : LIGHT_INK,
-          primary: lerpColor(lo.primary, hi.primary, t),
-          secondary: lerpColor(lo.secondary, hi.secondary, t),
-          tertiary: lerpColor(lo.tertiary, hi.tertiary, t),
-          tertiaryDeep: lerpColor(lo.tertiaryDeep, hi.tertiaryDeep, t),
-          quaternary: lerpColor(lo.quaternary, hi.quaternary, t),
-          quaternaryLight: lerpColor(lo.quaternaryLight, hi.quaternaryLight, t),
-          skyTop: lerpColor(lo.skyTop, hi.skyTop, t),
-          skyBottom: lerpColor(lo.skyBottom, hi.skyBottom, t),
-          orb: lerpColor(lo.orb, hi.orb, t),
-          glow: lerpRgba(lo.glow, hi.glow, t),
-          stars: lerpNum(lo.stars, hi.stars, t),
-          greet: t < 0.5 ? lo.greet : hi.greet,
-        };
-      }
-    }
-    return STOPS[0];
+  function isDaytimeHour(hour){ return hour >= DAY_START_HOUR && hour < NIGHT_START_HOUR; }
+  function greetingForHour(hour){
+    if(hour >= 5 && hour < 12) return 'Good morning';
+    if(hour >= 12 && hour < 17) return 'Good afternoon';
+    if(hour >= 17 && hour < 21) return 'Good evening';
+    return 'Good night';
   }
 
   const phone = document.getElementById('phone');
@@ -983,25 +933,15 @@
   const pageStars = document.getElementById('page-stars');
   const statusbar = document.getElementById('statusbar');
 
-  function formatTime(hour){
-    const h = Math.floor(hour);
-    const m = Math.round((hour - h) * 60);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    let h12 = h % 12; if(h12 === 0) h12 = 12;
-    return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
-  }
+  let themePreviewOverride = null; // 'day' | 'night' | null (null = follow real device time)
 
-  function applyTime(hour){
-    hour = ((hour % 24) + 24) % 24;
-    const th = themeAt(hour);
-    // Single source of truth for "is this a light or dark moment" — every
-    // other light/dark decision (card surfaces, the raised nav button,
-    // ink color) derives from this so nothing can fall out of sync with
-    // the actual background at the dawn/dusk crossover.
-    const isLight = luminance(th.bg) > 0.4;
+  function applyDayNight(){
+    const now = new Date();
+    const hour = now.getHours() + now.getMinutes() / 60;
+    const isDay = themePreviewOverride ? themePreviewOverride === 'day' : isDaytimeHour(hour);
+    const th = isDay ? THEME.day : THEME.night;
 
     phone.style.setProperty('--bg', th.bg);
-    phone.style.setProperty('--header-top', th.headerTop);
     phone.style.setProperty('--text', th.text);
     phone.style.setProperty('--primary', th.primary);
     phone.style.setProperty('--secondary', th.secondary);
@@ -1013,67 +953,37 @@
     // bg, dark mode is a faint light veil over the deep purple bg — both
     // rely on backdrop-filter blur (set in CSS) to pick up whatever's
     // showing through underneath.
-    phone.style.setProperty('--card-bg', isLight ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.07)');
-    phone.style.setProperty('--card-border', isLight ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.12)');
-    phone.style.setProperty('--raised-bg', isLight ? th.text : th.primary);
-    phone.style.setProperty('--raised-fg', isLight ? '#ffffff' : th.bg);
+    phone.style.setProperty('--card-bg', th.cardBg);
+    phone.style.setProperty('--card-border', th.cardBorder);
+    phone.style.setProperty('--raised-bg', th.raisedBg);
+    phone.style.setProperty('--raised-fg', th.raisedFg);
     phone.style.setProperty('--shadow-rgb', hexToRgb(th.text).join(','));
 
-    // Backlight blobs + page-wide stars only read as an intentional
-    // aesthetic once it's meaningfully dark — fade them in with the same
-    // "how night is it" value that used to also drive the sky band's
-    // stars (now retired — see the parallax header comment up top).
-    phoneGlow.style.opacity = th.stars;
-    pageStars.style.opacity = th.stars * 0.8;
+    phoneGlow.style.opacity = th.starsOpacity;
+    pageStars.style.opacity = th.starsOpacity * 0.8;
 
-    document.getElementById('greet-h1').innerHTML = th.greet + ', Shane';
-    // "Tonight" framing starts at dusk (h20) — just before it's officially
-    // night (h24/h0) — and switches back to "today" when the sun comes up
-    // at dawn (h5), matching the orb's own rise/set stops.
-    const isNightFraming = hour >= 20 || hour < 5;
-    document.getElementById('greet-sub').textContent = isNightFraming
-      ? "Ready for tonight's adventure?"
-      : "Ready for today's adventure?";
-    document.getElementById('time-value').textContent = formatTime(hour);
-    document.getElementById('statusbar-time').textContent = formatTime(hour).replace(/ (AM|PM)/, '');
+    document.getElementById('greet-h1').innerHTML = greetingForHour(hour) + ', Shane';
+    document.getElementById('greet-sub').textContent = isDay
+      ? "Ready for today's adventure?"
+      : "Ready for tonight's adventure?";
+
+    const ampm = Math.floor(hour) >= 12 ? 'PM' : 'AM';
+    let h12 = Math.floor(hour) % 12; if(h12 === 0) h12 = 12;
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    document.getElementById('time-value').textContent = `${h12}:${mm} ${ampm}`;
+    document.getElementById('statusbar-time').textContent = `${h12}:${mm}`;
     statusbar.style.color = th.text;
-
-    document.getElementById('time-slider').value = hour;
   }
 
-  const slider = document.getElementById('time-slider');
-  slider.addEventListener('input', () => applyTime(Number(slider.value)));
+  document.getElementById('theme-preview-day').addEventListener('click', () => { themePreviewOverride = 'day'; applyDayNight(); });
+  document.getElementById('theme-preview-night').addEventListener('click', () => { themePreviewOverride = 'night'; applyDayNight(); });
+  document.getElementById('theme-preview-auto').addEventListener('click', () => { themePreviewOverride = null; applyDayNight(); });
 
-  document.querySelectorAll('.time-preset-btn[data-hour]').forEach(btn => {
-    btn.addEventListener('click', () => applyTime(Number(btn.dataset.hour)));
-  });
-
-  let playing = false, playRaf = null;
-  document.getElementById('play-btn').addEventListener('click', (e) => {
-    if(playing){
-      playing = false;
-      cancelAnimationFrame(playRaf);
-      e.target.textContent = '▶ Play a full day';
-      return;
-    }
-    playing = true;
-    e.target.textContent = '⏸ Pause';
-    let hour = Number(slider.value);
-    let last = performance.now();
-    const HOURS_PER_SECOND = 2.4; // full 24h loop in ~10s
-    function step(now){
-      const dt = (now - last) / 1000; last = now;
-      hour = (hour + dt * HOURS_PER_SECOND) % 24;
-      applyTime(hour);
-      if(playing) playRaf = requestAnimationFrame(step);
-    }
-    playRaf = requestAnimationFrame(step);
-  });
-
-  // Initialize to the real local time, then let the slider/preset/play
-  // controls take over from there.
-  const now = new Date();
-  applyTime(now.getHours() + now.getMinutes() / 60);
+  applyDayNight();
+  // Keep the clock display and the real (non-overridden) theme fresh
+  // without needing a reload, in case real time crosses the boundary
+  // while the page is open.
+  setInterval(() => { if(!themePreviewOverride) applyDayNight(); }, 60000);
 
   // ---------- ROKU-STYLE PARALLAX HEADER ----------
   // Four real illustrated depth layers at different speeds, same

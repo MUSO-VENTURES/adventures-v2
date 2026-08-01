@@ -16,6 +16,14 @@
     --cream:#fff7ed;
     --ink:#2a2438;
     --card:#ffffff;
+    --shadow-rgb:42,36,56;
+  }
+  /* Binary day/night (see the shared detector script near the bottom of
+     body) — light by day, dark by night, no gradual transition. Card/ink/
+     bg are used pervasively via var(), so overriding just these three
+     cascades dark mode through nearly the whole page. */
+  :root[data-theme="dark"]{
+    --cream:#0a0912; --ink:#f7f3ff; --card:#1b1730; --shadow-rgb:0,0,0;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; font-size:106.25%;}
@@ -27,9 +35,9 @@
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 6vw;
-    background:rgba(255,247,237,0.9);
+    background:var(--cream);
     backdrop-filter:blur(8px);
-    border-bottom:2px solid rgba(42,36,56,0.06);
+    border-bottom:2px solid rgba(var(--shadow-rgb),0.06);
   }
   .logo{ font-family:'Fredoka', sans-serif; font-weight:700; font-size:1.3rem; display:flex; align-items:center; gap:8px; text-decoration:none; }
   .logo .dot{ width:10px; height:10px; border-radius:50%; background:var(--coral); display:inline-block; }
@@ -40,34 +48,34 @@
 
   .signin-prompt{
     max-width:420px; margin:8vh auto; background:var(--card); border-radius:18px;
-    padding:36px 32px; text-align:center; box-shadow:0 8px 30px rgba(42,36,56,0.1);
+    padding:36px 32px; text-align:center; box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.1);
   }
   .signin-prompt h2{ margin-bottom:10px; }
   .signin-prompt p{ opacity:0.7; font-size:0.92rem; margin-bottom:20px; }
   .signin-form{ display:flex; gap:8px; }
   .signin-form input{
-    flex:1; background:var(--cream); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    flex:1; background:var(--cream); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
     padding:10px 14px; border-radius:999px; font-family:'Nunito',sans-serif; font-size:0.9rem;
   }
   .signin-form input:focus{ outline:none; border-color:var(--coral); }
   .signin-btn{
-    background:var(--ink); color:#fff; border:none; padding:10px 20px; border-radius:999px;
+    background:var(--ink); color:var(--cream); border:none; padding:10px 20px; border-radius:999px;
     font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; cursor:pointer;
   }
   .signin-msg{ font-size:0.8rem; opacity:0.65; margin-top:10px; }
 
   .profile-header{
     display:flex; align-items:center; gap:20px; background:var(--card); border-radius:20px;
-    padding:26px 28px; box-shadow:0 8px 30px rgba(42,36,56,0.08); margin-bottom:22px; flex-wrap:wrap;
+    padding:26px 28px; box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.08); margin-bottom:22px; flex-wrap:wrap;
   }
   .avatar-wrap{ position:relative; flex-shrink:0; }
   .avatar{
     width:88px; height:88px; border-radius:50%; object-fit:cover; background:var(--coral);
     display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Fredoka',sans-serif;
-    font-weight:700; font-size:2rem; border:3px solid var(--card); box-shadow:0 4px 14px rgba(42,36,56,0.15);
+    font-weight:700; font-size:2rem; border:3px solid var(--card); box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.15);
   }
   .avatar-upload-btn{
-    position:absolute; bottom:-2px; right:-2px; background:var(--ink); color:#fff; border:2px solid var(--card);
+    position:absolute; bottom:-2px; right:-2px; background:var(--ink); color:var(--cream); border:2px solid var(--card);
     border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; font-size:0.85rem;
   }
@@ -81,12 +89,12 @@
 
   .card{
     background:var(--card); border-radius:18px; padding:22px 24px; margin-bottom:20px;
-    box-shadow:0 6px 20px rgba(42,36,56,0.07);
+    box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.07);
   }
   .card h2{ font-size:1.1rem; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-  .card h2 .soon{ font-size:0.68rem; font-weight:600; opacity:0.5; text-transform:uppercase; letter-spacing:0.04em; background:rgba(42,36,56,0.06); padding:3px 8px; border-radius:999px; }
+  .card h2 .soon{ font-size:0.68rem; font-weight:600; opacity:0.5; text-transform:uppercase; letter-spacing:0.04em; background:rgba(var(--shadow-rgb),0.06); padding:3px 8px; border-radius:999px; }
 
-  .xp-bar-track{ height:10px; border-radius:999px; background:rgba(42,36,56,0.08); overflow:hidden; margin:8px 0 6px; }
+  .xp-bar-track{ height:10px; border-radius:999px; background:rgba(var(--shadow-rgb),0.08); overflow:hidden; margin:8px 0 6px; }
   .xp-bar-fill{ height:100%; background:linear-gradient(90deg, var(--coral), var(--tangerine)); border-radius:999px; }
   .xp-label{ font-size:0.8rem; opacity:0.65; }
 
@@ -99,7 +107,7 @@
   .photo-item{ border-radius:12px; overflow:hidden; position:relative; aspect-ratio:1; background:#e8e6df; }
   .photo-item img{ width:100%; height:100%; object-fit:cover; }
   .photo-item .cap{
-    position:absolute; bottom:0; left:0; right:0; background:linear-gradient(0deg, rgba(42,36,56,0.75), transparent);
+    position:absolute; bottom:0; left:0; right:0; background:linear-gradient(0deg, rgba(var(--shadow-rgb),0.75), transparent);
     color:#fff; font-size:0.7rem; padding:16px 8px 6px;
   }
   .empty-note{ font-size:0.88rem; opacity:0.6; padding:8px 0; }
@@ -109,7 +117,7 @@
   @media (max-width:640px){ form.edit-form{ grid-template-columns:1fr; } }
   .field label{ display:block; font-size:0.8rem; font-weight:700; font-family:'Fredoka',sans-serif; margin-bottom:6px; }
   .field input, .field textarea{
-    width:100%; background:var(--cream); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    width:100%; background:var(--cream); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
     padding:10px 12px; border-radius:12px; font-family:'Nunito',sans-serif; font-size:0.9rem;
   }
   .field input:focus, .field textarea:focus{ outline:none; border-color:var(--coral); }
@@ -122,7 +130,7 @@
   }
   .save-msg{ grid-column:1 / -1; font-size:0.8rem; opacity:0.7; min-height:1.2em; }
 
-  .upcoming-row{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid rgba(42,36,56,0.06); }
+  .upcoming-row{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid rgba(var(--shadow-rgb),0.06); }
   .upcoming-row:last-child{ border-bottom:none; }
   .upcoming-row .emoji{ font-size:1.3rem; }
   .upcoming-row .when{ margin-left:auto; font-size:0.8rem; opacity:0.6; }
@@ -139,6 +147,17 @@
     padding:4px 12px; font-size:0.72rem; font-weight:700; cursor:pointer; font-family:'Fredoka',sans-serif;
   }
 </style>
+<script>
+  // Binary day/night, driven by the viewer's own device clock (always
+  // local time already — no geolocation needed). Runs synchronously
+  // before paint so there's no flash of the wrong theme. Same 6am/8pm
+  // boundary used across every MUSO Adventures page.
+  (function(){
+    var h = new Date().getHours();
+    var isDay = h >= 6 && h < 20;
+    document.documentElement.setAttribute('data-theme', isDay ? 'light' : 'dark');
+  })();
+</script>
 </head>
 <body>
 

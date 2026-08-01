@@ -17,6 +17,17 @@
     --cream:#fff7ed;
     --ink:#2a2438;
     --card:#ffffff;
+    --shadow-rgb:42,36,56;
+    --lock-scrim-start:rgba(255,247,237,0.2);
+    --lock-scrim-end:rgba(255,247,237,0.92);
+  }
+  /* Binary day/night (see the shared detector script near the bottom of
+     body) — light by day, dark by night, no gradual transition. Card/ink/
+     bg are used pervasively via var(), so overriding just these three
+     cascades dark mode through nearly the whole page. */
+  :root[data-theme="dark"]{
+    --cream:#0a0912; --ink:#f7f3ff; --card:#1b1730; --shadow-rgb:0,0,0;
+    --lock-scrim-start:rgba(10,9,18,0.2); --lock-scrim-end:rgba(10,9,18,0.92);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; font-size:106.25%;}
@@ -32,9 +43,9 @@
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 6vw;
-    background:rgba(255,247,237,0.9);
+    background:var(--cream);
     backdrop-filter:blur(8px);
-    border-bottom:2px solid rgba(42,36,56,0.06);
+    border-bottom:2px solid rgba(var(--shadow-rgb),0.06);
   }
   .logo{
     font-family:'Fredoka', sans-serif;
@@ -71,7 +82,7 @@
   .control-group label{ font-size:0.82rem; font-weight:700; font-family:'Fredoka',sans-serif; }
   .pill-row{ display:flex; gap:8px; flex-wrap:wrap; }
   .pill-btn{
-    background:var(--card); border:2px solid rgba(42,36,56,0.12);
+    background:var(--card); border:2px solid rgba(var(--shadow-rgb),0.12);
     padding:8px 16px; border-radius:999px; font-weight:600; font-size:0.85rem;
     cursor:pointer; transition:all .15s;
   }
@@ -100,11 +111,11 @@
 
   #map{
     width:100%; height:520px; border-radius:20px; overflow:hidden;
-    box-shadow:0 8px 30px rgba(42,36,56,0.12); background:#e8e6df;
+    box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.12); background:#e8e6df;
   }
   .route-summary{
     margin-top:14px; background:var(--card); border-radius:16px; padding:14px 18px;
-    box-shadow:0 4px 16px rgba(42,36,56,0.06); font-size:0.9rem; display:none;
+    box-shadow:0 4px 16px rgba(var(--shadow-rgb),0.06); font-size:0.9rem; display:none;
   }
   .route-summary.visible{ display:block; }
   .route-summary b{ color:var(--deep-teal); }
@@ -115,7 +126,7 @@
   }
   .venue-card{
     background:var(--card); border-radius:18px; overflow:hidden;
-    box-shadow:0 6px 20px rgba(42,36,56,0.08); display:flex; flex-direction:column;
+    box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.08); display:flex; flex-direction:column;
     cursor:pointer; transition:transform .15s;
   }
   .venue-card:hover{ transform:translateY(-2px); }
@@ -129,7 +140,7 @@
     display:flex; align-items:center; justify-content:center; font-family:'Fredoka',sans-serif;
   }
   .venue-photo .venue-price{
-    position:absolute; top:10px; right:10px; background:rgba(42,36,56,0.75); color:#fff;
+    position:absolute; top:10px; right:10px; background:rgba(var(--shadow-rgb),0.75); color:#fff;
     font-size:0.75rem; font-weight:700; padding:3px 9px; border-radius:999px;
   }
   .venue-body{ padding:14px 16px 16px; }
@@ -141,8 +152,8 @@
     flex:1; border:none; border-radius:999px; padding:8px 10px; font-size:0.78rem;
     font-weight:700; cursor:pointer; font-family:'Fredoka',sans-serif;
   }
-  .btn-directions{ background:var(--ink); color:#fff; }
-  .btn-view{ background:rgba(42,36,56,0.08); color:var(--ink); }
+  .btn-directions{ background:var(--ink); color:var(--cream); }
+  .btn-view{ background:rgba(var(--shadow-rgb),0.08); color:var(--ink); }
   .empty-state{
     text-align:center; opacity:0.6; font-size:0.9rem; padding:40px 20px;
   }
@@ -153,7 +164,7 @@
   /* ---------- AGE GATE / DISCLAIMER (shared with main site) ---------- */
   .gate-overlay{
     position:fixed; inset:0; z-index:1000;
-    background:rgba(42,36,56,0.92);
+    background:rgba(var(--shadow-rgb),0.92);
     display:flex; align-items:center; justify-content:center;
     padding:6vw;
   }
@@ -166,7 +177,7 @@
   .gate-card h2{ font-size:1.5rem; margin-bottom:8px; }
   .gate-card .gate-sub{ opacity:0.75; font-size:0.95rem; margin-bottom:20px; }
   .gate-disclaimer-box{
-    background:var(--cream); border:1px solid rgba(42,36,56,0.1); border-radius:12px;
+    background:var(--cream); border:1px solid rgba(var(--shadow-rgb),0.1); border-radius:12px;
     padding:16px; max-height:220px; overflow-y:auto; font-size:0.82rem; line-height:1.5;
     opacity:0.85; margin-bottom:20px;
   }
@@ -177,7 +188,7 @@
   .gate-field-optional{ font-weight:400; opacity:0.55; }
   .gate-field-hint{ display:block; font-size:0.76rem; opacity:0.6; margin-top:5px; line-height:1.4; }
   .gate-input{
-    width:100%; background:var(--cream); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    width:100%; background:var(--cream); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
     padding:11px 14px; border-radius:12px; font-family:'Nunito', sans-serif; font-size:0.95rem;
   }
   .gate-input:focus{ outline:none; border-color:var(--coral); }
@@ -190,7 +201,7 @@
   }
   .gate-error{ color:var(--coral); font-size:0.85rem; margin-bottom:10px; min-height:1.2em; }
   .gate-enter-btn{
-    width:100%; padding:14px; border:none; border-radius:12px; background:var(--ink); color:#fff;
+    width:100%; padding:14px; border:none; border-radius:12px; background:var(--ink); color:var(--cream);
     font-family:'Nunito', sans-serif; font-weight:600; font-size:1rem; cursor:pointer;
     opacity:0.4; pointer-events:none; transition:opacity .2s;
   }
@@ -207,19 +218,19 @@
   }
   .signin-form{ display:flex; gap:8px; align-items:center; }
   .signin-form input{
-    background:var(--card); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    background:var(--card); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
     padding:8px 12px; border-radius:999px; font-family:'Nunito',sans-serif; font-size:0.85rem;
     width:200px;
   }
   .signin-form input:focus{ outline:none; border-color:var(--coral); }
   .signin-btn{
-    background:var(--ink); color:#fff; border:none; padding:9px 18px; border-radius:999px;
+    background:var(--ink); color:var(--cream); border:none; padding:9px 18px; border-radius:999px;
     font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; cursor:pointer;
   }
   .signin-msg{ font-size:0.78rem; opacity:0.65; }
   .account-chip{
     display:flex; align-items:center; gap:10px; background:var(--card); border-radius:999px;
-    padding:6px 8px 6px 16px; box-shadow:0 4px 14px rgba(42,36,56,0.08); font-size:0.82rem;
+    padding:6px 8px 6px 16px; box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.08); font-size:0.82rem;
   }
   .level-pill{
     background:var(--plum); color:#fff; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -234,7 +245,7 @@
     padding:6px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
     font-size:0.78rem; cursor:pointer;
   }
-  .buy-coins-btn:hover{ background:var(--ink); color:#fff; }
+  .buy-coins-btn:hover{ background:var(--ink); color:var(--cream); }
   .signout-link{ font-size:0.76rem; opacity:0.55; text-decoration:underline; cursor:pointer; }
 
   /* ---------- RADIUS UNLOCK ---------- */
@@ -243,7 +254,7 @@
   }
   .radius-tier-marker{
     flex:1; text-align:center; padding:3px 4px; border-radius:6px;
-    background:rgba(42,36,56,0.05); opacity:0.4;
+    background:rgba(var(--shadow-rgb),0.05); opacity:0.4;
     font-size:0.68rem; font-weight:600; white-space:nowrap;
     transition:opacity .2s, background .2s;
   }
@@ -265,14 +276,14 @@
     position:absolute; inset:0; z-index:5;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     text-align:center; padding:24px; gap:12px;
-    background:linear-gradient(180deg, rgba(255,247,237,0.2) 0%, rgba(255,247,237,0.92) 40%);
+    background:linear-gradient(180deg, var(--lock-scrim-start) 0%, var(--lock-scrim-end) 40%);
     border-radius:18px;
   }
   .lock-overlay .lock-icon{ font-size:2rem; }
   .lock-overlay h3{ font-family:'Fredoka',sans-serif; font-size:1.05rem; }
   .lock-overlay p{ font-size:0.85rem; opacity:0.75; max-width:280px; }
   .lock-progress{
-    width:100%; max-width:220px; height:8px; border-radius:999px; background:rgba(42,36,56,0.1);
+    width:100%; max-width:220px; height:8px; border-radius:999px; background:rgba(var(--shadow-rgb),0.1);
     overflow:hidden; margin-top:2px;
   }
   .lock-progress-fill{ height:100%; background:var(--plum); border-radius:999px; }
@@ -283,13 +294,13 @@
   }
   .unlock-coins-btn{ background:var(--coral); color:#fff; }
   .unlock-coins-btn:disabled{ opacity:0.4; cursor:not-allowed; }
-  .unlock-signin-btn{ background:var(--ink); color:#fff; }
+  .unlock-signin-btn{ background:var(--ink); color:var(--cream); }
 
   /* ---------- START AN ADVENTURE ---------- */
   .adventure-section{ max-width:1080px; margin:0 auto; padding:0 6vw 4vh; }
   .adventure-inner{
     background:var(--card); border-radius:20px; padding:28px 30px;
-    box-shadow:0 8px 30px rgba(42,36,56,0.08);
+    box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.08);
   }
   .adventure-inner h2{ font-size:1.3rem; margin-bottom:6px; }
   .adventure-sub{ opacity:0.7; font-size:0.9rem; margin-bottom:18px; }
@@ -343,7 +354,7 @@
 
   /* ---------- CELEBRATION MODAL ---------- */
   .celebration-overlay{
-    position:fixed; inset:0; z-index:2000; background:rgba(42,36,56,0.85);
+    position:fixed; inset:0; z-index:2000; background:rgba(var(--shadow-rgb),0.85);
     display:flex; align-items:center; justify-content:center; padding:6vw;
   }
   .celebration-overlay[hidden]{ display:none; }
@@ -362,12 +373,12 @@
     font-size:0.9rem; cursor:pointer;
   }
   .celebration-btn.primary{ background:var(--coral); color:#fff; }
-  .celebration-btn.secondary{ background:rgba(42,36,56,0.08); color:var(--ink); }
+  .celebration-btn.secondary{ background:rgba(var(--shadow-rgb),0.08); color:var(--ink); }
   .celebration-count{ font-size:0.75rem; opacity:0.5; margin-top:14px; }
 
   /* ---------- TOAST ---------- */
   .xp-toast{
-    position:fixed; bottom:24px; right:24px; z-index:1900; background:var(--ink); color:#fff;
+    position:fixed; bottom:24px; right:24px; z-index:1900; background:var(--ink); color:var(--cream);
     padding:12px 20px; border-radius:14px; font-family:'Fredoka',sans-serif; font-weight:700;
     font-size:0.85rem; box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(20px); opacity:0;
     transition:all .25s; max-width:320px;
@@ -389,12 +400,12 @@
   .qa-panel[hidden]{ display:none; }
   .qa-panel h3{ font-family:'Fredoka',sans-serif; font-size:1rem; margin-bottom:4px; }
   .qa-panel .qa-sub{ font-size:0.76rem; opacity:0.6; margin-bottom:14px; }
-  .qa-group{ margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid rgba(42,36,56,0.1); }
+  .qa-group{ margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid rgba(var(--shadow-rgb),0.1); }
   .qa-group:last-child{ border-bottom:none; margin-bottom:0; padding-bottom:0; }
   .qa-group label{ display:block; font-size:0.76rem; font-weight:700; margin-bottom:6px; }
   .qa-row{ display:flex; gap:6px; align-items:center; }
   .qa-row input, .qa-row select{
-    flex:1; min-width:0; background:var(--cream); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    flex:1; min-width:0; background:var(--cream); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
     padding:7px 9px; border-radius:8px; font-family:'Nunito',sans-serif; font-size:0.8rem;
   }
   .qa-btn{
@@ -405,6 +416,17 @@
   .qa-btn.danger{ background:var(--coral); }
   .qa-msg{ font-size:0.74rem; opacity:0.7; margin-top:6px; min-height:1.1em; }
 </style>
+<script>
+  // Binary day/night, driven by the viewer's own device clock (always
+  // local time already — no geolocation needed). Runs synchronously
+  // before paint so there's no flash of the wrong theme. Same 6am/8pm
+  // boundary used across every MUSO Adventures page.
+  (function(){
+    var h = new Date().getHours();
+    var isDay = h >= 6 && h < 20;
+    document.documentElement.setAttribute('data-theme', isDay ? 'light' : 'dark');
+  })();
+</script>
 </head>
 <body>
 
