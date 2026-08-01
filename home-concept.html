@@ -224,6 +224,119 @@
   .ai-pick p{ font-size:0.85rem; opacity:0.92; line-height:1.4; max-width:280px; }
   .ai-pick .meta{ display:flex; align-items:center; gap:10px; margin-top:10px; font-size:0.8rem; font-weight:700; }
 
+  /* ---------- REAL GAMEPLAY (adventure section) ---------- */
+  #adventure-signed-out{ height:auto; min-height:200px; padding:22px 20px; }
+  .av-signin-form{ display:flex; gap:8px; margin-top:14px; }
+  .av-signin-form input{
+    flex:1; min-width:0; border:none; border-radius:999px; padding:10px 16px;
+    font-family:'Nunito',sans-serif; font-size:0.9rem; background:rgba(255,255,255,0.92); color:#2a2438;
+  }
+  .av-signin-form input:focus{ outline:2px solid rgba(255,255,255,0.7); }
+  .av-signin-btn{
+    border:none; border-radius:999px; padding:10px 18px; background:#2a2438; color:#fff;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.85rem; cursor:pointer; flex-shrink:0;
+  }
+  .av-signin-btn:disabled{ opacity:0.6; cursor:default; }
+  .av-signin-msg{ font-size:0.78rem; opacity:0.85; margin-top:8px; min-height:1.1em; }
+
+  .empty-state{ text-align:center; opacity:0.6; font-size:0.9rem; padding:24px 10px; }
+
+  .route-pick-card{
+    background:var(--card-bg); border:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border-radius:18px; padding:16px 18px; margin-bottom:12px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    box-shadow:0 6px 18px rgba(var(--shadow-rgb),0.1);
+  }
+  .rp-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; color:var(--text); }
+  .rp-desc{ font-size:0.82rem; opacity:0.7; margin-top:2px; color:var(--text); max-width:200px; }
+  .rp-meta{ font-size:0.75rem; opacity:0.6; margin-top:6px; color:var(--text); }
+  .start-adv-btn{
+    flex-shrink:0; border:none; border-radius:999px; padding:10px 16px; background:var(--primary); color:#fff;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem; cursor:pointer;
+  }
+
+  .adventure-complete-banner{
+    background:linear-gradient(135deg, var(--tertiary), var(--tertiary-deep)); color:#fff; text-align:center;
+    font-family:'Fredoka',sans-serif; font-weight:700; padding:12px; border-radius:14px; margin-bottom:14px;
+  }
+  .itinerary-list{
+    background:var(--card-bg); border:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border-radius:18px; padding:6px 16px; box-shadow:0 6px 18px rgba(var(--shadow-rgb),0.1);
+  }
+  .itinerary-stop{ display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid rgba(var(--shadow-rgb),0.1); }
+  .itinerary-stop:last-child{ border-bottom:none; }
+  .itinerary-stop.done{ opacity:0.6; }
+  .is-emoji{ font-size:1.4rem; flex-shrink:0; }
+  .is-body{ flex:1; min-width:0; }
+  .is-name{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; color:var(--text); }
+  .is-desc{ font-size:0.78rem; opacity:0.65; margin-top:2px; color:var(--text); }
+  .is-status{ font-size:0.78rem; font-weight:700; flex-shrink:0; }
+  .checkin-btn{
+    border:none; border-radius:999px; padding:9px 14px; background:var(--primary); color:#fff;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.78rem; cursor:pointer; white-space:nowrap;
+  }
+  .photo-add-btn{
+    border:2px solid var(--primary); border-radius:999px; padding:6px 12px; background:transparent; color:var(--primary);
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.72rem; cursor:pointer; white-space:nowrap;
+  }
+  .photo-ready-badge{ font-size:0.72rem; font-weight:700; color:var(--tertiary-deep); white-space:nowrap; }
+  .stop-tier-lock{
+    display:flex; align-items:center; gap:10px; margin-top:14px; padding:14px 16px;
+    background:var(--card-bg); border:1px solid var(--card-border); border-radius:16px;
+  }
+  .stop-tier-lock-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.85rem; color:var(--text); }
+  .stop-tier-lock-desc{ font-size:0.74rem; opacity:0.65; margin-top:2px; color:var(--text); }
+  .unlock-coins-btn{
+    flex-shrink:0; border:none; border-radius:999px; padding:9px 14px; background:var(--tangerine, var(--secondary)); color:#fff;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.76rem; cursor:pointer;
+  }
+  .unlock-coins-btn:disabled{ opacity:0.5; cursor:default; }
+
+  /* ---------- PHOTO BOOTH ---------- */
+  .pb-overlay{
+    position:fixed; inset:0; z-index:300; background:rgba(0,0,0,0.85);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;
+  }
+  .pb-overlay[hidden]{ display:none; }
+  .pb-header{ color:#fff; text-align:center; margin-bottom:14px; font-family:'Nunito',sans-serif; }
+  .pb-header b{ font-family:'Fredoka',sans-serif; }
+  .pb-video, .pb-preview-img{ width:100%; max-width:340px; border-radius:18px; background:#111; }
+  .pb-controls{ display:flex; gap:12px; margin-top:16px; }
+  .pb-btn{
+    border:none; border-radius:999px; padding:11px 18px; font-family:'Fredoka',sans-serif; font-weight:700;
+    font-size:0.85rem; cursor:pointer;
+  }
+  .pb-btn.primary{ background:var(--primary); color:#fff; }
+  .pb-btn.secondary{ background:rgba(255,255,255,0.15); color:#fff; }
+
+  /* ---------- BADGE CELEBRATION ---------- */
+  .celeb-overlay{
+    position:fixed; inset:0; z-index:300; background:rgba(20,16,32,0.75);
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .celeb-overlay[hidden]{ display:none; }
+  .celeb-card{
+    background:linear-gradient(160deg, var(--primary), var(--quaternary)); color:#fff; text-align:center;
+    border-radius:26px; padding:36px 26px; max-width:340px; box-shadow:0 24px 60px rgba(0,0,0,0.4);
+  }
+  .celeb-emoji{ font-size:4rem; margin-bottom:10px; }
+  .celeb-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.4rem; margin-bottom:8px; }
+  .celeb-praise{ font-size:0.92rem; opacity:0.92; line-height:1.5; margin-bottom:18px; }
+  .celeb-count{ font-size:0.78rem; opacity:0.75; margin-bottom:14px; }
+  .celeb-btn{
+    border:none; border-radius:999px; padding:11px 22px; background:#fff; color:var(--ink, #2a2438);
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.88rem; cursor:pointer;
+  }
+
+  /* ---------- TOAST ---------- */
+  .xp-toast{
+    position:fixed; left:50%; bottom:100px; transform:translateX(-50%) translateY(20px);
+    background:#2a2438; color:#fff; padding:12px 20px; border-radius:999px; font-family:'Fredoka',sans-serif;
+    font-weight:700; font-size:0.85rem; z-index:250; opacity:0; pointer-events:none;
+    transition:opacity .3s ease, transform .3s ease; box-shadow:0 12px 28px rgba(0,0,0,0.3); white-space:nowrap;
+  }
+  .xp-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
   /* ---------- CREW ---------- */
   .crew-row{ display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
   .crew-label{ font-family:'Fredoka',sans-serif; font-weight:600; font-size:1.02rem; color:var(--text); transition:color .35s ease; }
@@ -451,19 +564,20 @@
       </div>
     </div>
 
-    <div class="section">
-      <div class="ai-pick">
-        <span class="ai-tag">✨ AI pick for tonight</span>
-        <h2>Sunset Rooftop Crawl</h2>
-        <p>Rooftop cocktails, a hidden speakeasy, and a late-night skyline view — built for your crew's vibe.</p>
-        <div class="meta">
-          <span>⭐ 4.9</span>
-          <span>·</span>
-          <span>95% match</span>
-          <span>·</span>
-          <span>3 stops</span>
-        </div>
+    <div class="section" id="adventure-section">
+      <!-- Real gameplay: sign-in prompt, route picker, or active itinerary,
+           depending on auth/adventure state — see loadAdventureSection(). -->
+      <div class="ai-pick" id="adventure-signed-out">
+        <span class="ai-tag">✨ Real gameplay</span>
+        <h2>Sign in to start a real adventure</h2>
+        <p id="adventure-signed-out-sub">Earn real XP, coins, and badges — check in at real stops as you go.</p>
+        <form class="av-signin-form" onsubmit="event.preventDefault(); avSendMagicLink();">
+          <input type="email" id="av-signin-email" placeholder="you@example.com" required>
+          <button type="submit" class="av-signin-btn" id="av-signin-submit-btn">Sign in</button>
+        </form>
+        <p class="av-signin-msg" id="av-signin-msg"></p>
       </div>
+      <div id="adventure-body"></div>
     </div>
 
     <div class="section">
@@ -564,9 +678,10 @@
           <div class="avatar" style="width:64px; height:64px; font-size:1.3rem;"><img src="assets/profile/shane-avatar.jpg" alt="Shane"></div>
           <div>
             <h2 style="font-size:1.2rem; color:var(--text);">Shane</h2>
-            <div class="crew-sub">Level 7 Explorer</div>
+            <div class="crew-sub" id="profile-level-text">Level 7 Explorer</div>
           </div>
         </div>
+        <div class="rp-meta" id="profile-real-stats" style="margin-top:10px;"></div>
       </div>
       <div class="section">
         <div class="streak-card">
@@ -633,6 +748,36 @@
   </div>
 </div>
 
+<!-- Real gameplay: photo booth check-in capture -->
+<div class="pb-overlay" id="photobooth-overlay" hidden>
+  <div class="pb-header">Check in at <b id="pb-stop-name">this stop</b> — earn +<span id="pb-coin-amt">20</span> bonus coins with a photo</div>
+  <video id="pb-video" class="pb-video" autoplay playsinline muted></video>
+  <img id="pb-preview-img" class="pb-preview-img" style="display:none;" alt="">
+  <canvas id="pb-canvas" style="display:none;"></canvas>
+  <div class="pb-controls" id="pb-controls-live">
+    <button type="button" class="pb-btn secondary" onclick="closePhotoBooth()">Cancel</button>
+    <button type="button" class="pb-btn secondary" onclick="switchCamera()">Flip camera</button>
+    <button type="button" class="pb-btn primary" onclick="capturePhoto()">📸 Capture</button>
+  </div>
+  <div class="pb-controls" id="pb-controls-preview" style="display:none;">
+    <button type="button" class="pb-btn secondary" onclick="retakePhoto()">Retake</button>
+    <button type="button" class="pb-btn primary" onclick="useCapturedPhoto()">Use this photo</button>
+  </div>
+</div>
+
+<!-- Real gameplay: badge celebration -->
+<div class="celeb-overlay" id="celebration-overlay" hidden>
+  <div class="celeb-card">
+    <div class="celeb-emoji" id="celeb-emoji">🏅</div>
+    <div class="celeb-title" id="celeb-title">Badge earned!</div>
+    <div class="celeb-praise" id="celeb-praise"></div>
+    <div class="celeb-count" id="celeb-count"></div>
+    <button type="button" class="celeb-btn" onclick="dismissCelebration()">Nice!</button>
+  </div>
+</div>
+
+<div class="xp-toast" id="xp-toast"></div>
+
 <div class="time-control" id="time-control">
   <button type="button" class="time-control-close" id="time-control-close" aria-label="Close preview control">&times;</button>
   <div class="time-control-eyebrow">PREVIEW CONTROL — NOT PART OF THE APP</div>
@@ -652,6 +797,7 @@
 
 <button type="button" class="time-control-reopen hidden" id="time-control-reopen">🕐 Preview control</button>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
   // Close/reopen the preview control so it's possible to see the whole
   // phone (bottom nav included) while previewing, without losing the
@@ -1068,6 +1214,510 @@
       { timeout: 4000 }
     );
   }
+</script>
+
+<script>
+  // ---------- REAL GAMEPLAY ----------
+  // Ported from /preview/index.html (the live functional app) rather than
+  // rewritten — same Supabase project/schema/edge functions, just re-skinned
+  // to this page's markup/palette. Deliberately NOT included in this pass:
+  // venue search + maps, radius-tier slider, coin purchases/subscriptions
+  // (those stay on /shop/ and /preview/ for now — this covers the core game
+  // loop: sign in, start a real adventure, check in at real stops, earn
+  // real XP/coins/badges).
+  const SUPABASE_URL = 'https://aqaezprsbcyqpnnavdpv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
+
+  const avSupabase = (window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  const FREE_STOP_COUNT = 3;
+  const EXTRA_STOPS_LEVEL = 3;
+  const EXTRA_STOPS_COST = 200;
+  const EXTRA_STOPS_STOP_COUNT = 5;
+  const CHECKIN_PHOTO_COINS = 20; // must match muso-backend/supabase/functions/checkin/index.ts
+
+  let avSession = null;    // Supabase auth session, or null if signed out
+  let avProfile = null;    // { level, xp, adventure_coins, unlocked_stop_count, display_name }
+  let avBadgeKeys = new Set();
+  let avActiveAdventure = null; // { adventureId, routeId, route, stops, doneIds, ... }
+  let avCelebrationQueue = [];
+
+  async function avGetAccessToken() {
+    if (!avSupabase || !avSession) return null;
+    const { data } = await avSupabase.auth.getSession();
+    return data?.session?.access_token ?? null;
+  }
+
+  const AV_PROFILE_COLUMNS = 'id, xp, level, adventure_coins, unlocked_stop_count, display_name';
+
+  async function avFetchOrCreateProfile(userId, email) {
+    if (!avSupabase) return null;
+    const { data: existing } = await avSupabase.from('profiles').select(AV_PROFILE_COLUMNS).eq('id', userId).maybeSingle();
+    if (existing) return existing;
+    const displayName = (email || 'Explorer').split('@')[0];
+    const { data: created, error } = await avSupabase
+      .from('profiles').insert({ id: userId, display_name: displayName }).select(AV_PROFILE_COLUMNS).single();
+    if (error) { console.warn('Could not create profile:', error.message); return null; }
+    return created;
+  }
+
+  async function avRefreshProfileAndBadges() {
+    if (!avSession) { avProfile = null; avBadgeKeys = new Set(); return; }
+    avProfile = await avFetchOrCreateProfile(avSession.user.id, avSession.user.email);
+    const { data } = await avSupabase.from('profile_badges').select('badge_key').eq('profile_id', avSession.user.id);
+    avBadgeKeys = new Set((data || []).map(r => r.badge_key));
+  }
+
+  function avRenderAccountUI() {
+    const signedOutCard = document.getElementById('adventure-signed-out');
+    const levelText = document.getElementById('profile-level-text');
+    const realStats = document.getElementById('profile-real-stats');
+
+    if (!avSession) {
+      signedOutCard.style.display = '';
+      levelText.textContent = 'Sign in to track your real progress';
+      realStats.textContent = '';
+      return;
+    }
+    signedOutCard.style.display = 'none';
+    const level = avProfile?.level ?? 1;
+    const xp = avProfile?.xp ?? 0;
+    const coins = avProfile?.adventure_coins ?? 0;
+    levelText.textContent = `Level ${level} Explorer`;
+    realStats.innerHTML = `${xp} XP &nbsp;·&nbsp; 🪙 ${coins} coins &nbsp;·&nbsp; ${avBadgeKeys.size} badge${avBadgeKeys.size === 1 ? '' : 's'} earned`;
+  }
+
+  let avSigninCooldownTimer = null;
+  function avStartSigninCooldown(seconds) {
+    const btn = document.getElementById('av-signin-submit-btn');
+    if (!btn) return;
+    clearInterval(avSigninCooldownTimer);
+    let remaining = seconds;
+    btn.disabled = true;
+    const tick = () => {
+      btn.textContent = `Sign in (${remaining}s)`;
+      if (remaining <= 0) { clearInterval(avSigninCooldownTimer); btn.disabled = false; btn.textContent = 'Sign in'; return; }
+      remaining -= 1;
+    };
+    tick();
+    avSigninCooldownTimer = setInterval(tick, 1000);
+  }
+
+  window.avSendMagicLink = async function () {
+    const emailInput = document.getElementById('av-signin-email');
+    const msg = document.getElementById('av-signin-msg');
+    const email = emailInput.value.trim();
+    if (!email || !avSupabase) return;
+    msg.textContent = 'Sending link…';
+    const { error } = await avSupabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+    if (!error) {
+      msg.textContent = 'Check your email for a sign-in link.';
+      avStartSigninCooldown(60);
+      return;
+    }
+    const waitMatch = error.message.match(/after (\d+) seconds?/i);
+    if (waitMatch) {
+      const wait = Number(waitMatch[1]);
+      msg.textContent = `You already have a link on the way — try again in ${wait}s.`;
+      avStartSigninCooldown(wait);
+    } else {
+      msg.textContent = `Error: ${error.message}`;
+    }
+  };
+
+  window.avSignOut = async function () {
+    if (!avSupabase) return;
+    await avSupabase.auth.signOut();
+    avSession = null; avProfile = null; avBadgeKeys = new Set(); avActiveAdventure = null;
+    avRenderAccountUI();
+    avLoadAdventureSection();
+  };
+
+  // ---------- START AN ADVENTURE ----------
+  function avAdventureStorageKey(userId) { return `muso_active_adventure_${userId}`; }
+
+  async function avLoadAdventureSection() {
+    const sub = document.getElementById('adventure-signed-out-sub');
+    const body = document.getElementById('adventure-body');
+    if (!avSession) {
+      if (sub) sub.textContent = 'Earn real XP, coins, and badges — check in at real stops as you go.';
+      body.innerHTML = '';
+      avActiveAdventure = null;
+      return;
+    }
+    body.innerHTML = '<div class="empty-state">Loading…</div>';
+
+    let resumeId = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(avAdventureStorageKey(avSession.user.id)) || 'null');
+      resumeId = saved?.adventureId || null;
+    } catch (e) {}
+
+    if (!resumeId) {
+      const { data: partyRows } = await avSupabase.from('party_members').select('party_id').eq('profile_id', avSession.user.id);
+      const partyIds = (partyRows || []).map(r => r.party_id);
+      if (partyIds.length) {
+        const { data: advRows } = await avSupabase.from('adventures').select('id').in('party_id', partyIds).eq('status', 'in_progress').limit(1);
+        if (advRows && advRows.length) resumeId = advRows[0].id;
+      }
+    }
+
+    if (resumeId) { await avLoadItinerary(resumeId); }
+    else { await avRenderRoutePicker(); }
+  }
+
+  async function avRenderRoutePicker() {
+    const body = document.getElementById('adventure-body');
+    const { data: routes, error } = await avSupabase.from('routes').select('id, title, description').order('created_at', { ascending: true });
+    if (error || !routes || !routes.length) {
+      body.innerHTML = '<div class="empty-state">No adventure routes are set up yet — check back soon.</div>';
+      return;
+    }
+    const counts = {};
+    for (const r of routes) {
+      const { count } = await avSupabase.from('route_stops').select('id', { count: 'exact', head: true }).eq('route_id', r.id);
+      counts[r.id] = count || 0;
+    }
+    const unlockedStopCount = avProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
+    body.innerHTML = routes.map(r => {
+      const total = counts[r.id];
+      const capped = total > unlockedStopCount;
+      return `
+      <div class="route-pick-card">
+        <div>
+          <div class="rp-title">${r.title}</div>
+          <div class="rp-desc">${r.description || ''}</div>
+          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops — 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
+        </div>
+        <button type="button" class="start-adv-btn" onclick="avStartAdventure('${r.id}')">Start</button>
+      </div>
+    `;
+    }).join('');
+  }
+
+  window.avStartAdventure = async function (routeId) {
+    const body = document.getElementById('adventure-body');
+    body.innerHTML = '<div class="empty-state">Starting your adventure…</div>';
+    try {
+      const { data: { session: freshSession } } = await avSupabase.auth.getSession();
+      if (!freshSession) {
+        avSession = null;
+        avRenderAccountUI();
+        body.innerHTML = '<div class="empty-state">Your sign-in session has expired. Please sign in again above.</div>';
+        return;
+      }
+      avSession = freshSession;
+      const userId = freshSession.user.id;
+
+      let { data: memberRows } = await avSupabase.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
+      let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
+      if (!partyId) {
+        const { data: party, error: partyErr } = await avSupabase
+          .from('parties').insert({ name: `${avProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId }).select('id').single();
+        if (partyErr) throw partyErr;
+        partyId = party.id;
+        const { error: memberErr } = await avSupabase.from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
+        if (memberErr) throw memberErr;
+      }
+
+      const { count: stopCount } = await avSupabase.from('route_stops').select('id', { count: 'exact', head: true }).eq('route_id', routeId);
+      const unlockedStopCount = avProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
+      const cappedStopCount = Math.min(stopCount || 0, unlockedStopCount);
+      const { data: adventure, error: advErr } = await avSupabase
+        .from('adventures').insert({ party_id: partyId, route_id: routeId, stop_count: cappedStopCount }).select('id').single();
+      if (advErr) throw advErr;
+
+      try { localStorage.setItem(avAdventureStorageKey(userId), JSON.stringify({ adventureId: adventure.id })); } catch (e) {}
+      await avLoadItinerary(adventure.id);
+    } catch (e) {
+      const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
+      body.innerHTML = isRlsError
+        ? '<div class="empty-state">Your sign-in session expired partway through. Please sign in again above.</div>'
+        : `<div class="empty-state">Couldn't start that adventure: ${e.message}</div>`;
+    }
+  };
+
+  async function avLoadItinerary(adventureId) {
+    const body = document.getElementById('adventure-body');
+    body.innerHTML = '<div class="empty-state">Loading your itinerary…</div>';
+
+    const { data: adv } = await avSupabase.from('adventures').select('id, route_id, status').eq('id', adventureId).maybeSingle();
+    if (!adv) {
+      try { localStorage.removeItem(avAdventureStorageKey(avSession.user.id)); } catch (e) {}
+      await avRenderRoutePicker();
+      return;
+    }
+
+    const token = await avGetAccessToken();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/route-detail?routeId=${adv.route_id}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+    });
+    const routeData = await res.json();
+    if (!res.ok) {
+      body.innerHTML = `<div class="empty-state">Couldn't load the itinerary: ${routeData.error || res.statusText}</div>`;
+      return;
+    }
+
+    const { data: checkIns } = await avSupabase.from('check_ins').select('route_stop_id').eq('adventure_id', adventureId);
+    const doneIds = new Set((checkIns || []).map(c => c.route_stop_id));
+
+    avActiveAdventure = {
+      adventureId, routeId: adv.route_id, route: routeData.route, stops: routeData.stops, doneIds,
+      unlockedStopCount: routeData.unlockedStopCount ?? FREE_STOP_COUNT,
+      totalStops: routeData.totalStops ?? routeData.stops.length,
+      stopsLocked: !!routeData.locked,
+    };
+    avRenderItinerary();
+  }
+
+  function avRenderItinerary() {
+    const body = document.getElementById('adventure-body');
+    if (!avActiveAdventure) return;
+    const { route, stops, doneIds, stopsLocked, unlockedStopCount, totalStops } = avActiveAdventure;
+    const firstIncompleteIdx = stops.findIndex(s => !doneIds.has(s.id));
+    const allVisibleDone = firstIncompleteIdx === -1;
+    const allDone = allVisibleDone && !stopsLocked;
+
+    const currentStopId = firstIncompleteIdx !== -1 ? stops[firstIncompleteIdx].id : null;
+    Object.keys(avPendingPhotoCaptures).forEach((stopId) => {
+      if (stopId !== currentStopId) {
+        URL.revokeObjectURL(avPendingPhotoCaptures[stopId].previewUrl);
+        delete avPendingPhotoCaptures[stopId];
+      }
+    });
+
+    const rows = stops.map((s, i) => {
+      const isDone = doneIds.has(s.id);
+      const isCurrent = i === firstIncompleteIdx;
+      const locked = !isDone && !isCurrent;
+      let status;
+      if (isDone) status = `<span class="is-status" style="color:var(--tertiary-deep);">✓ Checked in</span>`;
+      else if (isCurrent) {
+        const safeName = (s.name || 'this stop').replace(/'/g, "\\'");
+        const hasPhoto = !!avPendingPhotoCaptures[s.id];
+        const photoControl = hasPhoto
+          ? `<span class="photo-ready-badge" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Photo ready ✓</span>`
+          : `<button type="button" class="photo-add-btn" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 +${CHECKIN_PHOTO_COINS} coins</button>`;
+        status = `
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            ${photoControl}
+            <button type="button" class="checkin-btn" onclick="avCheckInStop('${s.id}')">Check in</button>
+          </div>
+        `;
+      }
+      else status = `<span class="is-status" style="opacity:0.5;">🔒 Locked</span>`;
+      return `
+        <div class="itinerary-stop ${isDone ? 'done' : ''}">
+          <div class="is-emoji">${s.emoji || '📍'}</div>
+          <div class="is-body">
+            <div class="is-name">${i + 1}. ${s.name}</div>
+            <div class="is-desc">${s.description || ''}</div>
+          </div>
+          ${status}
+        </div>
+      `;
+    }).join('');
+
+    const tierLockHtml = stopsLocked ? `
+      <div class="stop-tier-lock">
+        <div>🔒</div>
+        <div style="flex:1;">
+          <div class="stop-tier-lock-title">${totalStops - unlockedStopCount} more stop${totalStops - unlockedStopCount === 1 ? '' : 's'} available</div>
+          <div class="stop-tier-lock-desc">Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} coins to unlock all ${EXTRA_STOPS_STOP_COUNT}.</div>
+        </div>
+      </div>
+    ` : '';
+
+    body.innerHTML = `
+      ${allDone ? `
+        <div class="adventure-complete-banner">🏁 Adventure complete! Great work.</div>
+        <div style="text-align:center; margin-bottom:14px;"><button type="button" class="start-adv-btn" onclick="avClearActiveAdventure()">Start Another Adventure</button></div>
+      ` : ''}
+      <div style="font-family:'Fredoka',sans-serif; font-weight:700; margin-bottom:10px; color:var(--text);">${route.title}</div>
+      <div class="itinerary-list">${rows}</div>
+      ${tierLockHtml}
+    `;
+  }
+
+  window.avClearActiveAdventure = function () {
+    try { localStorage.removeItem(avAdventureStorageKey(avSession.user.id)); } catch (e) {}
+    avActiveAdventure = null;
+    avRenderRoutePicker();
+  };
+
+  window.avCheckInStop = async function (routeStopId) {
+    if (!avActiveAdventure || !avSession) return;
+    const token = await avGetAccessToken();
+
+    let photoUrl = null;
+    const pending = avPendingPhotoCaptures[routeStopId];
+    if (pending) {
+      try {
+        avShowToast('Uploading your photo…');
+        const path = `${avSession.user.id}/${avActiveAdventure.adventureId}_${routeStopId}_${Date.now()}.jpg`;
+        const { error: uploadError } = await avSupabase.storage.from('checkin-photos').upload(path, pending.blob, { contentType: 'image/jpeg', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: pub } = avSupabase.storage.from('checkin-photos').getPublicUrl(path);
+        photoUrl = pub.publicUrl;
+      } catch (e) {
+        alert("Couldn't upload your photo, so this check-in won't earn coins: " + e.message);
+        photoUrl = null;
+      }
+    }
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/checkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ adventureId: avActiveAdventure.adventureId, routeStopId, photoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Could not check in.'); return; }
+
+      if (avPendingPhotoCaptures[routeStopId]) {
+        URL.revokeObjectURL(avPendingPhotoCaptures[routeStopId].previewUrl);
+        delete avPendingPhotoCaptures[routeStopId];
+      }
+      avActiveAdventure.doneIds.add(routeStopId);
+      avRenderItinerary();
+
+      await avRefreshProfileAndBadges();
+      avRenderAccountUI();
+
+      const progress = data.progress || {};
+      let toastMsg = '';
+      if (progress.xpGained) {
+        toastMsg = progress.leveledUp ? `🎉 +${progress.xpGained} XP — Level Up! Now Level ${progress.newLevel}` : `+${progress.xpGained} XP`;
+      }
+      if (progress.coinsGained) {
+        toastMsg = toastMsg ? `${toastMsg}  •  📸 +${progress.coinsGained} coins` : `📸 +${progress.coinsGained} Adventure Coins!`;
+      }
+      if (progress.newBadges && progress.newBadges.length) avQueueCelebrations(progress.newBadges);
+      else if (toastMsg) avShowToast(toastMsg);
+    } catch (e) {
+      alert('Could not reach the check-in service: ' + e.message);
+    }
+  };
+
+  // ---------- PHOTO BOOTH ----------
+  let avPendingPhotoCaptures = {};
+  let pbStream = null, pbFacingMode = 'environment', pbTargetStopId = null, pbCapturedBlob = null;
+
+  window.openPhotoBooth = async function (routeStopId, stopName) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("This browser doesn't support camera access. Try a modern mobile or desktop browser.");
+      return;
+    }
+    pbTargetStopId = routeStopId;
+    document.getElementById('pb-stop-name').textContent = stopName || 'this stop';
+    document.getElementById('pb-coin-amt').textContent = CHECKIN_PHOTO_COINS;
+    document.getElementById('photobooth-overlay').removeAttribute('hidden');
+    await pbStartCamera();
+  };
+
+  async function pbStartCamera() {
+    pbStopStream();
+    const video = document.getElementById('pb-video');
+    const img = document.getElementById('pb-preview-img');
+    img.style.display = 'none'; video.style.display = 'block';
+    document.getElementById('pb-controls-live').style.display = 'flex';
+    document.getElementById('pb-controls-preview').style.display = 'none';
+    try {
+      pbStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: pbFacingMode }, audio: false });
+      video.srcObject = pbStream;
+    } catch (e) {
+      alert("Couldn't access your camera: " + e.message);
+      closePhotoBooth();
+    }
+  }
+  function pbStopStream() { if (pbStream) { pbStream.getTracks().forEach(t => t.stop()); pbStream = null; } }
+
+  window.switchCamera = async function () { pbFacingMode = pbFacingMode === 'environment' ? 'user' : 'environment'; await pbStartCamera(); };
+
+  window.capturePhoto = function () {
+    const video = document.getElementById('pb-video');
+    const canvas = document.getElementById('pb-canvas');
+    canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 960;
+    const ctx = canvas.getContext('2d');
+    if (pbFacingMode === 'user') { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      pbCapturedBlob = blob;
+      const img = document.getElementById('pb-preview-img');
+      img.src = URL.createObjectURL(blob);
+      img.style.display = 'block'; video.style.display = 'none';
+      document.getElementById('pb-controls-live').style.display = 'none';
+      document.getElementById('pb-controls-preview').style.display = 'flex';
+      pbStopStream();
+    }, 'image/jpeg', 0.85);
+  };
+  window.retakePhoto = function () { pbCapturedBlob = null; pbStartCamera(); };
+  window.useCapturedPhoto = function () {
+    if (!pbCapturedBlob || !pbTargetStopId) return;
+    const previewUrl = URL.createObjectURL(pbCapturedBlob);
+    if (avPendingPhotoCaptures[pbTargetStopId]) URL.revokeObjectURL(avPendingPhotoCaptures[pbTargetStopId].previewUrl);
+    avPendingPhotoCaptures[pbTargetStopId] = { blob: pbCapturedBlob, previewUrl };
+    closePhotoBooth();
+    avRenderItinerary();
+  };
+  window.closePhotoBooth = function () {
+    pbStopStream(); pbCapturedBlob = null; pbTargetStopId = null;
+    document.getElementById('photobooth-overlay').setAttribute('hidden', '');
+  };
+
+  // ---------- CELEBRATIONS + TOAST ----------
+  const AV_BADGE_PRAISE = {
+    first_checkin: { title: 'Adventure Begins!', praise: "You just checked in at your very first MUSO stop — your profile is now unlocked. Nice work getting started!" },
+    level_5: { title: 'Level 5!', praise: "You've leveled up to 5 — real venue search just unlocked for you." },
+    level_10: { title: 'Level 10!', praise: "Double digits! You're one of the most active explorers out there." },
+    adventure_completed: { title: 'Route Complete!', praise: "You checked in at every stop on this adventure. That's the whole thing — well played." },
+  };
+
+  function avQueueCelebrations(badges) {
+    const wasEmpty = avCelebrationQueue.length === 0;
+    avCelebrationQueue.push(...badges);
+    if (wasEmpty) avShowNextCelebration();
+  }
+  function avShowNextCelebration() {
+    const overlay = document.getElementById('celebration-overlay');
+    if (!avCelebrationQueue.length) { overlay.setAttribute('hidden', ''); return; }
+    const badge = avCelebrationQueue[0];
+    const copy = AV_BADGE_PRAISE[badge.key] || { title: badge.name, praise: badge.description };
+    document.getElementById('celeb-emoji').textContent = badge.emoji || '🏅';
+    document.getElementById('celeb-title').textContent = copy.title;
+    document.getElementById('celeb-praise').textContent = copy.praise;
+    document.getElementById('celeb-count').textContent = avCelebrationQueue.length > 1 ? `+${avCelebrationQueue.length - 1} more new badge${avCelebrationQueue.length > 2 ? 's' : ''} waiting` : '';
+    overlay.removeAttribute('hidden');
+  }
+  window.dismissCelebration = function () { avCelebrationQueue.shift(); avShowNextCelebration(); };
+
+  function avShowToast(text) {
+    const toast = document.getElementById('xp-toast');
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(window._avToastTimer);
+    window._avToastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+  }
+
+  // ---------- BOOTSTRAP ----------
+  async function avInitAuth() {
+    if (!avSupabase) { avRenderAccountUI(); return; }
+    const { data: { session } } = await avSupabase.auth.getSession();
+    avSession = session;
+    await avRefreshProfileAndBadges();
+    avRenderAccountUI();
+    avLoadAdventureSection();
+
+    avSupabase.auth.onAuthStateChange(async (_event, session) => {
+      avSession = session;
+      await avRefreshProfileAndBadges();
+      avRenderAccountUI();
+      avLoadAdventureSection();
+    });
+  }
+  avInitAuth();
 </script>
 
 </body>
