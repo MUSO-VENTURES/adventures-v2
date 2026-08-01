@@ -370,10 +370,10 @@
      open it FLIPs (JS: from-rect -> natural-rect transform) up into this
      spot and sticks here (position:sticky) so it stays anchored at the
      top of the stage while the rest of the profile content scrolls
-     underneath it. Sized at 150% of the 54px nav disc (54 * 1.5 = 81px). */
+     underneath it. Sized at 200% of the 54px nav disc (54 * 2 = 108px). */
   .profile-hero-avatar{
     position:sticky; top:14px; z-index:20; margin:14px auto 0;
-    width:81px; height:81px; border-radius:50%; overflow:hidden;
+    width:108px; height:108px; border-radius:50%; overflow:hidden;
     border:3px solid var(--card-bg); box-shadow:0 10px 26px rgba(var(--shadow-rgb),0.35);
     background:var(--raised-bg); display:block;
   }
@@ -477,13 +477,18 @@
      by default), .tabbar (fixed height, always pinned at the bottom)].
      JS animates the wrap's own height between the tabbar's natural
      height and a near-full-stage height, revealing/hiding the sheet —
-     see openProfile/closeProfile. */
+     see openProfile/closeProfile. No overflow:hidden on the wrap itself:
+     the raised avatar disc deliberately pokes above .tabbar's top edge
+     via a negative margin, and clipping at the wrap level cut that disc
+     (and .tabbar's own drop shadow) off. #profile-sheet's own flex
+     sizing + overflow-y already contain its content without needing the
+     parent to clip too. */
   .tabbar-wrap{
     position:absolute; left:0; right:0; bottom:0; z-index:60;
-    display:flex; flex-direction:column; overflow:hidden;
+    display:flex; flex-direction:column;
   }
   #profile-sheet{
-    flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
     background:var(--bg); transition:background-color .35s ease;
   }
   .tabbar{
@@ -849,23 +854,25 @@
   const navAvatarImg = document.getElementById('nav-avatar-img');
   const navAvatarClose = document.getElementById('nav-avatar-close');
   const heroAvatar = document.getElementById('profile-avatar-hero');
+  const viewHomeEl = document.getElementById('view-home');
   let profileOpen = false;
   let profileAnimating = false;
 
   // Opening the profile is the nav bar itself expanding upward into a
   // sheet, not the avatar flying off across the whole screen on its own:
-  // .tabbar-wrap grows from "just tall enough for .tabbar" to "nearly the
-  // full stage", revealing #profile-sheet (clipped to 0 height until
+  // .tabbar-wrap grows from "just tall enough for .tabbar" to the full
+  // stage height, revealing #profile-sheet (clipped to 0 height until
   // then) above the tab row, which stays pinned at the bottom throughout.
   // The avatar disc still runs a FLIP transform (dock rect -> natural
   // sticky rect) so it visibly rides along at the top of the sheet as it
   // grows, but both rects now live inside the same expanding box instead
-  // of one being off in the unrelated scroll area.
+  // of one being off in the unrelated scroll area. The home content
+  // underneath fades out/in in sync with the same transition.
   function navCollapsedHeight(){
     return tabbarEl.getBoundingClientRect().height;
   }
   function navExpandedHeight(){
-    return phone.clientHeight - statusbar.getBoundingClientRect().height - 40;
+    return phone.clientHeight;
   }
 
   function openProfile(){
@@ -899,12 +906,15 @@
 
     tabbarWrap.style.transition = 'height .45s cubic-bezier(.22,.85,.32,1)';
     heroAvatar.style.transition = 'transform .45s cubic-bezier(.22,.85,.32,1)';
+    viewHomeEl.style.transition = 'opacity .45s ease';
     tabbarWrap.style.height = expandedH + 'px';
     heroAvatar.style.transform = 'translate(0,0) scale(1)';
+    viewHomeEl.style.opacity = '0';
 
     const finish = () => {
       tabbarWrap.style.transition = '';
       heroAvatar.style.transition = '';
+      viewHomeEl.style.transition = '';
       profileOpen = true;
       profileAnimating = false;
     };
@@ -936,14 +946,17 @@
 
     tabbarWrap.style.transition = 'height .4s cubic-bezier(.4,0,.2,1)';
     heroAvatar.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
+    viewHomeEl.style.transition = 'opacity .4s ease';
     tabbarWrap.style.height = collapsedH + 'px';
     heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    viewHomeEl.style.opacity = '1';
 
     const finish = () => {
       tabbarWrap.style.transition = '';
       tabbarWrap.style.height = '';
       heroAvatar.style.transition = '';
       heroAvatar.style.transform = '';
+      viewHomeEl.style.transition = '';
       navAvatarImg.style.visibility = '';
       navAvatarClose.hidden = true;
       profileSheet.hidden = true;
