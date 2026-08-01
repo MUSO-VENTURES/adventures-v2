@@ -131,27 +131,15 @@
     position:absolute; inset:0; padding:14px 22px 0; z-index:4;
   }
 
-  .greet-row{ display:flex; align-items:center; gap:12px; }
-  /* Fixed light color, not var(--text) — this text now sits on the
-     parallax scene's dark scrim rather than the old time-driven gradient,
-     so it needs to stay legible regardless of the time-of-day slider. */
-  .greet-row h1{ font-size:1.3rem; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.3); }
-  .greet-sub{ opacity:0.9; font-size:0.9rem; margin-top:2px; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.3); }
-  .weather-line{
+  /* Greeting + weather now live in normal page flow below the header
+     (not overlaid on the parallax image), so they use the themed text
+     color instead of the old fixed white + drop-shadow treatment. */
+  .home-greet-section h1{ font-size:1.3rem; color:var(--text); transition:color .35s ease; }
+  .home-greet-section .greet-sub{ opacity:0.7; font-size:0.9rem; margin-top:2px; color:var(--text); transition:color .35s ease; }
+  .home-greet-section .weather-line{
     display:flex; align-items:center; gap:6px; margin-top:10px; font-size:0.8rem;
-    opacity:0.85; color:#fff; font-weight:600; text-shadow:0 1px 4px rgba(0,0,0,0.3);
+    opacity:0.7; color:var(--text); font-weight:600; transition:color .35s ease;
   }
-  .avatar{
-    width:44px; height:44px; border-radius:50%; flex-shrink:0;
-    background:linear-gradient(135deg, var(--primary), var(--quaternary));
-    display:flex; align-items:center; justify-content:center;
-    color:#fff; font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem;
-    box-shadow:0 4px 12px rgba(var(--shadow-rgb),0.3);
-    overflow:hidden;
-  }
-  /* Placeholder profile photo until the real edit-profile feature picks
-     a source for this — swap for the user's actual avatar/upload then. */
-  .avatar img{ width:100%; height:100%; object-fit:cover; }
 
   /* Fixed frosted-white style, not the time-driven --card-bg/--text —
      same reasoning as the greeting text above: this sits on the parallax
@@ -175,11 +163,6 @@
 
   /* ---------- AI PICK CARD ---------- */
   .section{ padding:22px 22px 4px; position:relative; z-index:1; }
-  /* Pull the AI-pick card up so it overlaps the bottom of the parallax
-     header instead of sitting in a hard-edged strip below it — the
-     header's own scrim already darkens toward the bottom, which helps
-     the card read cleanly against the illustration behind it. */
-  .sky-band + .section{ margin-top:-60px; z-index:5; }
 
   /* ---------- AMBIENT BACKLIGHT + PAGE-WIDE STARS ----------
      Soft blurred color blobs behind the panels (shows through the
@@ -503,18 +486,30 @@
   }
   .tab-item svg{ width:21px; height:21px; }
   .tab-item.active{ color:var(--primary); opacity:1; }
+  /* Raised slot now docks the user's profile photo instead of the map
+     icon — the disc is a separate inner element (not the tab-item
+     itself) so a "Profile" label can sit below it, matching the other
+     nav items, without being clipped by the disc's own overflow:hidden. */
   .tab-item.raised{
-    margin-top:-30px; background:var(--raised-bg); color:var(--raised-fg); opacity:1; border-radius:50%;
-    width:54px; height:54px; padding:0; align-items:center; justify-content:center;
-    box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4); flex:0 0 54px; transition:background-color .35s ease;
+    margin-top:-30px; padding:0; flex:0 0 54px; gap:6px;
   }
-  .tab-item.raised svg{ width:24px; height:24px; }
-  .tab-item.raised span{ display:none; }
-  /* Nav avatar disc — the raised slot now docks the user's profile photo
-     instead of the map icon; the photo itself is the tappable element
-     that FLIPs up into the profile hero position (see JS). */
-  .tab-item.avatar-raised{ overflow:hidden; border:3px solid var(--card-bg); }
-  .tab-item.avatar-raised img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .tab-item.raised span{ font-size:0.66rem; font-weight:700; opacity:0.55; transition:opacity .35s ease, color .35s ease; }
+  .tab-item.raised.active span{ opacity:1; color:var(--primary); }
+  .nav-avatar-disc{
+    position:relative; width:54px; height:54px; border-radius:50%; overflow:hidden;
+    background:var(--raised-bg); border:3px solid var(--card-bg);
+    box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4); transition:background-color .35s ease;
+  }
+  .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
+  /* Swapped in for the photo while the profile is open, occupying the
+     same dock so there's an obvious way to close it without having to
+     scroll back up to the hero disc. */
+  .nav-avatar-close{
+    position:absolute; inset:0; border:none; padding:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--raised-bg); color:var(--raised-fg); font-size:1.5rem; line-height:1;
+  }
+  .nav-avatar-close[hidden]{ display:none; }
 
   @media (max-width:430px){
     body{ padding:0; }
@@ -568,14 +563,6 @@
       </div>
       <div class="sky-band-scrim"></div>
       <div class="home-header-inner">
-        <div class="greet-row">
-          <div class="avatar"><img src="assets/profile/shane-avatar.jpg" alt="Shane"></div>
-          <div>
-            <h1 id="greet-h1">Good evening, Shane</h1>
-            <div class="greet-sub" id="greet-sub">Ready for tonight's adventure?</div>
-          </div>
-        </div>
-        <div class="weather-line" id="weather-line">64°F · Clear — good night for a rooftop stop</div>
         <div class="search-bar">
           <span class="icon-btn" style="background:none; width:auto;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
@@ -586,6 +573,12 @@
           </span>
         </div>
       </div>
+    </div>
+
+    <div class="section home-greet-section">
+      <h1 id="greet-h1">Good evening, Shane</h1>
+      <div class="greet-sub" id="greet-sub">Ready for tonight's adventure?</div>
+      <div class="weather-line" id="weather-line">64°F · Clear — good night for a rooftop stop</div>
     </div>
 
     <div class="section" id="adventure-section">
@@ -755,8 +748,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
         <span>Explore</span>
       </div>
-      <div class="tab-item raised avatar-raised" id="nav-avatar-btn">
-        <img src="assets/profile/shane-avatar.jpg" alt="Profile" id="nav-avatar-img">
+      <div class="tab-item raised" id="nav-avatar-btn">
+        <div class="nav-avatar-disc">
+          <img src="assets/profile/shane-avatar.jpg" alt="Profile" id="nav-avatar-img">
+          <button type="button" class="nav-avatar-close" id="nav-avatar-close" aria-label="Close profile" hidden>&times;</button>
+        </div>
+        <span>Profile</span>
       </div>
       <div class="tab-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>
@@ -837,6 +834,7 @@
   const scrollAreaEl = document.querySelector('.scroll-area');
   const navAvatarBtn = document.getElementById('nav-avatar-btn');
   const navAvatarImg = document.getElementById('nav-avatar-img');
+  const navAvatarClose = document.getElementById('nav-avatar-close');
   const heroAvatar = document.getElementById('profile-avatar-hero');
   let profileOpen = false;
   let profileAnimating = false;
@@ -857,6 +855,7 @@
 
     const fromRect = navAvatarImg.getBoundingClientRect();
     navAvatarImg.style.visibility = 'hidden';
+    navAvatarClose.hidden = false;
     viewHome.hidden = true;
     viewProfile.hidden = false;
     scrollAreaEl.scrollTop = 0;
@@ -906,6 +905,7 @@
       heroAvatar.style.transition = '';
       heroAvatar.style.transform = '';
       navAvatarImg.style.visibility = '';
+      navAvatarClose.hidden = true;
       profileOpen = false;
       profileAnimating = false;
       if(onLanded) onLanded();
