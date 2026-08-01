@@ -123,9 +123,16 @@
   }
   .px-scroll::-webkit-scrollbar{ display:none; }
   .px-spacer{ height:1px; }
+  /* Blends the header's hard bottom edge into the page background below
+     it instead of darkening the whole scene for text legibility (the
+     greeting text that used to need that scrim now lives below the
+     header, not on top of it — see .home-greet-section). Fully
+     transparent until the last 50px, then fades to the same themed
+     background as the rest of the interface, so day/night switches
+     carry through automatically via var(--bg). */
   .sky-band-scrim{
     position:absolute; inset:0; z-index:3; pointer-events:none;
-    background:linear-gradient(180deg, rgba(20,16,32,0.15) 0%, rgba(20,16,32,0.55) 100%);
+    background:linear-gradient(180deg, transparent 0%, transparent calc(100% - 50px), var(--bg) 100%);
   }
   .home-header-inner{
     position:absolute; inset:0; padding:14px 22px 0; z-index:4;
@@ -145,9 +152,12 @@
      same reasoning as the greeting text above: this sits on the parallax
      scrim now, not the old gradient, so it stays constant regardless of
      the time-of-day slider. */
+  /* Padding/icon size scaled to 75% of the original (13px/34px) so the
+     bar's overall height comes down to ~75% too, without shrinking the
+     input text itself. */
   .search-bar{
     margin-top:16px; background:rgba(255,255,255,0.55); border:1px solid rgba(255,255,255,0.5);
-    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:16px; padding:13px 16px;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:12px; padding:10px 16px;
     display:flex; align-items:center; gap:10px;
     box-shadow:0 6px 18px rgba(20,16,32,0.25);
   }
@@ -157,7 +167,7 @@
   }
   .search-bar input::placeholder{ color:#2a2438; opacity:0.4; }
   .icon-btn{
-    width:34px; height:34px; border-radius:10px; display:flex; align-items:center;
+    width:26px; height:26px; border-radius:8px; display:flex; align-items:center;
     justify-content:center; background:rgba(255,247,237,0.9); flex-shrink:0; color:#2a2438;
   }
 
@@ -584,11 +594,11 @@
       <div class="home-header-inner">
         <div class="search-bar">
           <span class="icon-btn" style="background:none; width:auto;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
           </span>
           <input type="text" placeholder="Search moods, venues, vibes...">
           <span class="icon-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="11" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
           </span>
         </div>
       </div>
@@ -872,7 +882,9 @@
     return tabbarEl.getBoundingClientRect().height;
   }
   function navExpandedHeight(){
-    return phone.clientHeight;
+    // Leave the status bar (time/battery icons) uncovered — the sheet
+    // expands up to the top of the scrolling parallax header, not over it.
+    return phone.clientHeight - statusbar.getBoundingClientRect().height;
   }
 
   function openProfile(){
