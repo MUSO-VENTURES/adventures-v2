@@ -470,14 +470,28 @@
      above regular in-page content (.section/.sky-band use up to z-index:5)
      or scrolled cards paint over it, since position:absolute with
      z-index:auto stacks below any positioned sibling that sets an
-     explicit z-index, regardless of DOM order. */
-  .tabbar-wrap{ position:absolute; left:0; right:0; bottom:0; z-index:60; }
+     explicit z-index, regardless of DOM order.
+
+     The wrap itself is what "expands into a sheet" for the profile page:
+     it's a column of [#profile-sheet (flex:1, clipped away at 0 height
+     by default), .tabbar (fixed height, always pinned at the bottom)].
+     JS animates the wrap's own height between the tabbar's natural
+     height and a near-full-stage height, revealing/hiding the sheet —
+     see openProfile/closeProfile. */
+  .tabbar-wrap{
+    position:absolute; left:0; right:0; bottom:0; z-index:60;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  #profile-sheet{
+    flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:var(--bg); transition:background-color .35s ease;
+  }
   .tabbar{
     background:var(--card-bg); border-top:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:0;
     padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; align-items:flex-end; justify-content:space-between;
     box-shadow:0 -10px 26px rgba(var(--shadow-rgb),0.18);
-    position:relative; width:100%; transition:background-color .35s ease;
+    position:relative; width:100%; flex-shrink:0; transition:background-color .35s ease;
   }
   .tab-item{
     display:flex; flex-direction:column; align-items:center; gap:3px;
@@ -491,7 +505,7 @@
      itself) so a "Profile" label can sit below it, matching the other
      nav items, without being clipped by the disc's own overflow:hidden. */
   .tab-item.raised{
-    margin-top:-30px; padding:0; flex:0 0 54px; gap:6px;
+    margin-top:-30px; padding:0 0 8px; flex:0 0 54px; gap:6px; opacity:1;
   }
   .tab-item.raised span{ font-size:0.66rem; font-weight:700; opacity:0.55; transition:opacity .35s ease, color .35s ease; }
   .tab-item.raised.active span{ opacity:1; color:var(--primary); }
@@ -688,8 +702,30 @@
 
     <button type="button" class="recap-trigger" id="recap-trigger">🎉 Preview: Adventure Complete recap</button>
     </div>
+  </div>
 
-    <div id="view-profile" hidden>
+  <div class="recap-overlay" id="recap-overlay">
+    <button type="button" class="recap-close" id="recap-close" aria-label="Close">&times;</button>
+    <div class="recap-ring-wrap">
+      <svg viewBox="0 0 150 150">
+        <circle class="recap-ring-track" cx="75" cy="75" r="64"></circle>
+        <circle class="recap-ring-progress" id="recap-ring" cx="75" cy="75" r="64"></circle>
+      </svg>
+      <div class="recap-ring-center">
+        <div class="big">3/3</div>
+        <div class="small">stops complete</div>
+      </div>
+    </div>
+    <div class="recap-title">Adventure Complete! 🎉</div>
+    <div class="recap-stats">
+      <div class="stat-float"><div class="sf-val">+150</div><div class="sf-label">XP earned</div></div>
+      <div class="stat-float"><div class="sf-val">+40 🪙</div><div class="sf-label">Coins</div></div>
+      <div class="stat-float"><div class="sf-val">1 🏅</div><div class="sf-label">New badge</div></div>
+    </div>
+  </div>
+
+  <div class="tabbar-wrap" id="tabbar-wrap">
+    <div class="profile-sheet" id="profile-sheet" hidden>
       <div class="profile-hero-avatar" id="profile-avatar-hero"><img src="assets/profile/shane-avatar.jpg" alt="Shane"></div>
       <div class="section">
         <div class="profile-head">
@@ -716,29 +752,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="recap-overlay" id="recap-overlay">
-    <button type="button" class="recap-close" id="recap-close" aria-label="Close">&times;</button>
-    <div class="recap-ring-wrap">
-      <svg viewBox="0 0 150 150">
-        <circle class="recap-ring-track" cx="75" cy="75" r="64"></circle>
-        <circle class="recap-ring-progress" id="recap-ring" cx="75" cy="75" r="64"></circle>
-      </svg>
-      <div class="recap-ring-center">
-        <div class="big">3/3</div>
-        <div class="small">stops complete</div>
-      </div>
-    </div>
-    <div class="recap-title">Adventure Complete! 🎉</div>
-    <div class="recap-stats">
-      <div class="stat-float"><div class="sf-val">+150</div><div class="sf-label">XP earned</div></div>
-      <div class="stat-float"><div class="sf-val">+40 🪙</div><div class="sf-label">Coins</div></div>
-      <div class="stat-float"><div class="sf-val">1 🏅</div><div class="sf-label">New badge</div></div>
-    </div>
-  </div>
-
-  <div class="tabbar-wrap">
     <div class="tabbar">
       <div class="tab-item active" data-view="home">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
@@ -829,9 +842,9 @@
     timeControlReopen.classList.add('hidden');
   });
 
-  const viewHome = document.getElementById('view-home');
-  const viewProfile = document.getElementById('view-profile');
-  const scrollAreaEl = document.querySelector('.scroll-area');
+  const tabbarWrap = document.getElementById('tabbar-wrap');
+  const tabbarEl = document.querySelector('.tabbar');
+  const profileSheet = document.getElementById('profile-sheet');
   const navAvatarBtn = document.getElementById('nav-avatar-btn');
   const navAvatarImg = document.getElementById('nav-avatar-img');
   const navAvatarClose = document.getElementById('nav-avatar-close');
@@ -839,14 +852,22 @@
   let profileOpen = false;
   let profileAnimating = false;
 
-  // Profile open/close is a FLIP transition: the avatar disc is a single
-  // element that lives in the profile view at rest (position:sticky, so
-  // it stays anchored while the rest of the page scrolls beneath it) and
-  // is only made to LOOK like it's docked in the nav by transforming it
-  // to the nav avatar's screen rect on open, then animating that
-  // transform back to none. Closing reverses it: transform from the
-  // hero's current rect to the (still-laid-out-but-hidden) nav avatar's
-  // rect, then swap views once the disc has "landed" back in the dock.
+  // Opening the profile is the nav bar itself expanding upward into a
+  // sheet, not the avatar flying off across the whole screen on its own:
+  // .tabbar-wrap grows from "just tall enough for .tabbar" to "nearly the
+  // full stage", revealing #profile-sheet (clipped to 0 height until
+  // then) above the tab row, which stays pinned at the bottom throughout.
+  // The avatar disc still runs a FLIP transform (dock rect -> natural
+  // sticky rect) so it visibly rides along at the top of the sheet as it
+  // grows, but both rects now live inside the same expanding box instead
+  // of one being off in the unrelated scroll area.
+  function navCollapsedHeight(){
+    return tabbarEl.getBoundingClientRect().height;
+  }
+  function navExpandedHeight(){
+    return phone.clientHeight - statusbar.getBoundingClientRect().height - 40;
+  }
+
   function openProfile(){
     if(profileOpen || profileAnimating) return;
     profileAnimating = true;
@@ -856,106 +877,108 @@
     const fromRect = navAvatarImg.getBoundingClientRect();
     navAvatarImg.style.visibility = 'hidden';
     navAvatarClose.hidden = false;
-    viewHome.hidden = true;
-    viewProfile.hidden = false;
-    scrollAreaEl.scrollTop = 0;
+    profileSheet.hidden = false;
 
+    // Measure where the hero disc will naturally rest once the sheet is
+    // fully expanded, without the user ever seeing that expanded state —
+    // jump the wrap to its target height, read the rect, then rewind
+    // before anything paints.
+    const collapsedH = navCollapsedHeight();
+    const expandedH = navExpandedHeight();
+    tabbarWrap.style.transition = 'none';
+    tabbarWrap.style.height = expandedH + 'px';
     const toRect = heroAvatar.getBoundingClientRect();
+    tabbarWrap.style.height = collapsedH + 'px';
+
     const dx = fromRect.left + fromRect.width / 2 - (toRect.left + toRect.width / 2);
     const dy = fromRect.top + fromRect.height / 2 - (toRect.top + toRect.height / 2);
     const scale = fromRect.width / toRect.width;
-
     heroAvatar.style.transition = 'none';
     heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    heroAvatar.getBoundingClientRect(); // force reflow so the line below starts a real transition, not a no-op
+    heroAvatar.getBoundingClientRect(); // force reflow so the lines below start real transitions, not no-ops
+
+    tabbarWrap.style.transition = 'height .45s cubic-bezier(.22,.85,.32,1)';
     heroAvatar.style.transition = 'transform .45s cubic-bezier(.22,.85,.32,1)';
+    tabbarWrap.style.height = expandedH + 'px';
     heroAvatar.style.transform = 'translate(0,0) scale(1)';
 
     const finish = () => {
+      tabbarWrap.style.transition = '';
       heroAvatar.style.transition = '';
       profileOpen = true;
       profileAnimating = false;
     };
-    heroAvatar.addEventListener('transitionend', function te(e){
-      if(e.propertyName !== 'transform') return;
-      heroAvatar.removeEventListener('transitionend', te);
+    tabbarWrap.addEventListener('transitionend', function te(e){
+      if(e.propertyName !== 'height') return;
+      tabbarWrap.removeEventListener('transitionend', te);
       clearTimeout(fallback);
       finish();
     }, {once:true});
-    const fallback = setTimeout(finish, 500); // safety net if transitionend doesn't fire (e.g. rect unchanged)
+    const fallback = setTimeout(finish, 550); // safety net if transitionend doesn't fire
   }
 
-  function closeProfile(onLanded){
+  function closeProfile(){
     if(!profileOpen || profileAnimating) return;
     profileAnimating = true;
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    document.querySelector('.tab-item[data-view="home"]').classList.add('active');
 
     const fromRect = heroAvatar.getBoundingClientRect();
     const toRect = navAvatarImg.getBoundingClientRect(); // still laid out while visibility:hidden
     const dx = toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2);
     const dy = toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2);
     const scale = toRect.width / fromRect.width;
+    const collapsedH = navCollapsedHeight();
 
     heroAvatar.style.transition = 'none';
     heroAvatar.style.transform = 'translate(0,0) scale(1)';
-    heroAvatar.getBoundingClientRect(); // force reflow so the line below starts a real transition, not a no-op
+    heroAvatar.getBoundingClientRect(); // force reflow so the lines below start real transitions, not no-ops
+
+    tabbarWrap.style.transition = 'height .4s cubic-bezier(.4,0,.2,1)';
     heroAvatar.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
+    tabbarWrap.style.height = collapsedH + 'px';
     heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
 
     const finish = () => {
+      tabbarWrap.style.transition = '';
+      tabbarWrap.style.height = '';
       heroAvatar.style.transition = '';
       heroAvatar.style.transform = '';
       navAvatarImg.style.visibility = '';
       navAvatarClose.hidden = true;
+      profileSheet.hidden = true;
+      profileSheet.scrollTop = 0;
       profileOpen = false;
       profileAnimating = false;
-      if(onLanded) onLanded();
     };
-    heroAvatar.addEventListener('transitionend', function te(e){
-      if(e.propertyName !== 'transform') return;
-      heroAvatar.removeEventListener('transitionend', te);
+    tabbarWrap.addEventListener('transitionend', function te(e){
+      if(e.propertyName !== 'height') return;
+      tabbarWrap.removeEventListener('transitionend', te);
       clearTimeout(fallback);
       finish();
     }, {once:true});
-    const fallback = setTimeout(finish, 450); // safety net if transitionend doesn't fire (e.g. rect unchanged)
+    const fallback = setTimeout(finish, 500); // safety net if transitionend doesn't fire
   }
 
   navAvatarBtn.addEventListener('click', () => {
     if(profileOpen){
-      document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
-      document.querySelector('.tab-item[data-view="home"]').classList.add('active');
-      closeProfile(() => {
-        viewProfile.hidden = true;
-        viewHome.hidden = false;
-        scrollAreaEl.scrollTop = 0;
-      });
+      closeProfile();
     } else {
       openProfile();
     }
   });
 
+  // Only Home has a real view built out in this concept — Explore/Crew/
+  // Map are just placeholder tabs. Their one real job here is: if the
+  // profile sheet is open, tapping any of them closes it first.
   document.querySelectorAll('.tab-item:not(.raised)').forEach(tab => {
     tab.addEventListener('click', () => {
+      if(profileOpen){
+        closeProfile();
+        return;
+      }
       document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      // Only Home has a real view built out in this concept — Explore/
-      // Crew/Map just stay on whichever view is already showing. But if
-      // the profile page was open, leaving it (via any nav tap, not just
-      // the avatar) should always fall back to Home once the avatar has
-      // landed back in its dock — otherwise the disc flies back to the
-      // nav while the profile content stays on screen underneath it.
-      const wasProfileOpen = profileOpen;
-      const showRequestedView = () => {
-        if(tab.dataset.view === 'home' || wasProfileOpen){
-          viewProfile.hidden = true;
-          viewHome.hidden = false;
-        }
-        scrollAreaEl.scrollTop = 0;
-      };
-      if(profileOpen){
-        closeProfile(showRequestedView);
-      } else {
-        showRequestedView();
-      }
     });
   });
 
