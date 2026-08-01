@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUSO Adventures — Parallax Real-Art Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#2a2438; --cream:#fff7ed; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Nunito', sans-serif; background:#e2ddd3; color:var(--ink);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding:4vh 20px;
+  }
+  h1,h3{ font-family:'Fredoka', sans-serif; }
+  .page-note{
+    position:fixed; top:16px; left:16px; font-size:0.8rem; opacity:0.55;
+    max-width:280px; line-height:1.4;
+  }
+
+  .phone{
+    width:390px; max-width:100%; height:760px; max-height:88vh;
+    background:var(--cream); border-radius:44px; overflow:hidden;
+    box-shadow:0 30px 70px rgba(0,0,0,0.35), 0 0 0 10px #1a1622;
+    position:relative; display:flex; flex-direction:column;
+  }
+  .statusbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px 8px; font-weight:700; font-size:0.85rem;
+  }
+  .ph-head{ padding:0 22px 16px; }
+  .ph-head h1{ font-size:1.3rem; }
+  .ph-head p{ font-size:0.85rem; opacity:0.65; margin-top:2px; }
+
+  /* ---------- PARALLAX SCENE (real art layers) ---------- */
+  .px-wrap{
+    position:relative; flex-shrink:0; margin:0 18px; height:300px; border-radius:24px;
+    overflow:hidden; box-shadow:0 10px 26px rgba(42,36,56,0.18); background:#bfe0f5;
+  }
+  .px-layers{ position:absolute; inset:0; }
+  .px-layer{
+    position:absolute; top:0; left:0; height:100%; width:auto; max-width:none;
+    will-change:transform; pointer-events:none; display:block;
+    /* All three source images are exported at the same 2928x352 canvas, so
+       scaling each to the wrap's height keeps them pixel-aligned with each
+       other regardless of parallax offset. */
+  }
+
+  .px-scroll{
+    position:absolute; inset:0; overflow-x:auto; overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
+  .px-scroll::-webkit-scrollbar{ display:none; }
+  .px-spacer{ height:1px; }
+
+  .px-hint{
+    position:absolute; bottom:10px; right:14px; z-index:5;
+    background:rgba(42,36,56,0.55); color:#fff; font-size:0.7rem; font-weight:700;
+    padding:5px 12px; border-radius:999px; pointer-events:none;
+    font-family:'Fredoka',sans-serif; letter-spacing:0.02em;
+  }
+
+  .below{ padding:16px 22px; overflow-y:auto; }
+  .below h3{ font-size:0.95rem; margin-bottom:6px; }
+  .below p{ font-size:0.82rem; opacity:0.65; line-height:1.5; }
+
+  @media (max-width:430px){
+    body{ padding:0; }
+    .phone{ width:100vw; height:100vh; max-height:100vh; border-radius:0; box-shadow:none; }
+    .px-wrap{ margin:0 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-note">Real-art test — swapping the flat SVG placeholders in parallax-concept.html for your actual Bay Area illustration set (sky / buildings / people), same three-speed drag + ambient auto-drift behavior. Source files: assets/parallax/bay-area-test/.</div>
+
+<div class="phone" id="phone">
+  <div class="statusbar">
+    <span>9:41</span>
+    <span>●●●●&nbsp;&nbsp;📶&nbsp;&nbsp;🔋</span>
+  </div>
+  <div class="ph-head">
+    <h1>Expedition Hub</h1>
+    <p>Swipe through the trail to find your next adventure</p>
+  </div>
+
+  <div class="px-wrap">
+    <div class="px-layers">
+      <img class="px-layer" id="px-sky" src="assets/parallax/bay-area-test/sky.jpg" alt="">
+      <img class="px-layer" id="px-city" src="assets/parallax/bay-area-test/city_longer.png" alt="">
+      <img class="px-layer" id="px-buildings" src="assets/parallax/bay-area-test/buildings.png" alt="">
+      <img class="px-layer" id="px-people" src="assets/parallax/bay-area-test/people.png" alt="">
+    </div>
+
+    <div class="px-scroll" id="px-scroll">
+      <div class="px-spacer" id="px-spacer"></div>
+    </div>
+
+    <div class="px-hint">auto-playing — drag to explore</div>
+  </div>
+
+  <div class="below">
+    <h3>What you're looking at</h3>
+    <p>Four real illustrated depth layers moving at different speeds as you drag: sky (slowest — furthest back), cityscape (distant skyline), downtown buildings (midground), people (fastest — this is the foreground and the layer that defines how far you can scroll). All four source images share the same canvas size, so they stay pixel-locked to each other at rest and only separate as you scroll. The buildings layer has real alpha transparency, so the cityscape shows through its gaps.</p>
+  </div>
+</div>
+
+<script>
+  const wrap = document.querySelector('.px-wrap');
+  const pxScroll = document.getElementById('px-scroll');
+  const pxSpacer = document.getElementById('px-spacer');
+  const skyImg = document.getElementById('px-sky');
+  const cityImg = document.getElementById('px-city');
+  const buildingsImg = document.getElementById('px-buildings');
+  const peopleImg = document.getElementById('px-people');
+
+  // Speed factors: 0 = pinned to viewport, 1 = moves 1:1 with the drag
+  // (i.e. is the layer whose width sets the scrollable range).
+  const SPEED = { sky: 0.1, city: 0.3, buildings: 0.55, people: 1 };
+
+  // city_longer.png (5000px native) is a long empty water/sky lead-in
+  // followed by the skyline's low-rise edge starting around native
+  // x=3560, with the Space Needle first appearing at x=3914 (measured
+  // directly from the source pixels). Anchored to the END of the scroll
+  // rather than the start: at rest we're still in the empty lead-in (no
+  // buildings poking above the foreground street), and by the time the
+  // scroll maxes out we've drifted just to the city's edge — never far
+  // enough to reveal the needle.
+  //
+  // The gap between where buildings start (3560) and the needle (3914)
+  // is only 354px — narrower than one viewport's worth of the image at
+  // most screen sizes — so the safe target has to be derived from the
+  // *actual* viewport width (how much native-image-space is visible at
+  // once), not a fixed x position, or a wider device would scroll the
+  // needle right into view even while "aimed" at the same edge point.
+  const CITY_NEEDLE_NATIVE_X = 3914;
+  const CITY_SAFETY_MARGIN_NATIVE = 20;
+  let cityBaseOffset = 0;
+
+  function computeCityBaseOffset(){
+    if(!cityImg.naturalHeight || !peopleImg.naturalHeight) return;
+    const scale = wrap.clientHeight / cityImg.naturalHeight;
+    const peopleWidth = peopleImg.getBoundingClientRect().width;
+    const maxScroll = Math.max(peopleWidth - wrap.clientWidth, 0);
+    const viewportNativeWidth = wrap.clientWidth / scale;
+    const edgeNativeX = CITY_NEEDLE_NATIVE_X - CITY_SAFETY_MARGIN_NATIVE - viewportNativeWidth;
+    const edgeRendered = edgeNativeX * scale;
+    cityBaseOffset = -(edgeRendered - maxScroll * SPEED.city);
+  }
+
+  function sizeSpacer(){
+    // people.naturalWidth is already the on-screen width once height:100%
+    // has scaled it (all three source images share one native size, so
+    // any of the three would give the same answer here).
+    const w = peopleImg.getBoundingClientRect().width;
+    pxSpacer.style.width = Math.max(w, wrap.clientWidth) + 'px';
+  }
+
+  function applyParallax(){
+    const s = pxScroll.scrollLeft;
+    skyImg.style.transform = `translateX(${-s * SPEED.sky}px)`;
+    cityImg.style.transform = `translateX(${cityBaseOffset - s * SPEED.city}px)`;
+    buildingsImg.style.transform = `translateX(${-s * SPEED.buildings}px)`;
+    peopleImg.style.transform = `translateX(${-s * SPEED.people}px)`;
+  }
+
+  let ticking = false;
+  pxScroll.addEventListener('scroll', () => {
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { applyParallax(); ticking = false; });
+  }, { passive: true });
+
+  function refreshLayout(){ sizeSpacer(); computeCityBaseOffset(); applyParallax(); }
+  window.addEventListener('resize', refreshLayout);
+  if(peopleImg.complete) refreshLayout(); else peopleImg.addEventListener('load', refreshLayout);
+  if(cityImg.complete) refreshLayout(); else cityImg.addEventListener('load', refreshLayout);
+
+  // ---------- AUTO-SCROLL (Roku-style ambient drift) ----------
+  const AUTO_SPEED = 0.45;
+  let autoScrollDir = 1;
+  let autoScrollPaused = false;
+  let resumeTimer = null;
+
+  function autoScrollStep(){
+    if(!autoScrollPaused){
+      const max = pxScroll.scrollWidth - pxScroll.clientWidth;
+      let next = pxScroll.scrollLeft + AUTO_SPEED * autoScrollDir;
+      if(next >= max){ next = max; autoScrollDir = -1; }
+      else if(next <= 0){ next = 0; autoScrollDir = 1; }
+      pxScroll.scrollLeft = next;
+    }
+    requestAnimationFrame(autoScrollStep);
+  }
+  requestAnimationFrame(autoScrollStep);
+
+  function pauseAutoScroll(){
+    autoScrollPaused = true;
+    clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(() => { autoScrollPaused = false; }, 2500);
+  }
+  ['pointerdown', 'wheel', 'touchstart'].forEach(evt => {
+    pxScroll.addEventListener(evt, pauseAutoScroll, { passive: true });
+  });
+</script>
+
+</body>
+</html>

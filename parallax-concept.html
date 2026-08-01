@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUSO Adventures — Parallax Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --coral:#e8503f; --tangerine:#f2994a; --teal:#0ea5a0; --deep-teal:#0b6e68;
+    --plum:#5b4b8a; --cream:#fff7ed; --ink:#2a2438;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'Nunito', sans-serif; background:#e2ddd3; color:var(--ink);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding:4vh 20px;
+  }
+  h1,h2,h3,.display{ font-family:'Fredoka', sans-serif; }
+  .page-note{
+    position:fixed; top:16px; left:16px; font-size:0.8rem; opacity:0.55;
+    max-width:260px; line-height:1.4;
+  }
+
+  .phone{
+    width:390px; max-width:100%; height:760px; max-height:88vh;
+    background:var(--cream); border-radius:44px; overflow:hidden;
+    box-shadow:0 30px 70px rgba(0,0,0,0.35), 0 0 0 10px #1a1622;
+    position:relative; display:flex; flex-direction:column;
+  }
+  .statusbar{
+    display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0; padding:16px 24px 8px; font-weight:700; font-size:0.85rem; color:var(--ink);
+  }
+  .ph-head{ flex-shrink:0; padding:0 22px 12px; }
+  .ph-head h1{ font-size:1.3rem; }
+  .ph-head p{ font-size:0.85rem; opacity:0.65; margin-top:2px; }
+
+  .time-toggle{ display:flex; flex-shrink:0; gap:8px; padding:0 22px 14px; }
+  .time-btn{
+    flex:1; padding:9px 0; border-radius:999px; border:2px solid rgba(42,36,56,0.12);
+    background:#fff; font-family:'Fredoka',sans-serif; font-weight:600; font-size:0.85rem;
+    cursor:pointer; color:var(--ink); transition:background .2s, color .2s, border-color .2s;
+  }
+  .time-btn.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  /* ---------- PARALLAX SCENE ---------- */
+  .px-wrap{
+    position:relative; flex-shrink:0; margin:0 18px; height:300px; border-radius:24px;
+    overflow:hidden; box-shadow:0 10px 26px rgba(42,36,56,0.18);
+  }
+  .px-layers{ position:absolute; inset:0; }
+  .px-layer{
+    position:absolute; top:0; left:0; height:100%; will-change:transform;
+    transition:background 0.6s ease;
+  }
+  .px-sky{ width:100%; }
+  .px-far, .px-mid, .px-fg{ pointer-events:none; }
+
+  /* the element the user actually touches/drags */
+  .px-scroll{
+    position:absolute; inset:0; overflow-x:auto; overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
+  .px-scroll::-webkit-scrollbar{ display:none; }
+  .px-spacer{ height:1px; }
+
+  .px-hint{
+    position:absolute; bottom:10px; right:14px; z-index:5;
+    background:rgba(42,36,56,0.55); color:#fff; font-size:0.7rem; font-weight:700;
+    padding:5px 12px; border-radius:999px; pointer-events:none;
+    font-family:'Fredoka',sans-serif; letter-spacing:0.02em;
+  }
+
+  .below{ flex:1; min-height:0; padding:16px 22px; overflow-y:auto; }
+  .below h3{ font-size:0.95rem; margin-bottom:6px; }
+  .below p{ font-size:0.82rem; opacity:0.65; line-height:1.5; }
+
+  @media (max-width:430px){
+    body{ padding:0; }
+    .phone{ width:100vw; height:100vh; max-height:100vh; border-radius:0; box-shadow:none; }
+    .px-wrap{ margin:0 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-note">Concept exploration — a Roku-style layered parallax scene. Auto-scrolls ambiently like a Roku background; drag to explore manually and it'll resume on its own. Flat vector shapes standing in for full illustration. Storefronts are loaded from the <code>parallax_stops</code> table in Supabase (see migration 0014) — add, reorder, or hide a row in the dashboard and this scene picks it up on next load, no code change needed. Falls back to built-in sample content if that table isn't reachable.</div>
+
+<div class="phone" id="phone" data-time="day">
+  <div class="statusbar">
+    <span>9:41</span>
+    <span>●●●●&nbsp;&nbsp;📶&nbsp;&nbsp;🔋</span>
+  </div>
+  <div class="ph-head">
+    <h1>Expedition Hub</h1>
+    <p>Swipe through the trail to find your next adventure</p>
+  </div>
+
+  <div class="time-toggle">
+    <button type="button" class="time-btn active" id="btn-day" onclick="setTime('day')">☀️ Day</button>
+    <button type="button" class="time-btn" id="btn-night" onclick="setTime('night')">🌙 Night</button>
+  </div>
+
+  <div class="px-wrap">
+    <div class="px-layers">
+      <svg class="px-layer px-sky" id="px-sky" viewBox="0 0 390 300" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop id="skyStop1" offset="0%"></stop>
+            <stop id="skyStop2" offset="100%"></stop>
+          </linearGradient>
+        </defs>
+        <rect width="390" height="300" fill="url(#skyGrad)"></rect>
+        <circle id="px-sun" cx="300" cy="60" r="26" fill="#ffdf8a"></circle>
+        <g id="px-stars"></g>
+      </svg>
+
+      <svg class="px-layer px-far" id="px-far" width="1400" height="300" viewBox="0 0 1400 300" preserveAspectRatio="xMidYMax slice">
+        <!-- distant skyline silhouette -->
+        <g id="px-far-shapes" fill="#a99bd6" opacity="0.55"></g>
+      </svg>
+
+      <svg class="px-layer px-mid" id="px-mid" width="1900" height="300" viewBox="0 0 1900 300" preserveAspectRatio="xMidYMax slice">
+        <!-- water band + boats + hills -->
+        <g id="px-mid-shapes"></g>
+      </svg>
+
+      <svg class="px-layer px-fg" id="px-fg" width="2400" height="300" viewBox="0 0 2400 300" preserveAspectRatio="xMidYMax slice">
+        <!-- foreground storefronts -->
+        <g id="px-fg-shapes"></g>
+      </svg>
+    </div>
+
+    <div class="px-scroll" id="px-scroll">
+      <div class="px-spacer" style="width:2400px;"></div>
+    </div>
+
+    <div class="px-hint">auto-playing — drag to explore</div>
+  </div>
+
+  <div class="below">
+    <h3>What you're looking at</h3>
+    <p>Four layers moving at different speeds as you drag: sky (static), distant skyline (slowest), water + hills (medium), storefronts (fastest — this is the actual scrollable layer). Each storefront is a real MUSO Adventures section, and the list of storefronts itself comes from Supabase.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  // Fill in your project's anon key from Supabase > Project Settings > API.
+  // The anon key is safe to expose in client-side code by design — it's not
+  // a secret, it's the public key Supabase's row-level security is built to
+  // work with. Same project already used by index.html / preview / shop.
+  const SUPABASE_URL = 'https://aqaezprsbcyqpnnavdpv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
+  const parallaxSupabase = (SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' && window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+</script>
+<script>
+  // ---------- PALETTES ----------
+  const PALETTES = {
+    day: {
+      sky1:'#bfe0f5', sky2:'#fff2e0', sun:'#ffdf8a', sunOpacity:1, starsOpacity:0,
+      far:'#a99bd6', farOpacity:0.55,
+      water:'#7fd4d0', hill:'#f2a15c', hillFar:'#f5b98a',
+      building:['#e8503f','#f2994a','#0ea5a0','#5b4b8a'],
+      window:'#fff7ed', windowLit:'#fff7ed', windowOpacity:0.9,
+      roofDark:'#2a2438',
+    },
+    night: {
+      sky1:'#0b0a17', sky2:'#332356', sun:'#e8e2ff', sunOpacity:0.9, starsOpacity:1,
+      far:'#4a3a72', farOpacity:0.6,
+      water:'#241d3d', hill:'#3a2c50', hillFar:'#2a2145',
+      building:['#c0392f','#c97a3a','#0b6e68','#443868'],
+      window:'#ffd98a', windowLit:'#ffd98a', windowOpacity:1,
+      roofDark:'#0a0912',
+    }
+  };
+
+  // Used standalone (no Supabase configured) and as the instant first paint
+  // before the real fetch resolves, so the concept still renders on its own.
+  // Matches the seed rows in migrations/0014_parallax_stops.sql.
+  const DEFAULT_STOPS = [
+    { label:'DISCOVERY\nBASE',     emoji:'🔍', color_index:0, width:130, height:150, is_big:false },
+    { label:'MAPS & GEAR',         emoji:'🗺️', color_index:1, width:120, height:130, is_big:false },
+    { label:'EXPEDITION\nCENTRAL', emoji:'🎉', color_index:2, width:220, height:210, is_big:true },
+    { label:'REWARDS\nOUTPOST',    emoji:'🪙', color_index:3, width:140, height:150, is_big:false },
+    { label:'LEADERBOARD\nLOUNGE', emoji:'🏆', color_index:0, width:150, height:150, is_big:false },
+  ];
+
+  // Positions are computed, not stored — whoever edits parallax_stops in
+  // Supabase manages label/emoji/size/order, not pixel coordinates.
+  const LEFT_MARGIN = 90, GAP = 150, TRAIL_MARGIN = 260, MIN_WIDTH = 2400;
+
+  function layoutStops(rows){
+    let x = LEFT_MARGIN;
+    return rows.map(r => {
+      const f = { x, label:r.label, emoji:r.emoji, w:r.width, h:r.height, color:r.color_index, big:r.is_big };
+      x += r.width + GAP;
+      return f;
+    });
+  }
+
+  function contentWidth(features){
+    if(!features.length) return MIN_WIDTH;
+    const last = features[features.length - 1];
+    return Math.max(MIN_WIDTH, last.x + last.w + TRAIL_MARGIN);
+  }
+
+  let FEATURES = layoutStops(DEFAULT_STOPS);
+
+  function buildingSVG(f, palette){
+    const baseY = 300;
+    const topY = baseY - f.h;
+    const c = palette.building[f.color % palette.building.length];
+    const lines = f.label.split('\n');
+    return `
+      <g>
+        <rect x="${f.x}" y="${topY}" width="${f.w}" height="${f.h}" rx="10" fill="${c}"></rect>
+        <rect x="${f.x - 6}" y="${topY - 14}" width="${f.w + 12}" height="20" rx="6" fill="${palette.roofDark}"></rect>
+        ${Array.from({length: Math.max(2, Math.floor(f.w/38))}).map((_, i) => {
+          const cols = Math.max(2, Math.floor(f.w/38));
+          const wx = f.x + 14 + i * ((f.w - 28) / (cols - 1 || 1));
+          return `<rect x="${wx - 8}" y="${topY + 22}" width="16" height="20" rx="3" fill="${palette.window}" opacity="${palette.windowOpacity}"></rect>
+                  <rect x="${wx - 8}" y="${topY + 54}" width="16" height="20" rx="3" fill="${palette.window}" opacity="${palette.windowOpacity}"></rect>`;
+        }).join('')}
+        <rect x="${f.x + f.w/2 - 18}" y="${baseY - 46}" width="36" height="46" rx="4" fill="${palette.roofDark}" opacity="0.85"></rect>
+        <rect x="${f.x - 4}" y="${topY - 34}" width="${f.w + 8}" height="24" rx="12" fill="#fff" opacity="0.94"></rect>
+        <text x="${f.x + f.w/2}" y="${topY - 20}" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="${f.big ? 11 : 9.5}" fill="${c}">
+          ${lines.map((l,i) => `<tspan x="${f.x + f.w/2}" dy="${i===0?0:11}">${l}</tspan>`).join('')}
+        </text>
+        <text x="${f.x + f.w/2}" y="${topY + f.h/2 + 6}" text-anchor="middle" font-size="${f.big ? 34 : 26}">${f.emoji}</text>
+      </g>
+    `;
+  }
+
+  function renderScene(mode){
+    const p = PALETTES[mode];
+
+    document.getElementById('skyStop1').setAttribute('stop-color', p.sky1);
+    document.getElementById('skyStop2').setAttribute('stop-color', p.sky2);
+    document.getElementById('px-sun').setAttribute('fill', p.sun);
+    document.getElementById('px-sun').setAttribute('opacity', p.sunOpacity);
+
+    const starsG = document.getElementById('px-stars');
+    starsG.setAttribute('opacity', p.starsOpacity);
+    if(!starsG.childElementCount){
+      let starsHtml = '';
+      for(let i = 0; i < 40; i++){
+        const sx = Math.random() * 390, sy = Math.random() * 160, sr = Math.random() * 1.4 + 0.6;
+        starsHtml += `<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="${sr.toFixed(1)}" fill="#fff"></circle>`;
+      }
+      starsG.innerHTML = starsHtml;
+    }
+
+    // Far skyline: simple stepped silhouette + a pyramid + a distant tower
+    const farShapes = document.getElementById('px-far-shapes');
+    farShapes.setAttribute('fill', p.far);
+    farShapes.setAttribute('opacity', p.farOpacity);
+    farShapes.innerHTML = `
+      <polygon points="120,300 220,140 320,300"></polygon>
+      <rect x="380" y="120" width="46" height="180"></rect>
+      <rect x="440" y="160" width="34" height="140"></rect>
+      <rect x="700" y="90" width="54" height="210"></rect>
+      <rect x="770" y="150" width="30" height="150"></rect>
+      <polygon points="900,300 970,120 1040,300"></polygon>
+      <rect x="1150" y="130" width="40" height="170"></rect>
+      <rect x="1200" y="170" width="60" height="130"></rect>
+    `;
+
+    // Mid layer: rolling hills + water band + a couple of boats/balloons
+    const midShapes = document.getElementById('px-mid-shapes');
+    midShapes.innerHTML = `
+      <path d="M0,300 Q200,190 450,260 T900,240 T1400,260 T1900,230 L1900,300 Z" fill="${p.hillFar}"></path>
+      <path d="M0,300 Q300,230 600,280 T1200,270 T1900,280 L1900,300 Z" fill="${p.hill}"></path>
+      <rect x="0" y="255" width="1900" height="45" fill="${p.water}" opacity="0.85"></rect>
+      <ellipse cx="260" cy="270" rx="30" ry="8" fill="${p.roofDark}" opacity="0.5"></ellipse>
+      <ellipse cx="820" cy="278" rx="26" ry="7" fill="${p.roofDark}" opacity="0.5"></ellipse>
+      <ellipse cx="1500" cy="270" rx="32" ry="8" fill="${p.roofDark}" opacity="0.5"></ellipse>
+      <g opacity="0.85">
+        <circle cx="560" cy="70" r="20" fill="${p.building[1]}"></circle>
+        <line x1="560" y1="90" x2="560" y2="120" stroke="${p.roofDark}" stroke-width="2"></line>
+        <rect x="548" y="118" width="24" height="16" rx="3" fill="${p.building[1]}"></rect>
+      </g>
+      <g opacity="0.8">
+        <circle cx="1320" cy="55" r="16" fill="${p.building[3]}"></circle>
+        <line x1="1320" y1="71" x2="1320" y2="96" stroke="${p.roofDark}" stroke-width="2"></line>
+        <rect x="1310" y="94" width="20" height="14" rx="3" fill="${p.building[3]}"></rect>
+      </g>
+    `;
+
+    // Foreground: buildings + a path line + trees
+    const fgWidth = contentWidth(FEATURES);
+    const fgShapes = document.getElementById('px-fg-shapes');
+    let html = `<rect x="0" y="288" width="${fgWidth}" height="12" fill="${p.roofDark}" opacity="0.18"></rect>`;
+    FEATURES.forEach(f => { html += buildingSVG(f, p); });
+    for(let tx = 70; tx < fgWidth - 100; tx += 230){
+      html += `<circle cx="${tx}" cy="278" r="14" fill="${p.hill}"></circle><rect x="${tx-3}" y="278" width="6" height="20" fill="${p.roofDark}"></rect>`;
+    }
+    fgShapes.innerHTML = html;
+  }
+
+  // The fg svg/viewBox and scroll spacer must track however wide the actual
+  // stop list is; far/mid backdrop art stays at its designed fixed width
+  // (built for a handful of stops) — a much longer stop list will show flat
+  // background past the art's edge rather than stretched/distorted shapes.
+  function applyContentWidth(){
+    const w = contentWidth(FEATURES);
+    const fg = document.getElementById('px-fg');
+    fg.setAttribute('width', w);
+    fg.setAttribute('viewBox', `0 0 ${w} 300`);
+    document.querySelector('.px-spacer').style.width = w + 'px';
+  }
+
+  window.setTime = function(mode){
+    document.getElementById('phone').dataset.time = mode;
+    document.getElementById('btn-day').classList.toggle('active', mode === 'day');
+    document.getElementById('btn-night').classList.toggle('active', mode === 'night');
+    renderScene(mode);
+  };
+
+  // ---------- PARALLAX SCROLL ----------
+  const pxScroll = document.getElementById('px-scroll');
+  const pxFar = document.getElementById('px-far');
+  const pxMid = document.getElementById('px-mid');
+  const pxFg = document.getElementById('px-fg');
+  let ticking = false;
+  pxScroll.addEventListener('scroll', () => {
+    if(ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const s = pxScroll.scrollLeft;
+      pxFar.style.transform = `translateX(${-s * 0.25}px)`;
+      pxMid.style.transform = `translateX(${-s * 0.55}px)`;
+      pxFg.style.transform = `translateX(${-s * 1}px)`;
+      ticking = false;
+    });
+  }, { passive: true });
+
+  // ---------- AUTO-SCROLL (Roku-style ambient drift) ----------
+  // Continuously drifts the scene left-to-right, reversing direction at
+  // each end (ping-pong) rather than snapping back to the start — the
+  // scene isn't a seamlessly tileable loop, so a hard reset would show a
+  // visible jump cut. Pauses while the visitor is actively dragging/
+  // scrolling it themselves, then resumes after a short idle period.
+  const AUTO_SPEED = 0.45; // px/frame, ~27px/sec at 60fps
+  let autoScrollDir = 1;
+  let autoScrollPaused = false;
+  let resumeTimer = null;
+
+  function autoScrollStep(){
+    if(!autoScrollPaused){
+      const max = pxScroll.scrollWidth - pxScroll.clientWidth;
+      let next = pxScroll.scrollLeft + AUTO_SPEED * autoScrollDir;
+      if(next >= max){ next = max; autoScrollDir = -1; }
+      else if(next <= 0){ next = 0; autoScrollDir = 1; }
+      pxScroll.scrollLeft = next;
+    }
+    requestAnimationFrame(autoScrollStep);
+  }
+  requestAnimationFrame(autoScrollStep);
+
+  function pauseAutoScroll(){
+    autoScrollPaused = true;
+    clearTimeout(resumeTimer);
+    resumeTimer = setTimeout(() => { autoScrollPaused = false; }, 2500);
+  }
+  ['pointerdown', 'wheel', 'touchstart'].forEach(evt => {
+    pxScroll.addEventListener(evt, pauseAutoScroll, { passive: true });
+  });
+
+  applyContentWidth();
+  renderScene('day');
+
+  // ---------- LOAD STOPS FROM SUPABASE ----------
+  // Renders with DEFAULT_STOPS immediately above so the page never shows
+  // blank while this resolves, then swaps in the real content once it
+  // arrives. Silently keeps the defaults on any error (table not migrated
+  // yet, offline, RLS misconfigured) — this is a concept file, not a page
+  // that should hard-fail if Supabase is briefly unreachable.
+  async function loadStopsFromSupabase(){
+    if(!parallaxSupabase) return;
+    try{
+      const { data, error } = await parallaxSupabase
+        .from('parallax_stops')
+        .select('label, emoji, color_index, width, height, is_big, sort_order')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      if(error || !data || !data.length) return;
+      FEATURES = layoutStops(data);
+      applyContentWidth();
+      renderScene(document.getElementById('phone').dataset.time);
+    } catch(err){
+      console.warn('parallax_stops fetch failed, keeping default content:', err);
+    }
+  }
+  loadStopsFromSupabase();
+</script>
+
+</body>
+</html>

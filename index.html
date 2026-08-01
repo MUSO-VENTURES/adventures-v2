@@ -1,0 +1,2214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUSO Adventures — Your People. Your Path. Your Adventure!!!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --coral:#e8503f;
+    --tangerine:#f2994a;
+    --teal:#0ea5a0;
+    --deep-teal:#0b6e68;
+    --plum:#5b4b8a;
+    --cream:#fff7ed;
+    --ink:#2a2438;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth; font-size:106.25%;}
+  body{
+    font-family:'Nunito', sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    overflow-x:hidden;
+  }
+  h1,h2,h3,.display{
+    font-family:'Fredoka', sans-serif;
+  }
+  a{color:inherit;}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(255,247,237,0.85);
+    backdrop-filter:blur(8px);
+    border-bottom:2px solid rgba(42,36,56,0.06);
+  }
+  .nav-inner{
+    display:flex; align-items:center; justify-content:space-between;
+    width:100%; margin:0;
+    padding:18px 28px;
+    box-sizing:border-box;
+  }
+  .logo{
+    font-family:'Fredoka', sans-serif;
+    font-weight:700;
+    font-size:1.4rem;
+    display:flex; align-items:center; gap:8px;
+  }
+  .logo .dot{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--coral);
+    display:inline-block;
+  }
+  .navlinks{display:flex; align-items:center; gap:28px; font-size:0.95rem; font-weight:500;}
+  .navlinks a{text-decoration:none; opacity:0.75; transition:opacity .2s;}
+  .navlinks a:hover{opacity:1;}
+  .nav-cta{
+    background:var(--coral);
+    color:#fff !important;
+    opacity:1 !important;
+    padding:10px 20px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:0.92rem;
+  }
+  .nav-cta:hover{background:var(--deep-teal);}
+
+  /* Sign In / Sign Out is the always-visible primary account action in the
+     sticky nav — deliberately styled with the same weight as .nav-cta so
+     it reads as prominent, and kept outside the mobile "hide extra links"
+     rule below so it never disappears on a small screen. Shop stays a
+     plain, secondary nav link: it supports the game, it isn't the point
+     of the header. */
+  .nav-account{ display:flex; align-items:center; gap:8px; }
+  .nav-signin-form{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .nav-signin-form input{
+    background:var(--card); border:2px solid rgba(42,36,56,0.14); color:var(--ink);
+    padding:8px 12px; border-radius:999px; font-family:'Space Grotesk',sans-serif; font-size:0.85rem;
+    width:min(190px, 40vw);
+  }
+  .nav-signin-form input:focus{ outline:none; border-color:var(--coral); }
+  .nav-signin-form button:disabled{ background:rgba(42,36,56,0.3); cursor:default; }
+  .nav-signin-msg{ font-size:0.78rem; opacity:0.65; }
+  .nav-signed-in-msg{ font-size:0.88rem; font-weight:600; opacity:0.85; }
+  .nav-signout-link{ font-size:0.85rem; font-weight:600; opacity:0.65; text-decoration:underline; cursor:pointer; }
+  .nav-signout-link:hover{ opacity:1; }
+  @media (max-width:640px){
+    .nav-signed-in-msg{ display:none; }
+    .nav-signin-form input{ width:38vw; }
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;
+    padding:9vh 6vw 12vh;
+    text-align:center;
+    overflow:hidden;
+  }
+  .hero::before, .hero::after{
+    content:"";
+    position:absolute;
+    border-radius:50%;
+    filter:blur(2px);
+    opacity:0.5;
+    z-index:0;
+  }
+  .hero::before{
+    width:340px; height:340px;
+    background:radial-gradient(circle at 30% 30%, var(--tangerine), transparent 70%);
+    top:-120px; left:-100px;
+  }
+  .hero::after{
+    width:420px; height:420px;
+    background:radial-gradient(circle at 60% 60%, var(--teal), transparent 70%);
+    bottom:-160px; right:-140px;
+  }
+  .hero-inner{position:relative; z-index:2; max-width:820px; margin:0 auto;}
+  .eyebrow{
+    display:inline-block;
+    background:var(--ink);
+    color:var(--cream);
+    padding:6px 16px;
+    border-radius:999px;
+    font-size:0.8rem;
+    font-weight:600;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin-bottom:22px;
+  }
+  .hero h1{
+    font-size:clamp(2.4rem, 6vw, 4.6rem);
+    line-height:1.05;
+    font-weight:700;
+    margin-bottom:20px;
+  }
+  .hero h1 .accent{color:var(--coral);}
+  .hero h1 .accent2{color:var(--deep-teal);}
+  .hero p.sub{
+    font-size:1.15rem;
+    max-width:560px;
+    margin:0 auto 34px;
+    opacity:0.8;
+    line-height:1.6;
+  }
+  .path-teaser{
+    display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+    font-size:0.95rem; font-weight:600;
+  }
+  .path-chip{
+    background:var(--card);
+    border:2px solid rgba(42,36,56,0.08);
+    padding:10px 20px;
+    border-radius:999px;
+    box-shadow:0 4px 14px rgba(42,36,56,0.06);
+  }
+  .path-chip span{color:var(--coral);}
+
+  .scroll-cue{
+    margin-top:60px;
+    font-size:0.85rem;
+    opacity:0.55;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .scroll-cue .arrow{
+    width:20px; height:20px;
+    border-right:2px solid var(--ink);
+    border-bottom:2px solid var(--ink);
+    transform:rotate(45deg);
+    animation:bob 1.6s infinite;
+  }
+  @keyframes bob{
+    0%,100%{transform:rotate(45deg) translate(0,0);}
+    50%{transform:rotate(45deg) translate(4px,4px);}
+  }
+
+  section{padding:10vh 6vw;}
+  .section-head{max-width:640px; margin:0 auto 56px; text-align:center;}
+  .section-head .tag{
+    color:var(--deep-teal); font-weight:700; letter-spacing:0.08em;
+    text-transform:uppercase; font-size:0.8rem; margin-bottom:10px; display:block;
+  }
+  .section-head h2{font-size:clamp(1.8rem,4vw,2.6rem); margin-bottom:14px;}
+  .section-head p{opacity:0.75; font-size:1.05rem; line-height:1.6;}
+
+  /* ---------- ROUTE DEMO ---------- */
+  .route-demo{
+    background:var(--ink);
+    color:var(--cream);
+    border-radius:32px;
+    max-width:1000px;
+    margin:0 auto;
+    padding:6vh 5vw;
+    position:relative;
+  }
+  .route-demo .section-head p{color:rgba(255,247,237,0.7);}
+  .route-demo .section-head .tag{color:var(--tangerine);}
+
+  .step-row{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    margin-bottom:40px; flex-wrap:wrap;
+  }
+  .step-dot{
+    width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,247,237,0.12);
+    font-weight:700; font-size:0.9rem;
+    transition:all .25s;
+  }
+  .step-dot.active{background:var(--coral); color:var(--ink);}
+  .step-line{width:36px; height:2px; background:rgba(255,247,237,0.18);}
+
+  .choice-stage{min-height:260px;}
+  .choice-title{font-size:1.4rem; font-weight:600; margin-bottom:26px; text-align:center; font-family:'Fredoka',sans-serif;}
+  .choice-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:16px; max-width:720px; margin:0 auto;
+  }
+  .choice-card{
+    background:rgba(255,247,237,0.06);
+    border:2px solid rgba(255,247,237,0.14);
+    border-radius:18px;
+    padding:22px 16px;
+    text-align:center;
+    cursor:pointer;
+    transition:all .2s;
+  }
+  .choice-card:hover{
+    border-color:var(--coral);
+    background:rgba(232,80,63,0.12);
+    transform:translateY(-3px);
+  }
+  .choice-card .emoji{font-size:2rem; display:block; margin-bottom:10px;}
+  .choice-card .label{font-weight:600; font-family:'Fredoka',sans-serif;}
+  .choice-card.wildcard{
+    background:linear-gradient(135deg, rgba(242,153,74,0.16), rgba(232,80,63,0.12));
+    border:2px dashed rgba(242,153,74,0.5);
+  }
+  .choice-card.wildcard:hover{
+    border-color:var(--tangerine);
+    border-style:solid;
+    background:rgba(242,153,74,0.2);
+  }
+  .choice-card.wildcard .label{color:var(--tangerine);}
+
+  .reveal-card{
+    background:linear-gradient(135deg, rgba(232,80,63,0.16), rgba(14,165,160,0.14));
+    border:2px solid rgba(255,247,237,0.16);
+    border-radius:22px;
+    padding:34px;
+    text-align:center;
+  }
+  .reveal-card .route-title{
+    font-family:'Fredoka',sans-serif;
+    font-size:1.6rem; font-weight:700; margin-bottom:12px;
+    color:var(--tangerine);
+  }
+  .reveal-card .route-desc{
+    opacity:0.85; line-height:1.7; max-width:520px; margin:0 auto 22px;
+  }
+  .replay-btn{
+    background:var(--coral); color:var(--ink); border:none;
+    padding:12px 28px; border-radius:999px; font-weight:700;
+    font-family:'Fredoka',sans-serif; cursor:pointer; font-size:0.95rem;
+    transition:transform .15s;
+  }
+  .replay-btn:hover{transform:scale(1.04);}
+
+  .stop-selector{
+    display:flex; justify-content:center; gap:10px; margin-bottom:34px; flex-wrap:wrap;
+  }
+  .stop-chip{
+    background:rgba(255,247,237,0.08);
+    border:2px solid rgba(255,247,237,0.16);
+    color:var(--cream);
+    padding:8px 20px;
+    border-radius:999px;
+    font-weight:600;
+    font-size:0.9rem;
+    cursor:pointer;
+    transition:all .2s;
+  }
+  .stop-chip.active{
+    background:var(--coral);
+    border-color:var(--coral);
+    color:var(--ink);
+  }
+  .stop-chip:hover{border-color:var(--coral);}
+  .stop-chip.locked{
+    cursor:pointer;
+    opacity:0.55;
+    background:rgba(255,247,237,0.04);
+  }
+  .stop-chip.locked:hover{border-color:rgba(255,247,237,0.16);}
+  .stop-selector-note{
+    text-align:center; font-size:0.78rem; opacity:0; max-height:0; overflow:hidden;
+    color:var(--tangerine); margin:-18px 0 24px; transition:opacity .2s;
+  }
+  .stop-selector-note.show{ opacity:0.9; max-height:40px; margin-top:-18px; margin-bottom:24px; }
+
+  .itinerary{
+    max-width:520px; margin:0 auto 22px; text-align:left;
+  }
+  .itinerary-stop{
+    display:flex; gap:14px; align-items:flex-start;
+    padding:14px 0; border-bottom:1px solid rgba(255,247,237,0.12);
+  }
+  .itinerary-stop:last-child{border-bottom:none;}
+  .itinerary-stop .stop-num{
+    flex:0 0 auto;
+    width:28px; height:28px; border-radius:50%;
+    background:rgba(242,153,74,0.2);
+    color:var(--tangerine);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:0.85rem;
+  }
+  .itinerary-stop .stop-body .stop-name{font-weight:600; font-family:'Fredoka',sans-serif; margin-bottom:2px;}
+  .itinerary-stop .stop-body .stop-desc{opacity:0.75; font-size:0.9rem; line-height:1.5;}
+  .itinerary-stop .stop-body .stop-qr{
+    display:inline-flex; align-items:center; gap:5px; margin-top:6px;
+    font-size:0.76rem; font-weight:700; color:var(--tangerine);
+  }
+  .itinerary-stop.reveal-in{
+    animation: revealStop 0.45s ease both;
+  }
+  @keyframes revealStop{
+    from{ opacity:0; transform:translateY(14px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  .reveal-progress{
+    text-align:center; font-size:0.85rem; opacity:0.6; margin-bottom:16px;
+  }
+  .recap-trigger-btn{ background:var(--tangerine) !important; }
+
+  /* ---------- PHOTO BOOTH RECAP ---------- */
+  .recap-showcase{
+    display:flex; justify-content:center; align-items:flex-start; gap:56px; flex-wrap:wrap;
+    max-width:1000px; margin:0 auto;
+  }
+  .recap-copy{ max-width:420px; }
+  .recap-copy h3{ font-size:1.2rem; margin-bottom:14px; font-family:'Fredoka',sans-serif; }
+  .recap-copy ul{ list-style:none; }
+  .recap-copy ul li{
+    display:flex; gap:10px; align-items:flex-start; margin-bottom:14px;
+    font-size:0.95rem; opacity:0.8; line-height:1.5;
+  }
+  .recap-copy ul li .check{ color:var(--coral); font-weight:700; flex:0 0 auto; }
+
+  .photobooth-strip{
+    background:#fffaf2;
+    border-radius:6px;
+    padding:14px 14px 18px;
+    width:210px;
+    box-shadow:0 20px 40px rgba(42,36,56,0.18);
+    transform:rotate(-3deg);
+    position:relative;
+    margin:0 auto;
+  }
+  .photobooth-strip::before{
+    content:"";
+    position:absolute; top:6px; left:50%; transform:translateX(-50%);
+    width:10px; height:10px; border-radius:50%;
+    background:var(--cream); border:2px solid rgba(42,36,56,0.15);
+  }
+  .photobooth-frame{
+    border-radius:4px;
+    height:110px;
+    margin-bottom:8px;
+    display:flex; align-items:flex-end;
+    padding:10px;
+    position:relative;
+    overflow:hidden;
+  }
+  .photobooth-frame .stop-label{
+    color:#fff; font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem;
+    text-shadow:0 2px 6px rgba(0,0,0,0.35);
+  }
+  .photobooth-frame .stop-emoji{
+    position:absolute; top:8px; right:10px; font-size:1.3rem; opacity:0.9;
+  }
+  .photobooth-footer{ text-align:center; margin-top:6px; }
+  .photobooth-footer .pb-logo{
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem; color:var(--ink);
+  }
+  .photobooth-footer .pb-date{ font-size:0.68rem; opacity:0.5; margin-top:2px; }
+
+  .recap-actions{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; justify-content:center; }
+  .recap-btn{
+    border:none; padding:10px 18px; border-radius:999px; font-weight:700;
+    font-family:'Fredoka',sans-serif; cursor:pointer; font-size:0.85rem;
+  }
+  .recap-btn.primary{ background:var(--coral); color:#fff; }
+  .recap-btn.secondary{ background:rgba(42,36,56,0.08); color:var(--ink); }
+  .recap-note{
+    text-align:center; font-size:0.85rem; opacity:0.65; margin-top:14px; min-height:1.2em;
+  }
+
+  /* ---------- DISCOVERY FORM ---------- */
+  .mode-toggle{
+    display:flex; justify-content:center; gap:10px; margin-bottom:40px; flex-wrap:wrap;
+  }
+  .mode-tab{
+    background:rgba(255,247,237,0.08);
+    border:2px solid rgba(255,247,237,0.16);
+    color:var(--cream);
+    padding:10px 24px;
+    border-radius:999px;
+    font-weight:700;
+    font-family:'Fredoka',sans-serif;
+    cursor:pointer;
+    font-size:0.9rem;
+    transition:all .2s;
+  }
+  .mode-tab.active{
+    background:var(--coral);
+    border-color:var(--coral);
+    color:var(--ink);
+  }
+  .mode-tab:hover{ border-color:var(--coral); }
+
+  .discovery-form{ max-width:640px; margin:0 auto; }
+  .form-group{ margin-bottom:30px; }
+  .form-group .form-label{
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem;
+    color:var(--cream); margin-bottom:12px; display:block;
+  }
+  .form-group .form-hint{ font-size:0.82rem; opacity:0.55; margin-bottom:26px; margin-top:-4px; display:block; }
+  .radius-tier-markers{ display:flex; gap:6px; margin-top:12px; }
+  .radius-tier-marker{
+    flex:1; text-align:center; padding:5px 6px; border-radius:8px;
+    background:rgba(255,247,237,0.05); color:var(--cream);
+    opacity:0.45; font-size:0.72rem; font-weight:600; white-space:nowrap;
+  }
+  .radius-tier-marker.reached{
+    opacity:1; background:rgba(232,80,63,0.16); color:var(--coral);
+  }
+
+  .pill-group{ display:flex; gap:10px; flex-wrap:wrap; }
+  .pill-option{
+    background:rgba(255,247,237,0.06);
+    border:2px solid rgba(255,247,237,0.14);
+    color:var(--cream);
+    padding:10px 18px;
+    border-radius:14px;
+    cursor:pointer;
+    font-size:0.9rem;
+    transition:all .2s;
+    text-align:left;
+    flex:1 1 130px;
+  }
+  .pill-option .pill-title{ font-weight:700; font-family:'Fredoka',sans-serif; display:block; }
+  .pill-option .pill-desc{ font-size:0.76rem; opacity:0.6; margin-top:2px; display:block; }
+  .pill-option:hover{ border-color:rgba(232,80,63,0.5); }
+  .pill-option.selected{
+    background:rgba(232,80,63,0.16);
+    border-color:var(--coral);
+  }
+  .pill-option.selected .pill-title{ color:var(--coral); }
+
+  .chip-multiselect{ display:flex; gap:10px; flex-wrap:wrap; }
+  .multiselect-chip{
+    background:rgba(255,247,237,0.06);
+    border:2px solid rgba(255,247,237,0.14);
+    color:var(--cream);
+    padding:9px 16px;
+    border-radius:999px;
+    cursor:pointer;
+    font-size:0.85rem;
+    font-weight:600;
+    transition:all .2s;
+  }
+  .multiselect-chip:hover{ border-color:var(--teal); }
+  .multiselect-chip.selected{
+    background:var(--teal); border-color:var(--teal); color:var(--ink);
+  }
+
+  .form-select, .form-input, .form-textarea{
+    width:100%;
+    background:rgba(255,247,237,0.06);
+    border:2px solid rgba(255,247,237,0.16);
+    color:var(--cream);
+    padding:12px 16px;
+    border-radius:14px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:0.95rem;
+  }
+  .form-select option{ background:var(--ink); }
+  .form-textarea{ min-height:80px; resize:vertical; font-family:'Space Grotesk',sans-serif; }
+
+  .full-discovery-fields{ display:none; }
+  .full-discovery-fields.visible{ display:block; }
+
+  .summary-card{
+    background:linear-gradient(135deg, rgba(232,80,63,0.14), rgba(14,165,160,0.12));
+    border:2px solid rgba(255,247,237,0.16);
+    border-radius:22px;
+    padding:28px;
+    margin-top:26px;
+    max-width:640px;
+    margin-left:auto; margin-right:auto;
+  }
+  .summary-card h4{ font-family:'Fredoka',sans-serif; color:var(--tangerine); margin-bottom:14px; font-size:1.05rem; }
+  .summary-row{ display:flex; gap:10px; margin-bottom:10px; font-size:0.92rem; flex-wrap:wrap; }
+  .summary-row .summary-label{ opacity:0.6; flex:0 0 130px; }
+  .summary-row .summary-value{ font-weight:600; flex:1 1 200px; }
+
+  /* ---------- CHECK-IN / VIRAL LOOP ---------- */
+  .checkin-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:20px; max-width:1040px; margin:0 auto 32px;
+  }
+  .checkin-card{
+    background:var(--card);
+    border-radius:22px;
+    padding:28px 22px;
+    text-align:center;
+    box-shadow:0 6px 24px rgba(42,36,56,0.06);
+    border:2px solid rgba(42,36,56,0.05);
+  }
+  .checkin-card .step-badge{
+    width:36px; height:36px; border-radius:50%;
+    background:var(--ink); color:var(--cream);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fredoka',sans-serif; font-weight:700;
+    margin:0 auto 14px; font-size:0.92rem;
+  }
+  .checkin-card .icon-big{font-size:2rem; margin-bottom:8px; display:block;}
+  .checkin-card h3{font-size:1.05rem; margin-bottom:8px;}
+  .checkin-card p{opacity:0.75; font-size:0.9rem; line-height:1.55;}
+  .checkin-note{
+    max-width:600px; margin:0 auto; text-align:center;
+    opacity:0.65; font-size:0.9rem; line-height:1.6;
+    padding:18px 24px; border:2px dashed rgba(42,36,56,0.15); border-radius:18px;
+  }
+
+  /* ---------- LEADERBOARD ---------- */
+  .leaderboard{
+    max-width:760px; margin:0 auto;
+    background:var(--card);
+    border-radius:28px;
+    padding:8px;
+    box-shadow:0 6px 24px rgba(42,36,56,0.06);
+    border:2px solid rgba(42,36,56,0.05);
+  }
+  .lb-row{
+    display:flex; align-items:center; gap:16px;
+    padding:16px 22px;
+    border-radius:20px;
+  }
+  .lb-row.top{
+    background:linear-gradient(90deg, rgba(232,80,63,0.08), rgba(14,165,160,0.08));
+  }
+  .lb-rank{
+    width:34px; text-align:center; font-family:'Fredoka',sans-serif;
+    font-weight:700; font-size:1.1rem; opacity:0.6;
+  }
+  .lb-row.top .lb-rank{opacity:1;}
+  .lb-avatar{
+    width:42px; height:42px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem;
+    color:#fff; flex:0 0 auto;
+  }
+  .lb-name{flex:1; font-weight:600; font-family:'Fredoka',sans-serif;}
+  .lb-stats{display:flex; gap:22px; font-size:0.82rem; opacity:0.75; text-align:right;}
+  .lb-stats .lb-stat b{display:block; font-size:1rem; color:var(--ink); opacity:1; font-family:'Fredoka',sans-serif;}
+  .lb-you{
+    max-width:760px; margin:20px auto 0;
+    border:2px dashed rgba(42,36,56,0.18);
+    border-radius:20px;
+    padding:16px 22px;
+    display:flex; align-items:center; gap:16px;
+    opacity:0.85;
+  }
+  .lb-you .lb-rank{opacity:0.4;}
+
+  /* ---------- REWARDS ---------- */
+  .rewards-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:24px; max-width:900px; margin:0 auto;
+  }
+  .reward-card{
+    background:var(--card);
+    border-radius:26px;
+    padding:32px 28px;
+    box-shadow:0 6px 24px rgba(42,36,56,0.06);
+    border:2px solid rgba(42,36,56,0.05);
+  }
+  .reward-card.premium{
+    border:2px solid var(--tangerine);
+    background:linear-gradient(180deg, rgba(242,153,74,0.08), rgba(255,255,255,0));
+    position:relative;
+  }
+  .reward-card .tier-badge{
+    display:inline-block; font-size:0.75rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.06em;
+    padding:5px 14px; border-radius:999px; margin-bottom:18px;
+  }
+  .reward-card.regular .tier-badge{background:rgba(14,165,160,0.15); color:var(--deep-teal);}
+  .reward-card.premium .tier-badge{background:var(--tangerine); color:var(--ink);}
+  .reward-card h3{font-size:1.3rem; margin-bottom:6px;}
+  .reward-card .tier-sub{opacity:0.65; font-size:0.9rem; margin-bottom:22px;}
+  .reward-list{list-style:none;}
+  .reward-list li{
+    display:flex; gap:14px; align-items:flex-start;
+    padding:12px 0; border-bottom:1px solid rgba(42,36,56,0.06);
+  }
+  .reward-list li:last-child{border-bottom:none;}
+  .reward-list .milestone{
+    flex:0 0 auto;
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem;
+    background:rgba(42,36,56,0.06);
+    padding:5px 10px; border-radius:10px; white-space:nowrap;
+  }
+  .reward-card.premium .reward-list .milestone{background:rgba(242,153,74,0.18); color:var(--tangerine);}
+  .reward-list .reward-text{font-size:0.94rem; line-height:1.5; opacity:0.85;}
+
+  /* ---------- STREET TEAM ---------- */
+  .street-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:22px; max-width:1040px; margin:0 auto;
+  }
+  .street-card{
+    background:var(--card);
+    border-radius:22px;
+    padding:30px 24px;
+    box-shadow:0 6px 24px rgba(42,36,56,0.06);
+    border:2px solid rgba(42,36,56,0.05);
+  }
+  .street-card .icon{
+    width:52px; height:52px; border-radius:16px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.5rem; margin-bottom:16px;
+  }
+  .street-card:nth-child(1) .icon{background:rgba(232,80,63,0.15);}
+  .street-card:nth-child(2) .icon{background:rgba(14,165,160,0.15);}
+  .street-card:nth-child(3) .icon{background:rgba(242,153,74,0.2);}
+  .street-card:nth-child(4) .icon{background:rgba(91,75,138,0.15);}
+  .street-card h3{font-size:1.1rem; margin-bottom:8px;}
+  .street-card p{opacity:0.75; font-size:0.92rem; line-height:1.6;}
+  .street-card .addon-tag{
+    display:inline-block; margin-top:14px; font-size:0.72rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.05em;
+    background:rgba(42,36,56,0.06); padding:4px 12px; border-radius:999px;
+  }
+  .street-note{
+    max-width:640px; margin:36px auto 0; text-align:center;
+    opacity:0.65; font-size:0.92rem; line-height:1.6;
+  }
+
+  /* ---------- VALUE PROPS (users) ---------- */
+  .value-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:24px; max-width:1080px; margin:0 auto;
+  }
+  .value-card{
+    background:var(--card);
+    border-radius:24px;
+    padding:34px 28px;
+    box-shadow:0 6px 24px rgba(42,36,56,0.06);
+    border:2px solid rgba(42,36,56,0.05);
+  }
+  .value-card .icon{
+    width:52px; height:52px; border-radius:16px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.5rem; margin-bottom:18px;
+  }
+  .value-card:nth-child(1) .icon{background:rgba(232,80,63,0.15);}
+  .value-card:nth-child(2) .icon{background:rgba(14,165,160,0.15);}
+  .value-card:nth-child(3) .icon{background:rgba(242,153,74,0.2);}
+  .value-card h3{font-size:1.2rem; margin-bottom:10px;}
+  .value-card p{opacity:0.75; line-height:1.6; font-size:0.98rem;}
+
+  /* ---------- VENUE / BUSINESS SECTION ---------- */
+  .venue-section{background:var(--plum); color:var(--cream); border-radius:32px; max-width:1100px; margin:0 auto;}
+  .venue-section .section-head .tag{color:var(--tangerine);}
+  .venue-section .section-head p{color:rgba(255,247,237,0.75);}
+
+  .venue-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:22px; max-width:1000px; margin:0 auto;
+  }
+  .venue-card{
+    background:rgba(255,247,237,0.08);
+    border:2px solid rgba(255,247,237,0.14);
+    border-radius:20px;
+    padding:28px 24px;
+  }
+  .venue-card .tier{
+    display:inline-block; font-size:0.75rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.06em;
+    background:var(--coral); color:var(--ink);
+    padding:4px 12px; border-radius:999px; margin-bottom:14px;
+  }
+  .venue-card h3{font-family:'Fredoka',sans-serif; font-size:1.2rem; margin-bottom:10px;}
+  .venue-card p{opacity:0.8; line-height:1.6; font-size:0.95rem;}
+  .venue-card ul{margin-top:12px; padding-left:18px; opacity:0.85; font-size:0.9rem; line-height:1.7;}
+
+  .venue-cta{
+    text-align:center; max-width:560px; margin:44px auto 0;
+  }
+  .venue-cta p{opacity:0.8; line-height:1.6; margin-bottom:18px;}
+  .venue-cta .replay-btn{
+    display:inline-block; text-decoration:none;
+  }
+
+  /* ---------- HOW IT WORKS STRIP ---------- */
+  .how-strip{
+    display:flex; justify-content:center; gap:0; flex-wrap:wrap;
+    max-width:960px; margin:0 auto;
+  }
+  .how-item{
+    flex:1 1 200px; text-align:center; padding:20px;
+    position:relative;
+  }
+  .how-item .num{
+    font-family:'Fredoka',sans-serif; font-size:2.4rem; font-weight:700;
+    color:rgba(42,36,56,0.12); line-height:1;
+  }
+  .how-item h3{margin:8px 0 8px; font-size:1.1rem;}
+  .how-item p{opacity:0.7; font-size:0.92rem; line-height:1.5;}
+
+  /* ---------- FOOTER ---------- */
+  footer{
+    padding:8vh 6vw 6vh;
+    text-align:center;
+  }
+  footer .footer-links{
+    display:flex; justify-content:center; gap:64px; flex-wrap:wrap;
+    text-align:left; margin-bottom:40px;
+  }
+  footer .footer-col h4{
+    font-family:'Fredoka', sans-serif; font-size:0.75rem; text-transform:uppercase;
+    letter-spacing:0.06em; opacity:0.45; margin-bottom:12px;
+  }
+  footer .footer-col a{
+    display:block; font-size:0.9rem; opacity:0.75; text-decoration:none; margin-bottom:10px;
+  }
+  footer .footer-col a:hover{ opacity:1; }
+  footer .logo{justify-content:center; margin-bottom:16px;}
+  footer p{opacity:0.6; font-size:0.92rem; max-width:480px; margin:0 auto 6px;}
+  footer .fine{font-size:0.78rem; opacity:0.45; margin-top:26px;}
+
+  @media (max-width:640px){
+    .navlinks a:not(.nav-cta){display:none;}
+    .navlinks{gap:0;}
+    section{padding:8vh 6vw;}
+  }
+
+  /* ---------- AGE GATE / DISCLAIMER ---------- */
+  .gate-overlay{
+    position:fixed; inset:0; z-index:1000;
+    background:rgba(42,36,56,0.92);
+    display:flex; align-items:center; justify-content:center;
+    padding:6vw;
+  }
+  .gate-overlay[hidden]{display:none;}
+  .gate-card{
+    background:var(--card);
+    border-radius:20px;
+    max-width:520px;
+    width:100%;
+    max-height:86vh;
+    overflow-y:auto;
+    padding:36px 32px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+  }
+  .gate-card h2{
+    font-size:1.5rem;
+    margin-bottom:8px;
+  }
+  .gate-card .gate-sub{
+    opacity:0.75;
+    font-size:0.95rem;
+    margin-bottom:20px;
+  }
+  .gate-disclaimer-box{
+    background:var(--cream);
+    border:1px solid rgba(42,36,56,0.1);
+    border-radius:12px;
+    padding:16px;
+    max-height:220px;
+    overflow-y:auto;
+    font-size:0.82rem;
+    line-height:1.5;
+    opacity:0.85;
+    margin-bottom:20px;
+  }
+  .gate-disclaimer-box p{margin-bottom:10px;}
+  .gate-disclaimer-box p:last-child{margin-bottom:0;}
+  .gate-field-row{ margin-bottom:16px; text-align:left; }
+  .gate-field-label{
+    display:block; font-weight:600; font-size:0.88rem; margin-bottom:6px;
+  }
+  .gate-field-optional{ font-weight:400; opacity:0.55; }
+  .gate-field-hint{ display:block; font-size:0.76rem; opacity:0.6; margin-top:5px; line-height:1.4; }
+  .gate-input{
+    width:100%;
+    background:var(--cream);
+    border:2px solid rgba(42,36,56,0.14);
+    color:var(--ink);
+    padding:11px 14px;
+    border-radius:12px;
+    font-family:'Space Grotesk', sans-serif;
+    font-size:0.95rem;
+  }
+  .gate-input:focus{ outline:none; border-color:var(--coral); }
+  .gate-check-row{
+    display:flex; align-items:flex-start; gap:10px;
+    margin-bottom:14px;
+    font-size:0.88rem;
+    line-height:1.4;
+    cursor:pointer;
+  }
+  .gate-check-row input[type="checkbox"]{
+    margin-top:3px;
+    width:18px; height:18px;
+    accent-color:var(--coral);
+    flex-shrink:0;
+    cursor:pointer;
+  }
+  .gate-error{
+    color:var(--coral);
+    font-size:0.85rem;
+    margin-bottom:10px;
+    min-height:1.2em;
+  }
+  .gate-enter-btn{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:12px;
+    background:var(--ink);
+    color:#fff;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:1rem;
+    cursor:pointer;
+    opacity:0.4;
+    pointer-events:none;
+    transition:opacity .2s;
+  }
+  .gate-enter-btn.ready{
+    opacity:1;
+    pointer-events:auto;
+    background:var(--coral);
+  }
+  .gate-leave-link{
+    display:block;
+    text-align:center;
+    margin-top:14px;
+    font-size:0.82rem;
+    opacity:0.55;
+    text-decoration:underline;
+    cursor:pointer;
+  }
+  .age-badge{
+    display:inline-block;
+    font-size:0.65rem;
+    font-weight:700;
+    letter-spacing:0.03em;
+    padding:2px 7px;
+    border-radius:6px;
+    background:var(--coral);
+    color:#fff;
+    margin-left:6px;
+    vertical-align:middle;
+  }
+  .pill-option.locked{
+    opacity:0.75;
+    filter:grayscale(0.35);
+    pointer-events:none;
+    cursor:not-allowed;
+  }
+  .multiselect-chip.locked{
+    opacity:0.75;
+    filter:grayscale(0.35);
+    pointer-events:none;
+    cursor:not-allowed;
+  }
+
+  /* ---------- TOP VENUES RESULTS ---------- */
+  #top-venues-results{ margin-top:16px; }
+  .venue-result-card{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:12px;
+    background:var(--card);
+    border:1px solid rgba(42,36,56,0.08);
+    border-radius:12px;
+    padding:14px 16px;
+    margin-top:10px;
+    text-align:left;
+  }
+  .venue-result-photo{
+    width:56px; height:56px; flex:0 0 auto;
+    border-radius:10px;
+    object-fit:cover;
+    background:rgba(42,36,56,0.06);
+  }
+  .venue-result-photo-placeholder{
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.4rem;
+  }
+  .venue-result-info{ min-width:0; flex:1; }
+  .venue-result-name{font-weight:600; color:var(--ink);}
+  .venue-result-meta{
+    font-size:0.82rem; opacity:0.65; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .venue-result-rating{
+    font-weight:700; color:var(--deep-teal);
+    white-space:nowrap;
+  }
+  .venue-status-msg{
+    font-size:0.85rem;
+    opacity:0.7;
+    margin-top:10px;
+    text-align:left;
+  }
+</style>
+</head>
+<body>
+
+<div class="gate-overlay" id="gate-overlay">
+  <div class="gate-card">
+    <h2>Before you plan an adventure</h2>
+    <p class="gate-sub">MUSO Adventures routes can include alcohol, cannabis, physical activities (like axe throwing), and visits to independent, third-party venues. Please read and confirm the following.</p>
+
+    <div class="gate-disclaimer-box" id="gate-disclaimer-text">
+      <p><strong>Participant acknowledgment &amp; assumption of risk.</strong> By using MUSO Adventures, you acknowledge and agree that: (1) routes may include physical activities, alcohol and/or cannabis service, and visits to third-party venues not owned or operated by MUSO Ventures ("MUSO"); (2) MUSO curates and suggests routes and venues but does not supervise, control, or guarantee the conduct of any venue, staff, or fellow participant; (3) you are solely responsible for your own decisions, safety, and conduct — including alcohol or cannabis consumption, participation in physical activities, and interactions with venues or other participants — throughout any MUSO Adventure; (4) any injury, loss, dispute, or other harm arising from your participation, including at third-party venues, is your responsibility and not that of MUSO, its officers, employees, or affiliates, except where caused by MUSO's own gross negligence or willful misconduct; (5) many venues (for example, axe-throwing locations, bars, and dispensaries) require their own separate liability waiver or ID check on-site, and this acknowledgment does not replace that requirement.</p>
+      <p><strong>Age requirement.</strong> You must be 18 or older to access NC-17 content, and 21 or older to access Adults Only content or to enter routes involving bars, dispensaries, alcohol, or cannabis. We calculate your age from the birthday you provide below — MUSO does not otherwise independently verify identity, and venues will still check ID on-site as required by law. Enter your birthday once and we'll remember it — you won't need to re-confirm your age to unlock these ratings again.</p>
+    </div>
+
+    <div class="gate-field-row">
+      <label for="gate-birthdate" class="gate-field-label">Your birthday</label>
+      <input type="date" id="gate-birthdate" class="gate-input">
+      <span class="gate-field-hint">Unlocks 21+ content when you're eligible — and lets us send you something for your birthday 🎂</span>
+    </div>
+    <div class="gate-field-row">
+      <label for="gate-email" class="gate-field-label">Email <span class="gate-field-optional">(optional — for birthday specials)</span></label>
+      <input type="email" id="gate-email" class="gate-input" placeholder="you@example.com">
+    </div>
+
+    <label class="gate-check-row">
+      <input type="checkbox" id="gate-disclaimer-check">
+      <span>I have read and agree to the participant acknowledgment above. I understand that my choices and conduct during a MUSO Adventure are my own responsibility.</span>
+    </label>
+
+    <div class="gate-error" id="gate-error"></div>
+
+    <button type="button" class="gate-enter-btn" id="gate-enter-btn" onclick="attemptEnterSite()">Continue to MUSO Adventures</button>
+    <span class="gate-leave-link" onclick="window.location.href='https://www.google.com'">I do not agree — leave the site</span>
+  </div>
+</div>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo"><span class="dot"></span>MUSO Adventures</div>
+    <div class="navlinks">
+      <a href="#demo">Try a Route</a>
+      <a href="#discovery">Plan It</a>
+      <a href="#users">For Every Crew</a>
+      <a href="#leaderboard">Leaderboard</a>
+      <a href="/shop/">Shop</a>
+      <div class="nav-account" id="nav-account">
+        <!-- Populated by JS: a Sign In button, or "Signed in as ... / Sign out" once authenticated. -->
+      </div>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">Concept preview</span>
+    <h1>Your people. <span class="accent">Your path.</span> Your <span class="accent2">adventure!!!</span></h1>
+    <p class="sub">Turn "what do you want to do tonight?" into a branching story that's all yours. Pick a mood, pick a twist, and land on a route through the best local spots — with your partner, your crew, or your team. MUSO Adventures is happy to curate the experience. No planning spiral required.</p>
+    <div class="path-teaser">
+      <div class="path-chip">🍸 Cozy <span>→</span> Wine bar</div>
+      <div class="path-chip">🎯 Adventurous <span>→</span> Axe throwing</div>
+      <div class="path-chip">🎲 Spontaneous <span>→</span> Mystery stop</div>
+    </div>
+    <div class="scroll-cue"><span>see how it works</span><span class="arrow"></span></div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="route-demo">
+    <div class="section-head">
+      <span class="tag">Sample Route</span>
+      <h2>Play through a real date, right now</h2>
+      <p>Pick your mood, pick your twist, choose how many stops you're up for. This is exactly what a couple sees on their phone.</p>
+    </div>
+
+    <div class="stop-selector" id="stop-selector">
+      <div class="stop-chip" data-stops="2" onclick="setStopCount(2)">2 stops</div>
+      <div class="stop-chip active" data-stops="3" onclick="setStopCount(3)">3 stops</div>
+      <div class="stop-chip locked" data-stops="4" onclick="setStopCount(4)">4 stops 🔒</div>
+      <div class="stop-chip locked" data-stops="5" onclick="setStopCount(5)">5 stops 🔒</div>
+    </div>
+    <p class="stop-selector-note" id="stop-selector-note">🔒 Free adventures include up to 3 stops. Unlock 4–5 stops by leveling up or with Adventure Coins once you start playing.</p>
+
+    <div class="step-row">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot-3">3</div>
+    </div>
+
+    <div class="choice-stage" id="stage">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</section>
+
+<section id="discovery">
+  <div class="route-demo">
+    <div class="section-head">
+      <span class="tag">Discovery Form</span>
+      <h2>Tell us who's coming and what they're into</h2>
+      <p>Planners fill this out before or at the start of the excursion — the more we know, the better the route. Start quick, or go deeper.</p>
+    </div>
+
+    <div class="mode-toggle">
+      <div class="mode-tab active" data-mode="quick" onclick="setDiscoveryMode('quick')">Quick Setup</div>
+      <div class="mode-tab" data-mode="full" onclick="setDiscoveryMode('full')">Full Discovery</div>
+    </div>
+
+    <div class="discovery-form">
+
+      <div class="form-group">
+        <span class="form-label">Budget</span>
+        <div class="pill-group" id="budget-group">
+          <div class="pill-option" data-value="$" onclick="selectPill(this,'budget')">
+            <span class="pill-title">$</span><span class="pill-desc">Keep it low-key</span>
+          </div>
+          <div class="pill-option" data-value="$$" onclick="selectPill(this,'budget')">
+            <span class="pill-title">$$</span><span class="pill-desc">Comfortable spend</span>
+          </div>
+          <div class="pill-option" data-value="$$$" onclick="selectPill(this,'budget')">
+            <span class="pill-title">$$$</span><span class="pill-desc">Treat yourself</span>
+          </div>
+          <div class="pill-option" data-value="$$$$" onclick="selectPill(this,'budget')">
+            <span class="pill-title">$$$$</span><span class="pill-desc">No limits</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Search Radius</span>
+        <span class="form-hint">Defaults to 15 miles from your starting point or current location — drag to widen or narrow the search area</span>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <input type="range" id="radius-slider" min="1" max="30" value="15" style="flex:1; accent-color:var(--coral);" oninput="document.getElementById('radius-value').textContent = this.value">
+          <span id="radius-value" style="font-weight:600; min-width:64px;">15 mi</span>
+        </div>
+        <div class="radius-tier-markers">
+          <div class="radius-tier-marker reached">≤30mi Free</div>
+          <div class="radius-tier-marker">🔓 ≤50mi Unlock</div>
+          <div class="radius-tier-marker">⭐ ≤100mi Exclusive</div>
+        </div>
+      </div>
+
+      <div class="form-group" id="top-venues-group">
+        <span class="form-label">Top-Rated Venues Nearby</span>
+        <span class="form-hint">Pulls live, rated venues within your budget and radius</span>
+        <div style="text-align:left;">
+          <button type="button" class="replay-btn" onclick="findTopVenues()" id="find-venues-btn">Find Top-Rated Venues</button>
+        </div>
+        <div id="top-venues-results"></div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Content Rating</span>
+        <div class="pill-group" id="rating-group">
+          <div class="pill-option" data-value="G-Rated" onclick="selectPill(this,'rating')">
+            <span class="pill-title">🟢 G-Rated</span><span class="pill-desc">Family-friendly, zero surprises</span>
+          </div>
+          <div class="pill-option" data-value="PG-Rated" onclick="selectPill(this,'rating')">
+            <span class="pill-title">🟡 PG-Rated</span><span class="pill-desc">A little flirty, nothing wild</span>
+          </div>
+          <div class="pill-option" data-value="NC-17" onclick="selectPill(this,'rating')">
+            <span class="pill-title">🟠 NC-17<span class="age-badge">18+</span></span><span class="pill-desc">Adult humor, still tasteful</span>
+          </div>
+          <div class="pill-option" data-value="Adults Only" onclick="selectPill(this,'rating')">
+            <span class="pill-title">🔴 Adults Only<span class="age-badge">21+</span></span><span class="pill-desc">No limits</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Alcohol</span>
+        <div class="pill-group" id="alcohol-group">
+          <div class="pill-option" data-value="Alcohol-Friendly" onclick="selectPill(this,'alcohol')">
+            <span class="pill-title">🍷 Alcohol-Friendly</span><span class="pill-desc">Bars and drinks are fair game</span>
+          </div>
+          <div class="pill-option" data-value="Sober / Alcohol-Free" onclick="selectPill(this,'alcohol')">
+            <span class="pill-title">🚫 Sober / Alcohol-Free</span><span class="pill-desc">Keep the whole route dry</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Group Size</span>
+        <input type="number" class="form-input" id="group-size" min="1" max="20" value="2">
+      </div>
+
+      <div class="full-discovery-fields" id="full-discovery-fields">
+
+        <div class="form-group">
+          <span class="form-label">Interests</span>
+          <span class="form-hint">Pick as many as apply</span>
+          <div class="chip-multiselect" id="interests-group">
+            <div class="multiselect-chip" data-value="Food & Drink" onclick="toggleChip(this)">🍽️ Food & Drink</div>
+            <div class="multiselect-chip" data-value="Outdoors" onclick="toggleChip(this)">🌲 Outdoors</div>
+            <div class="multiselect-chip" data-value="Arts & Culture" onclick="toggleChip(this)">🎨 Arts & Culture</div>
+            <div class="multiselect-chip" data-value="Games & Competition" onclick="toggleChip(this)">🎮 Games & Competition</div>
+            <div class="multiselect-chip" data-value="Live Music" onclick="toggleChip(this)">🎵 Live Music</div>
+            <div class="multiselect-chip" data-value="Wellness" onclick="toggleChip(this)">🧘 Wellness</div>
+            <div class="multiselect-chip" data-value="Nightlife" onclick="toggleChip(this)">🌃 Nightlife</div>
+            <div class="multiselect-chip" data-value="Shopping" onclick="toggleChip(this)">🛍️ Shopping</div>
+            <div class="multiselect-chip" data-value="Pet-Friendly" onclick="toggleChip(this)">🐾 Pet-Friendly</div>
+            <div class="multiselect-chip" data-value="Comedy" onclick="toggleChip(this)">😂 Comedy</div>
+            <div class="multiselect-chip" data-value="Cultured" onclick="toggleChip(this)">🎭 Cultured</div>
+            <div class="multiselect-chip" data-value="Oddities & Curiosities" onclick="toggleChip(this)">🔮 Oddities & Curiosities</div>
+            <div class="multiselect-chip" id="smoke-cigar-chip" data-value="Smoke & Cigar" onclick="toggleChip(this)">💨 Smoke & Cigar<span class="age-badge">21+</span></div>
+          </div>
+          <p class="form-hint" style="margin-top:10px;">🍕 Got the munchies? Pick <strong>Smoke & Cigar</strong> and we'll automatically pair your route with nearby food &amp; snack stops.</p>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label">What's the occasion?</span>
+          <select class="form-select" id="goal-select">
+            <option value="">Select one...</option>
+            <option>First Date</option>
+            <option>Anniversary</option>
+            <option>Date Night Reset</option>
+            <option>Friend Hangout</option>
+            <option>Team Building</option>
+            <option>Celebration</option>
+            <option>Just Because</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label">Anything else?</span>
+          <span class="form-hint">Accessibility needs, allergies, preferences — whatever helps us fine-tune it</span>
+          <textarea class="form-textarea" id="notes-field" placeholder="e.g. wheelchair accessible, nut allergy, prefers quiet spots..."></textarea>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;">
+        <button type="button" class="replay-btn recap-trigger-btn" onclick="generateDiscoverySummary()">Save My Preferences</button>
+      </div>
+    </div>
+
+    <div id="discovery-summary"></div>
+  </div>
+</section>
+
+<section id="users">
+  <div class="section-head">
+    <span class="tag">For Every Crew</span>
+    <h2>Discovery without the decision fatigue</h2>
+    <p>The whole point: less scrolling, more actually going. Built for date nights — works just as well for a friend group or a work crew ready to actually go do something.</p>
+  </div>
+  <div class="value-grid">
+    <div class="value-card">
+      <div class="icon">🗺️</div>
+      <h3>Curated, not generic</h3>
+      <p>Every route is hand-built around real local venues — not a list of restaurants nobody vetted.</p>
+    </div>
+    <div class="value-card">
+      <div class="icon">🎁</div>
+      <h3>A new route every month</h3>
+      <p>Your free route resets monthly. Want more variety mid-month? Unlock extra adventures anytime.</p>
+    </div>
+    <div class="value-card">
+      <div class="icon">✨</div>
+      <h3>Milestone editions</h3>
+      <p>Anniversary routes, proposal routes, "we've been together a year" routes — bigger moments get bigger stories.</p>
+    </div>
+  </div>
+</section>
+
+<section id="leaderboard">
+  <div class="section-head">
+    <span class="tag">Community</span>
+    <h2>Every adventure earns you a spot on the board</h2>
+    <p>Ranked by total adventures completed and stops visited. Sample season shown below.</p>
+  </div>
+  <div class="leaderboard">
+    <div class="lb-row top">
+      <div class="lb-rank">🥇</div>
+      <div class="lb-avatar" style="background:var(--coral);">J&amp;A</div>
+      <div class="lb-name">Jordan &amp; Alex</div>
+      <div class="lb-stats"><div class="lb-stat"><b>14</b>Adventures</div><div class="lb-stat"><b>42</b>Stops</div></div>
+    </div>
+    <div class="lb-row top">
+      <div class="lb-rank">🥈</div>
+      <div class="lb-avatar" style="background:var(--deep-teal);">S&amp;R</div>
+      <div class="lb-name">Sam &amp; Riya</div>
+      <div class="lb-stats"><div class="lb-stat"><b>12</b>Adventures</div><div class="lb-stat"><b>33</b>Stops</div></div>
+    </div>
+    <div class="lb-row top">
+      <div class="lb-rank">🥉</div>
+      <div class="lb-avatar" style="background:var(--tangerine);">D&amp;K</div>
+      <div class="lb-name">Devon &amp; Kai</div>
+      <div class="lb-stats"><div class="lb-stat"><b>11</b>Adventures</div><div class="lb-stat"><b>29</b>Stops</div></div>
+    </div>
+    <div class="lb-row">
+      <div class="lb-rank">4</div>
+      <div class="lb-avatar" style="background:var(--plum);">P&amp;M</div>
+      <div class="lb-name">Priya &amp; Marcus</div>
+      <div class="lb-stats"><div class="lb-stat"><b>9</b>Adventures</div><div class="lb-stat"><b>24</b>Stops</div></div>
+    </div>
+    <div class="lb-row">
+      <div class="lb-rank">5</div>
+      <div class="lb-avatar" style="background:var(--coral);">T&amp;J</div>
+      <div class="lb-name">Taylor &amp; Jess</div>
+      <div class="lb-stats"><div class="lb-stat"><b>8</b>Adventures</div><div class="lb-stat"><b>22</b>Stops</div></div>
+    </div>
+    <div class="lb-row">
+      <div class="lb-rank">6</div>
+      <div class="lb-avatar" style="background:var(--deep-teal);">N&amp;O</div>
+      <div class="lb-name">Nia &amp; Owen</div>
+      <div class="lb-stats"><div class="lb-stat"><b>7</b>Adventures</div><div class="lb-stat"><b>19</b>Stops</div></div>
+    </div>
+    <div class="lb-row">
+      <div class="lb-rank">7</div>
+      <div class="lb-avatar" style="background:var(--tangerine);">L&amp;S</div>
+      <div class="lb-name">Luca &amp; Sofia</div>
+      <div class="lb-stats"><div class="lb-stat"><b>6</b>Adventures</div><div class="lb-stat"><b>15</b>Stops</div></div>
+    </div>
+  </div>
+  <div class="lb-you">
+    <div class="lb-rank">—</div>
+    <div class="lb-avatar" style="background:var(--ink);">YOU</div>
+    <div class="lb-name">Your rank shows up here once you start playing</div>
+    <div class="lb-stats"><div class="lb-stat"><b>0</b>Adventures</div><div class="lb-stat"><b>0</b>Stops</div></div>
+  </div>
+</section>
+
+<section id="checkin">
+  <div class="section-head">
+    <span class="tag">Check-In &amp; Share</span>
+    <h2>Scan it. Snap it. Show it off.</h2>
+    <p>Every stop on your route has a QR marker waiting. That's how your stops count — and how your friends find out about your MUSO Adventures.</p>
+  </div>
+  <div class="checkin-grid">
+    <div class="checkin-card">
+      <div class="step-badge">1</div>
+      <span class="icon-big">📍</span>
+      <h3>Find the Marker</h3>
+      <p>Each venue displays a small MUSO Adventures QR marker at the entrance or table.</p>
+    </div>
+    <div class="checkin-card">
+      <div class="step-badge">2</div>
+      <span class="icon-big">📱</span>
+      <h3>Scan &amp; Snap</h3>
+      <p>Scan to confirm you made it, then take a quick photo together at the spot.</p>
+    </div>
+    <div class="checkin-card">
+      <div class="step-badge">3</div>
+      <span class="icon-big">📤</span>
+      <h3>Share It</h3>
+      <p>Post to your story with the auto-filled caption and route hashtag. Tag the venue, tag us.</p>
+    </div>
+    <div class="checkin-card">
+      <div class="step-badge">4</div>
+      <span class="icon-big">🏆</span>
+      <h3>Stack Your Stats</h3>
+      <p>Verified check-ins count toward your leaderboard rank and speed up your rewards.</p>
+    </div>
+  </div>
+  <p class="checkin-note">Scanning the marker confirms your check-in and counts toward your stats — that part's required to keep the leaderboard honest. Sharing to social is always optional, but posting unlocks a small bonus toward your next reward.</p>
+</section>
+
+<section id="recap">
+  <div class="section-head">
+    <span class="tag">Recap &amp; Share</span>
+    <h2>Every stop becomes a keepsake</h2>
+    <p>The moment your last stop is checked in, your route is stitched into a photo-booth-style strip — yours to keep, download, or share.</p>
+  </div>
+  <div class="recap-showcase">
+    <div class="photobooth-strip">
+      <div class="photobooth-frame" style="background:linear-gradient(135deg, var(--coral), var(--teal));">
+        <span class="stop-emoji">🍷</span>
+        <span class="stop-label">Wine Bar</span>
+      </div>
+      <div class="photobooth-frame" style="background:linear-gradient(135deg, var(--tangerine), var(--plum));">
+        <span class="stop-emoji">🎯</span>
+        <span class="stop-label">Axe Throwing</span>
+      </div>
+      <div class="photobooth-frame" style="background:linear-gradient(135deg, var(--teal), var(--coral));">
+        <span class="stop-emoji">🎤</span>
+        <span class="stop-label">Karaoke Bar</span>
+      </div>
+      <div class="photobooth-frame" style="background:linear-gradient(135deg, var(--plum), var(--tangerine));">
+        <span class="stop-emoji">🌅</span>
+        <span class="stop-label">Sunrise Lookout</span>
+      </div>
+      <div class="photobooth-footer">
+        <div class="pb-logo">MUSO Adventures</div>
+        <div class="pb-date">Sample Recap Strip</div>
+      </div>
+    </div>
+    <div class="recap-copy">
+      <h3>Built from the check-ins you already made</h3>
+      <ul>
+        <li><span class="check">✓</span> Auto-generated the moment your last stop is scanned — no extra steps</li>
+        <li><span class="check">✓</span> Every frame pulled straight from your QR check-in photos</li>
+        <li><span class="check">✓</span> One-tap download or share to Instagram, TikTok, or a text thread</li>
+        <li><span class="check">✓</span> Standout strips get featured on our own "Happy Outings" page — a dedicated MUSO Adventures social account for real couples, crews, and teams showing off their nights</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="rewards">
+  <div class="section-head">
+    <span class="tag">Rewards</span>
+    <h2>Free stuff, just for playing</h2>
+    <p>Hit milestones and unlock real perks at partner venues — Premium players unlock more, faster.</p>
+  </div>
+  <div class="rewards-grid">
+    <div class="reward-card regular">
+      <span class="tier-badge">Regular</span>
+      <h3>Explorer Track</h3>
+      <p class="tier-sub">Free to earn, no subscription needed.</p>
+      <ul class="reward-list">
+        <li><span class="milestone">3 Adventures</span><span class="reward-text">Free appetizer at a partner venue on your next stop.</span></li>
+        <li><span class="milestone">5 Adventures</span><span class="reward-text">One bonus route unlocked, on the house.</span></li>
+        <li><span class="milestone">10 Adventures</span><span class="reward-text">"Explorer" badge on the leaderboard + early access to new routes.</span></li>
+        <li><span class="milestone">15 Adventures</span><span class="reward-text">Free entry to a sponsored route of your choice.</span></li>
+      </ul>
+    </div>
+    <div class="reward-card premium">
+      <span class="tier-badge">Premium</span>
+      <h3>VIP Track</h3>
+      <p class="tier-sub">Everything in Explorer, unlocked faster and bigger.</p>
+      <ul class="reward-list">
+        <li><span class="milestone">3 Adventures</span><span class="reward-text">Free appetizer <em>and</em> dessert at a partner venue.</span></li>
+        <li><span class="milestone">5 Adventures</span><span class="reward-text">Two bonus routes unlocked free.</span></li>
+        <li><span class="milestone">10 Adventures</span><span class="reward-text">"VIP Explorer" badge + priority booking at premium venues.</span></li>
+        <li><span class="milestone">15 Adventures</span><span class="reward-text">A full sponsored date night for two, transportation included.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="street-team">
+  <div class="section-head">
+    <span class="tag">Street Team</span>
+    <h2>Add a pro to your route</h2>
+    <p>For the stops where a little extra makes it memorable — book a vetted local expert to join in.</p>
+  </div>
+  <div class="street-grid">
+    <div class="street-card">
+      <div class="icon">📸</div>
+      <h3>Photographer</h3>
+      <p>Discreet, on-location shots for anniversaries, proposals, or just a really good night out.</p>
+      <span class="addon-tag">Add-on</span>
+    </div>
+    <div class="street-card">
+      <div class="icon">🍷</div>
+      <h3>Sommelier</h3>
+      <p>A guided tasting built right into your winery or wine bar stop, led by someone who actually knows the list.</p>
+      <span class="addon-tag">Add-on</span>
+    </div>
+    <div class="street-card">
+      <div class="icon">🧭</div>
+      <h3>Local Guide</h3>
+      <p>For history-heavy or hidden-gem routes, walk with someone who knows the neighborhood's real stories.</p>
+      <span class="addon-tag">Add-on</span>
+    </div>
+    <div class="street-card">
+      <div class="icon">🎉</div>
+      <h3>Surprise Coordinator</h3>
+      <p>Pulling off a proposal or milestone moment? Street Team handles the logistics so you can just show up.</p>
+      <span class="addon-tag">Add-on</span>
+    </div>
+  </div>
+  <p class="street-note">Street Team add-ons are booked per stop and layer directly into your existing route — no separate app or extra planning required.</p>
+</section>
+
+<section id="venues">
+  <div class="venue-section">
+    <div style="padding:8vh 5vw 8vh;">
+      <div class="section-head">
+        <span class="tag">Partners</span>
+        <h2>Branded storytelling, not just a listing</h2>
+        <p>Three ways to plug into the MUSO Adventures map — pick the level that fits.</p>
+      </div>
+      <div class="venue-grid">
+        <div class="venue-card">
+          <span class="tier">Basic — Free</span>
+          <h3>On the Map</h3>
+          <p>Every local spot can be discovered inside a route at no cost.</p>
+          <ul>
+            <li>Appear in relevant date routes</li>
+            <li>Foot traffic during slow hours</li>
+            <li>No setup fee</li>
+          </ul>
+        </div>
+        <div class="venue-card">
+          <span class="tier">Premium — Monthly</span>
+          <h3>Featured Placement</h3>
+          <p>For escape rooms, breweries, and upscale spots that want priority.</p>
+          <ul>
+            <li>Priority placement in matching routes</li>
+            <li>Custom chapter writing with our team</li>
+            <li>Performance reporting</li>
+          </ul>
+        </div>
+        <div class="venue-card">
+          <span class="tier">Sponsor — Per Route</span>
+          <h3>Own a Route</h3>
+          <p>Tourism boards and anchor venues co-write and headline an entire adventure.</p>
+          <ul>
+            <li>Full branded route, built together</li>
+            <li>Anchor placement + "Experience Designer" credit</li>
+            <li>Paid per booking that flows through</li>
+          </ul>
+        </div>
+      </div>
+      <div class="venue-cta">
+        <p>Want your business in front of couples, crews, and teams looking for something to do tonight?</p>
+        <a class="replay-btn" href="mailto:smusseau@gmail.com?subject=MUSO%20Adventures%20Partnership%20Inquiry&body=Hi%20MUSO%20Adventures%2C%0A%0AI'd%20like%20to%20learn%20more%20about%20becoming%20a%20partner.%0A%0ABusiness%20name%3A%0AWebsite%2FLocation%3A%0A">Become a Partner</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <span class="tag">The Model</span>
+    <h2>Free to play, sustainable to run</h2>
+  </div>
+  <div class="how-strip">
+    <div class="how-item">
+      <div class="num">01</div>
+      <h3>Free monthly route</h3>
+      <p>Every couple gets one full adventure free, every month.</p>
+    </div>
+    <div class="how-item">
+      <div class="num">02</div>
+      <h3>Venue partnerships</h3>
+      <p>Premium venues pay for featured placement and custom chapters.</p>
+    </div>
+    <div class="how-item">
+      <div class="num">03</div>
+      <h3>Sponsored routes</h3>
+      <p>Bigger players fund whole branded adventures.</p>
+    </div>
+    <div class="how-item">
+      <div class="num">04</div>
+      <h3>Optional upsells</h3>
+      <p>Extended endings, photo packs, milestone editions — never required.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-links">
+    <div class="footer-col">
+      <h4>More</h4>
+      <a href="#rewards">Rewards</a>
+      <a href="#street-team">Street Team</a>
+      <a href="#venues">Partners</a>
+      <a href="#venues">Sponsors</a>
+    </div>
+    <div class="footer-col">
+      <h4>Explore</h4>
+      <a href="#demo">Try a Route</a>
+      <a href="#users">For Every Crew</a>
+      <a href="#leaderboard">Community</a>
+      <a href="#leaderboard">Leaderboard</a>
+    </div>
+  </div>
+  <div class="logo" style="justify-content:center;"><span class="dot"></span>MUSO Adventures</div>
+  <p>Your people. Your path. Your adventure!!! Brought to you by Muso Ventures LLC.</p>
+  <p class="fine">This page is a concept preview, not a live product yet.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  const routes = {
+    1: {
+      title: "Pick your mood",
+      options: [
+        {emoji:"🍸", label:"Cozy", key:"cozy"},
+        {emoji:"🎯", label:"Adventurous", key:"adventurous"},
+        {emoji:"🎲", label:"Spontaneous", key:"spontaneous"},
+        {emoji:"🎭", label:"Cultured", key:"cultured"},
+        {emoji:"🎈", label:"Playful", key:"playful"},
+      ]
+    },
+    2: {
+      cozy: {
+        title:"Pick your twist",
+        options:[
+          {emoji:"🕯️", label:"Candlelit", key:"cozy-candlelit"},
+          {emoji:"📖", label:"Bookish", key:"cozy-bookish"},
+          {emoji:"🐾", label:"Pet-Friendly", key:"cozy-pets"},
+        ]
+      },
+      adventurous: {
+        title:"Pick your twist",
+        options:[
+          {emoji:"🪓", label:"High-stakes", key:"adv-stakes"},
+          {emoji:"🌙", label:"After dark", key:"adv-dark"},
+          {emoji:"🔮", label:"Curious", key:"adv-curious"},
+        ]
+      },
+      spontaneous: {
+        title:"Pick your twist",
+        options:[
+          {emoji:"🎁", label:"Surprise me", key:"spo-surprise"},
+          {emoji:"🍜", label:"Foodie roulette", key:"spo-food"},
+          {emoji:"😂", label:"Comedy Night", key:"spo-comedy"},
+        ]
+      },
+      cultured: {
+        title:"Pick your twist",
+        options:[
+          {emoji:"🍷", label:"Fine Dining", key:"cult-dining"},
+          {emoji:"👗", label:"Fashion & Flair", key:"cult-fashion"},
+        ]
+      },
+      playful: {
+        title:"Pick your twist",
+        options:[
+          {emoji:"🤹", label:"Silly & Games", key:"play-silly"},
+          {emoji:"🎪", label:"Whimsical", key:"play-whimsical"},
+        ]
+      }
+    },
+    reveals: {
+      "cozy-candlelit": {title:"The Slow Burn", stops:[
+        {name:"Wine Bar", desc:"Small plates and candlelight to start the night slow."},
+        {name:"Rooftop Lounge", desc:"One more round under string lights."},
+        {name:"Late-Night Bakery", desc:"Split a pastry on the walk back."},
+        {name:"Skyline Bench", desc:"A quiet nightcap view before you call it a night."},
+        {name:"Walk Home Under the Stars", desc:"No agenda, no plans — just the two of you and the last stretch of night."}
+      ]},
+      "cozy-bookish": {title:"The Quiet Chapter", stops:[
+        {name:"Used Bookstore", desc:"Pick a book for each other, no peeking at the price."},
+        {name:"Corner Café", desc:"Read the first page out loud over coffee."},
+        {name:"Tea House", desc:"Order the flavor neither of you can pronounce."},
+        {name:"Porch Swing", desc:"Finish the chapter together before you head home."},
+        {name:"Late-Night Diner", desc:"One more stop for pie and coffee before the night's fully over."}
+      ]},
+      "adv-stakes": {title:"The Countdown", stops:[
+        {name:"Escape Room", desc:"60 minutes, one team, no phones allowed."},
+        {name:"Loaded Fries Bar", desc:"Debrief the win — or the very close loss."},
+        {name:"Arcade", desc:"One round of skee-ball, loser buys the next drink."},
+        {name:"Rooftop Bar", desc:"Toast to surviving the countdown."},
+        {name:"Late-Night Photo Booth", desc:"Prove you survived the night with a strip of photos to keep."}
+      ]},
+      "adv-dark": {title:"After Hours", stops:[
+        {name:"Axe Throwing", desc:"Burn off the pre-date nerves."},
+        {name:"Late-Night Noodle Spot", desc:"Only good after 9pm anyway."},
+        {name:"Karaoke Bar", desc:"One song each, no excuses."},
+        {name:"Corner Store Run", desc:"Snacks for the walk home."},
+        {name:"Sunrise Lookout", desc:"If you're still going, catch the first light from the best view in town."}
+      ]},
+      "spo-surprise": {title:"The Mystery Stop", stops:[
+        {name:"Unknown Location #1", desc:"We pick. You don't find out until you arrive."},
+        {name:"Unknown Location #2", desc:"Keep going — no peeking at the map."},
+        {name:"The Reveal", desc:"Finally find out where tonight actually started."},
+        {name:"Wildcard Finale", desc:"Something neither of you saw coming."},
+        {name:"One More Surprise", desc:"Just when you thought the night was over, it isn't."}
+      ]},
+      "spo-food": {title:"Foodie Roulette", stops:[
+        {name:"Tiny Plate No. 1", desc:"Appetizer roulette — no menu shown."},
+        {name:"Tiny Plate No. 2", desc:"A cuisine you wouldn't normally pick."},
+        {name:"Tiny Plate No. 3", desc:"Dessert, chef's choice."},
+        {name:"Digestif Stop", desc:"One last thing to end the night right."},
+        {name:"Late-Night Snack Run", desc:"Because somehow there's always room for one more bite."}
+      ]},
+      "cozy-pets": {title:"The Furry Plus-One", stops:[
+        {name:"Dog-Friendly Café", desc:"Two coffees and a pup cup — everyone's welcome at the patio table."},
+        {name:"Local Dog Park", desc:"Off-leash for a while, just watching the chaos together."},
+        {name:"Pet Bakery Stop", desc:"Pick out a treat for your four-legged plus-one."},
+        {name:"Pet-Friendly Patio Dinner", desc:"A table for the humans, a water bowl for the rest of the crew."},
+        {name:"Evening Walk Home", desc:"One more lap around the block before everyone — two-legged and four — calls it a night."}
+      ]},
+      "adv-curious": {title:"Down the Rabbit Hole", stops:[
+        {name:"Oddities Museum", desc:"Wander through the strange, the unexplained, and the delightfully weird."},
+        {name:"Curiosity Shop", desc:"Browse the strangest souvenir you'll almost buy."},
+        {name:"Immersive Puzzle Room", desc:"A mind-bender that isn't quite an escape room — expect the unexpected."},
+        {name:"Late-Night Diner", desc:"Debrief the weirdest part of the night over pie."},
+        {name:"One Last Detour", desc:"A final stop neither of you saw coming."}
+      ]},
+      "spo-comedy": {title:"Open Mic Energy", stops:[
+        {name:"Comedy Club", desc:"Grab a table up front — or hide in the back, your call."},
+        {name:"Late-Night Snack Spot", desc:"Debrief the best (and worst) bits over food."},
+        {name:"Karaoke Bar", desc:"If they can make people laugh, you can make people wince — one song each."},
+        {name:"Corner Store Run", desc:"Snacks for the walk home."},
+        {name:"Porch Recap", desc:"Replay the best lines of the night before you turn in."}
+      ]},
+      "cult-dining": {title:"The Tasting Menu", stops:[
+        {name:"Upscale Wine Bar", desc:"Start with something you can't pronounce and don't ask the price."},
+        {name:"Chef's Table Dinner", desc:"Multiple courses, zero rushing — this one's meant to be savored."},
+        {name:"Dessert Bar", desc:"A final course built just for your table."},
+        {name:"Rooftop Nightcap", desc:"A skyline view to close out the night properly."},
+        {name:"Late-Night Stroll", desc:"Walk it off before the night ends."}
+      ]},
+      "play-silly": {title:"Recess Energy", stops:[
+        {name:"Mini Golf Course", desc:"Whoever loses buys ice cream, no exceptions."},
+        {name:"Arcade", desc:"Skee-ball, claw machine, the works — bragging rights on the line."},
+        {name:"Bumper Cars or Go-Karts", desc:"A little friendly chaos never hurt anyone."},
+        {name:"Ice Cream Stop", desc:"Two spoons, one sundae, zero regrets."},
+        {name:"Photo Booth Strip", desc:"Make the silliest faces you've got — no do-overs."}
+      ]},
+      "play-whimsical": {title:"The Carnival Effect", stops:[
+        {name:"Carnival Game Booth", desc:"Win something ridiculous neither of you needs."},
+        {name:"Cotton Candy Cart", desc:"Split one — it's basically required."},
+        {name:"Ferris Wheel or Scenic Ride", desc:"A few minutes up top before the night keeps moving."},
+        {name:"Face Painting or Photo Op", desc:"Commit to the bit, whatever it is."},
+        {name:"Late-Night Funnel Cake", desc:"The night's not over until dessert says so."}
+      ]},
+      "cult-fashion": {title:"The Runway Night", stops:[
+        {name:"Boutique Shopping Stop", desc:"Find one thing nobody expected to love."},
+        {name:"Fashion or Trunk Show", desc:"Front row seats to something stylish and local."},
+        {name:"Upscale Cocktail Lounge", desc:"Debrief the best looks of the night."},
+        {name:"Art Gallery Walk", desc:"One more stop for something beautiful to look at."},
+        {name:"Late Dinner Reservation", desc:"Cap the night with a table that was worth the wait."}
+      ]},
+    }
+  };
+
+  let state = {step:1, mood:null, key:null, stopCount:3};
+
+  window.setStopCount = function(n){
+    const note = document.getElementById('stop-selector-note');
+    if(n > 3){
+      // Mirrors the real app's free-tier cap (0011_stop_unlock.sql /
+      // unlock-feature edge function) — the marketing demo shouldn't
+      // let you select stop counts a free player can't actually get.
+      if(note) note.classList.add('show');
+      return;
+    }
+    if(note) note.classList.remove('show');
+    state.stopCount = n;
+    document.querySelectorAll('.stop-chip').forEach(chip=>{
+      chip.classList.toggle('active', parseInt(chip.dataset.stops)===n);
+    });
+  };
+  const stage = document.getElementById('stage');
+
+  function setDots(step){
+    for(let i=1;i<=3;i++){
+      document.getElementById('dot-'+i).classList.toggle('active', i<=step);
+    }
+  }
+
+  function renderStep1(){
+    state = {step:1, mood:null, key:null, stopCount: state.stopCount};
+    setDots(1);
+    const r = routes[1];
+    stage.innerHTML = `
+      <div class="choice-title">${r.title}</div>
+      <div class="choice-grid">
+        ${r.options.map(o => `
+          <div class="choice-card" onclick="chooseMood('${o.key}')">
+            <span class="emoji">${o.emoji}</span>
+            <span class="label">${o.label}</span>
+          </div>
+        `).join('')}
+        <div class="choice-card wildcard" onclick="surpriseMe()">
+          <span class="emoji">🎁</span>
+          <span class="label">Surprise Me</span>
+        </div>
+      </div>
+    `;
+  }
+
+  window.surpriseMe = function(){
+    const moods = Object.keys(routes[2]);
+    const randomMood = moods[Math.floor(Math.random() * moods.length)];
+    const twistOptions = routes[2][randomMood].options;
+    const randomTwist = twistOptions[Math.floor(Math.random() * twistOptions.length)];
+    const randomStopCount = Math.floor(Math.random() * 2) + 2; // 2 to 3 — free-tier cap
+
+    state.stopCount = randomStopCount;
+    document.querySelectorAll('.stop-chip').forEach(chip=>{
+      chip.classList.toggle('active', parseInt(chip.dataset.stops) === randomStopCount);
+    });
+
+    chooseTwist(randomTwist.key);
+  };
+
+  window.chooseMood = function(mood){
+    state.mood = mood;
+    state.step = 2;
+    setDots(2);
+    const r = routes[2][mood];
+    stage.innerHTML = `
+      <div class="choice-title">${r.title}</div>
+      <div class="choice-grid">
+        ${r.options.map(o => `
+          <div class="choice-card" onclick="chooseTwist('${o.key}')">
+            <span class="emoji">${o.emoji}</span>
+            <span class="label">${o.label}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  window.chooseTwist = function(key){
+    state.key = key;
+    state.step = 3;
+    setDots(3);
+    const reveal = routes.reveals[key];
+    state.currentStops = reveal.stops.slice(0, state.stopCount);
+    state.revealedCount = 0;
+    stage.innerHTML = `
+      <div class="reveal-card">
+        <div class="route-title">${reveal.title}</div>
+        <div class="reveal-progress" id="reveal-progress">Stop 1 of ${state.currentStops.length} awaits...</div>
+        <div class="itinerary" id="itinerary-list"></div>
+        <button class="replay-btn" id="reveal-btn" onclick="revealNextStop()">Reveal Stop 1 →</button>
+        <div id="recap-section" style="display:none; margin-top:26px; padding-top:26px; border-top:1px solid rgba(255,247,237,0.14);">
+          <button class="replay-btn recap-trigger-btn" onclick="generateRecap()">📸 Create Your Recap Strip</button>
+          <div id="recap-output" style="margin-top:20px; display:flex; flex-direction:column; align-items:center;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  window.generateRecap = function(){
+    const stops = state.currentStops;
+    const gradients = [
+      'linear-gradient(135deg, var(--coral), var(--teal))',
+      'linear-gradient(135deg, var(--tangerine), var(--plum))',
+      'linear-gradient(135deg, var(--teal), var(--coral))',
+      'linear-gradient(135deg, var(--plum), var(--tangerine))',
+      'linear-gradient(135deg, var(--coral), var(--plum))'
+    ];
+    const emojis = ['📍','🥂','✨','🌙','🎉'];
+    const output = document.getElementById('recap-output');
+    output.innerHTML = `
+      <div class="photobooth-strip">
+        ${stops.map((s,i) => `
+          <div class="photobooth-frame" style="background:${gradients[i % gradients.length]}">
+            <span class="stop-emoji">${emojis[i % emojis.length]}</span>
+            <span class="stop-label">${s.name}</span>
+          </div>
+        `).join('')}
+        <div class="photobooth-footer">
+          <div class="pb-logo">MUSO Adventures</div>
+          <div class="pb-date">${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+        </div>
+      </div>
+      <div class="recap-actions">
+        <button class="recap-btn primary" onclick="recapAction('download')">Download Strip</button>
+        <button class="recap-btn secondary" onclick="recapAction('share')">Share to Socials</button>
+      </div>
+      <p class="recap-note" id="recap-note"></p>
+    `;
+  }
+
+  window.recapAction = function(type){
+    const note = document.getElementById('recap-note');
+    if(!note) return;
+    note.textContent = type === 'download'
+      ? '📥 In the live app, this saves your strip straight to your camera roll.'
+      : '📤 In the live app, this opens a share sheet straight to Instagram or TikTok — and the best ones land on our Happy Outings page.';
+  }
+
+  window.revealNextStop = function(){
+    const stops = state.currentStops;
+    const idx = state.revealedCount;
+    if(idx >= stops.length) return;
+    const s = stops[idx];
+    const list = document.getElementById('itinerary-list');
+    list.innerHTML += `
+      <div class="itinerary-stop reveal-in">
+        <div class="stop-num">${idx+1}</div>
+        <div class="stop-body">
+          <div class="stop-name">${s.name}</div>
+          <div class="stop-desc">${s.desc}</div>
+          <div class="stop-qr">📍 Scan to check in</div>
+        </div>
+      </div>
+    `;
+    state.revealedCount++;
+    const btn = document.getElementById('reveal-btn');
+    const progress = document.getElementById('reveal-progress');
+    if(state.revealedCount < stops.length){
+      btn.textContent = `Reveal Stop ${state.revealedCount + 1} →`;
+      progress.textContent = `Stop ${state.revealedCount + 1} of ${stops.length} awaits...`;
+    } else {
+      btn.textContent = 'Play Again';
+      btn.setAttribute('onclick', 'renderStep1()');
+      progress.textContent = `Route complete — ${stops.length} of ${stops.length} stops revealed.`;
+      const recapSection = document.getElementById('recap-section');
+      if(recapSection) recapSection.style.display = 'block';
+    }
+  }
+
+  renderStep1();
+
+  window.setDiscoveryMode = function(mode){
+    document.querySelectorAll('.mode-tab').forEach(tab=>{
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+    const fullFields = document.getElementById('full-discovery-fields');
+    fullFields.classList.toggle('visible', mode === 'full');
+  };
+
+  window.selectPill = function(el, group){
+    if (el.classList.contains('locked')) return;
+    document.querySelectorAll('#' + group + '-group .pill-option').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+  };
+
+  window.toggleChip = function(el){
+    el.classList.toggle('selected');
+  };
+
+  window.generateDiscoverySummary = function(){
+    const budget = document.querySelector('#budget-group .pill-option.selected');
+    const rating = document.querySelector('#rating-group .pill-option.selected');
+    const alcohol = document.querySelector('#alcohol-group .pill-option.selected');
+
+    // Defense in depth: the site-wide gate already blocks entry without both
+    // confirmations, but double-check here too in case the rating pill was
+    // changed after the gate closed. Real enforcement lives server-side in
+    // the discovery-submit edge function — this is just a UX nicety.
+    if (rating && (rating.dataset.value === 'NC-17' || rating.dataset.value === 'Adults Only')) {
+      let gateOk = false;
+      try {
+        const saved = JSON.parse(localStorage.getItem('muso_gate_accepted_v1') || 'null');
+        const requiredAge = rating.dataset.value === 'Adults Only' ? MIN_ADULTS_ONLY_AGE : MIN_NC17_AGE;
+        gateOk = !!(saved && saved.disclaimerAccepted && typeof saved.age === 'number' && saved.age >= requiredAge);
+      } catch (e) {}
+      if (!gateOk) {
+        document.getElementById('gate-overlay').removeAttribute('hidden');
+        return;
+      }
+    }
+    const interests = Array.from(document.querySelectorAll('#interests-group .multiselect-chip.selected')).map(c => c.dataset.value);
+    const goalEl = document.getElementById('goal-select');
+    const groupSizeEl = document.getElementById('group-size');
+    const notesEl = document.getElementById('notes-field');
+    const goal = goalEl ? goalEl.value : '';
+    const groupSize = groupSizeEl ? groupSizeEl.value : '';
+    const notes = notesEl ? notesEl.value : '';
+
+    const summary = document.getElementById('discovery-summary');
+    summary.innerHTML = `
+      <div class="summary-card">
+        <h4>Your Preferences</h4>
+        <div class="summary-row"><span class="summary-label">Budget</span><span class="summary-value">${budget ? budget.dataset.value : 'Not set'}</span></div>
+        <div class="summary-row"><span class="summary-label">Content Rating</span><span class="summary-value">${rating ? rating.dataset.value : 'Not set'}</span></div>
+        <div class="summary-row"><span class="summary-label">Alcohol</span><span class="summary-value">${alcohol ? alcohol.dataset.value : 'Not set'}</span></div>
+        ${interests.length ? `<div class="summary-row"><span class="summary-label">Interests</span><span class="summary-value">${interests.join(', ')}</span></div>` : ''}
+        ${goal ? `<div class="summary-row"><span class="summary-label">Occasion</span><span class="summary-value">${goal}</span></div>` : ''}
+        ${groupSize ? `<div class="summary-row"><span class="summary-label">Group Size</span><span class="summary-value">${groupSize}</span></div>` : ''}
+        ${notes ? `<div class="summary-row"><span class="summary-label">Notes</span><span class="summary-value">${notes}</span></div>` : ''}
+        <p style="opacity:0.7; font-size:0.85rem; margin-top:16px;">In the live app, this fine-tunes which routes, venues, and content show up for your excursion.</p>
+      </div>
+    `;
+  };
+
+  // ---------- AGE GATE ----------
+  // Fill in your project's anon key from Supabase > Project Settings > API.
+  // The anon key is safe to expose in client-side code by design — it's not
+  // a secret, it's the public key Supabase's row-level security is built to
+  // work with. Do not put the service role key here.
+  const SUPABASE_URL = 'https://aqaezprsbcyqpnnavdpv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
+  const GATE_STORAGE_KEY = 'muso_gate_accepted_v1';
+
+  // ---------- NAV SIGN IN / SIGN OUT ----------
+  // Same Supabase project + anon key as /preview/ and /shop/, so the auth
+  // session (stored in this browser's localStorage under a key derived from
+  // the project ref, not the page) is automatically shared across all three
+  // — sign in here and /preview/ already sees you as signed in, no extra
+  // wiring needed. This is deliberately separate from the age-gate/venue
+  // logic below: it's just "am I signed in," always visible in the nav.
+  const navSupabase = (SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' && window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+  let navSession = null;
+
+  function renderNavAccount(){
+    const el = document.getElementById('nav-account');
+    if (!el || !navSupabase) return;
+    if (!navSession) {
+      el.innerHTML = `
+        <form class="nav-signin-form" onsubmit="event.preventDefault(); navSendMagicLink();">
+          <input type="email" id="nav-signin-email" placeholder="you@example.com" required>
+          <button type="submit" class="nav-cta" id="nav-signin-btn">Sign In</button>
+        </form>
+        <span class="nav-signin-msg" id="nav-signin-msg"></span>
+      `;
+      return;
+    }
+    el.innerHTML = `
+      <span class="nav-signed-in-msg">${navSession.user.email}</span>
+      <span class="nav-signout-link" onclick="navSignOut()">Sign out</span>
+    `;
+  }
+
+  let navCooldownTimer = null;
+  function navStartCooldown(seconds){
+    const btn = document.getElementById('nav-signin-btn');
+    if (!btn) return;
+    clearInterval(navCooldownTimer);
+    let remaining = seconds;
+    btn.disabled = true;
+    const tick = () => {
+      btn.textContent = `Sign In (${remaining}s)`;
+      if (remaining <= 0) { clearInterval(navCooldownTimer); btn.disabled = false; btn.textContent = 'Sign In'; return; }
+      remaining -= 1;
+    };
+    tick();
+    navCooldownTimer = setInterval(tick, 1000);
+  }
+
+  window.navSendMagicLink = async function(){
+    const input = document.getElementById('nav-signin-email');
+    const msg = document.getElementById('nav-signin-msg');
+    const email = (input.value || '').trim();
+    if (!email || !navSupabase) return;
+    msg.textContent = 'Sending link…';
+    const { error } = await navSupabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href },
+    });
+    if (!error) {
+      msg.textContent = 'Check your email for a sign-in link.';
+      navStartCooldown(60);
+      return;
+    }
+    // Same friendly-cooldown parsing as /preview/'s sign-in — Supabase's
+    // rate-limit error reads like "For security purposes, you can only
+    // request this after 28 seconds," which is confusing shown raw.
+    const waitMatch = error.message.match(/after (\d+) seconds?/i);
+    if (waitMatch) {
+      const wait = Number(waitMatch[1]);
+      msg.textContent = `You already have a link on the way — try again in ${wait}s.`;
+      navStartCooldown(wait);
+    } else {
+      msg.textContent = `Error: ${error.message}`;
+    }
+  };
+
+  window.navSignOut = async function(){
+    if (!navSupabase) return;
+    await navSupabase.auth.signOut();
+    navSession = null;
+    renderNavAccount();
+  };
+
+  if (navSupabase) {
+    navSupabase.auth.getSession().then(({ data }) => {
+      navSession = data?.session ?? null;
+      renderNavAccount();
+    });
+    navSupabase.auth.onAuthStateChange((_event, session) => {
+      navSession = session;
+      renderNavAccount();
+    });
+  }
+
+  const MIN_ADULT_AGE = 21; // bars + dispensaries — no exceptions
+  const MIN_NC17_AGE = 18;        // unlocks the NC-17 content rating only
+  const MIN_ADULTS_ONLY_AGE = 21; // unlocks Adults Only (and everything below it)
+
+  // Mirrors the server-side calculateAge() in the gate-capture / discovery-
+  // submit edge functions. This copy is for instant UI feedback only — the
+  // real enforcement always happens server-side.
+  function calculateAgeClient(birthDateStr){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDateStr)) return null;
+    const bd = new Date(birthDateStr + 'T00:00:00');
+    if (isNaN(bd.getTime())) return null;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    if (bd.getTime() > today.getTime()) return null;
+    let age = today.getFullYear() - bd.getFullYear();
+    const m = today.getMonth() - bd.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < bd.getDate())) age--;
+    return (age >= 0 && age <= 120) ? age : null;
+  }
+
+  // Two-tier lock: NC-17 unlocks at 18, Adults Only (and the Smoke & Cigar
+  // interest chip — bars/dispensaries-adjacent) unlocks at 21. Takes the
+  // raw computed age (or null if the gate's never been completed) rather
+  // than a single boolean so both thresholds can be checked independently.
+  function updateContentRatingLocks(age){
+    const nc17Ok = typeof age === 'number' && age >= MIN_NC17_AGE;
+    const adultsOnlyOk = typeof age === 'number' && age >= MIN_ADULTS_ONLY_AGE;
+
+    document.querySelectorAll('#rating-group .pill-option').forEach(p => {
+      const requiredOk = p.dataset.value === 'Adults Only' ? adultsOnlyOk
+        : p.dataset.value === 'NC-17' ? nc17Ok
+        : true;
+      const locked = !requiredOk;
+      p.classList.toggle('locked', locked);
+      if (locked) {
+        p.setAttribute('aria-disabled', 'true');
+        p.classList.remove('selected');
+      } else {
+        p.removeAttribute('aria-disabled');
+      }
+    });
+
+    // Smoke & Cigar interest (hookah lounges, cigar shops, smoke shops) is
+    // 21+ only, same threshold and same lock/grey treatment as Adults Only
+    // above — self-reported birthdate only, no dispensary tie-in and no
+    // separate ID-verification flow.
+    const smokeChip = document.getElementById('smoke-cigar-chip');
+    if (smokeChip) {
+      const locked = !adultsOnlyOk;
+      smokeChip.classList.toggle('locked', locked);
+      if (locked) {
+        smokeChip.setAttribute('aria-disabled', 'true');
+        smokeChip.classList.remove('selected');
+      } else {
+        smokeChip.removeAttribute('aria-disabled');
+      }
+    }
+  }
+
+  const birthdateInput = document.getElementById('gate-birthdate');
+  birthdateInput.max = new Date().toISOString().slice(0,10);
+
+  function checkGateState(){
+    const btn = document.getElementById('gate-enter-btn');
+    const ageOk = calculateAgeClient(birthdateInput.value) !== null;
+    const discOk = document.getElementById('gate-disclaimer-check').checked;
+    btn.classList.toggle('ready', ageOk && discOk);
+  }
+  birthdateInput.addEventListener('change', checkGateState);
+  document.getElementById('gate-disclaimer-check').addEventListener('change', checkGateState);
+
+  window.attemptEnterSite = function(){
+    const birthVal = birthdateInput.value;
+    const age = calculateAgeClient(birthVal);
+    const discOk = document.getElementById('gate-disclaimer-check').checked;
+    const err = document.getElementById('gate-error');
+
+    if (age === null) {
+      err.textContent = 'Please enter a valid birth date to continue.';
+      return;
+    }
+    if (!discOk) {
+      err.textContent = 'Please agree to the participant acknowledgment to continue.';
+      return;
+    }
+    err.textContent = '';
+
+    // ageConfirmed kept for backward-compat with the 21+-only checks
+    // elsewhere (e.g. the alcohol/cannabis routing disclaimer) — content
+    // rating locks themselves now read the raw age via updateContentRatingLocks.
+    const ageConfirmed = age >= MIN_ADULT_AGE;
+    const email = (document.getElementById('gate-email').value || '').trim();
+
+    try {
+      localStorage.setItem(GATE_STORAGE_KEY, JSON.stringify({
+        birthDate: birthVal,
+        age,
+        ageConfirmed,
+        disclaimerAccepted: true,
+        at: new Date().toISOString(),
+      }));
+    } catch (e) {}
+
+    updateContentRatingLocks(age);
+    document.getElementById('gate-overlay').setAttribute('hidden', '');
+
+    // Best-effort, fire-and-forget: stores the birthday (and optional email)
+    // so it can be used for birthday-special promotions later. Never blocks
+    // entry to the site if this fails or the anon key isn't configured yet.
+    if (SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') {
+      fetch(`${SUPABASE_URL}/functions/v1/gate-capture`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          birthDate: birthVal,
+          email: email || undefined,
+          disclaimerAccepted: true,
+        }),
+      }).catch(() => {});
+    }
+  };
+
+  // Runs on every page load/revisit. If this browser already completed the
+  // gate once, we don't ask again — the ratings unlock immediately from the
+  // birthday already on file, no separate "unlock" step required.
+  (function initGate(){
+    try {
+      const saved = JSON.parse(localStorage.getItem(GATE_STORAGE_KEY) || 'null');
+      if (saved && saved.disclaimerAccepted && saved.birthDate) {
+        document.getElementById('gate-overlay').setAttribute('hidden', '');
+        updateContentRatingLocks(typeof saved.age === 'number' ? saved.age : null);
+      }
+    } catch (e) {}
+  })();
+
+  // ---------- TOP-RATED VENUES (Yelp, via the venues-search edge function) ----------
+  // Maps each "Interests" chip to real Yelp Fusion category aliases so a
+  // selected vertical actually filters live results, not just a display
+  // tag. Best-effort aliases based on Yelp's public category taxonomy —
+  // Yelp silently ignores any alias it doesn't recognize rather than
+  // erroring, so a stale/wrong alias just means fewer matches, not a
+  // broken search. Smoke & Cigar is included here too, but it can only
+  // ever reach this code path if the chip was actually selectable, which
+  // requires the 21+ lock to already be cleared client-side (see
+  // updateContentRatingLocks) — no dispensary categories anywhere in here.
+  const INTEREST_YELP_CATEGORIES = {
+    'Food & Drink': 'restaurants,bars',
+    'Outdoors': 'parks,hiking',
+    'Arts & Culture': 'arts,museums,theater',
+    'Games & Competition': 'arcades,bowling,escapegames,minigolf,gokarts,axethrowing',
+    'Live Music': 'musicvenues,jazzandblues',
+    'Wellness': 'spas,yoga',
+    'Nightlife': 'nightlife,cocktailbars',
+    'Shopping': 'shopping',
+    'Pet-Friendly': 'dog_parks,petstores,zoos,aquariums',
+    'Comedy': 'comedyclubs',
+    'Cultured': 'opera,theater,artmuseums,galleries',
+    'Oddities & Curiosities': 'museums',
+    'Smoke & Cigar': 'hookahbars,cigarbars,vapeshops,tobaccoshops',
+  };
+
+  window.findTopVenues = async function(){
+    const resultsEl = document.getElementById('top-venues-results');
+    const btn = document.getElementById('find-venues-btn');
+    const budget = document.querySelector('#budget-group .pill-option.selected');
+    const radius = document.getElementById('radius-slider').value;
+    const selectedInterests = Array.from(
+      document.querySelectorAll('#interests-group .multiselect-chip.selected')
+    ).map(c => c.dataset.value);
+
+    if (SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+      resultsEl.innerHTML = '<p class="venue-status-msg">Live venue search isn\'t configured on this page yet — add your Supabase anon key at the top of the script to enable it.</p>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Searching…';
+    resultsEl.innerHTML = '<p class="venue-status-msg">Looking for top-rated spots…</p>';
+
+    try {
+      const params = new URLSearchParams({
+        // Defaults to the Livermore, CA 94551 pin server-side if omitted.
+        radiusMiles: radius,
+      });
+      if (budget) params.set('budget', budget.dataset.value);
+
+      const categories = [...new Set(
+        selectedInterests.flatMap(v => (INTEREST_YELP_CATEGORIES[v] || '').split(',').filter(Boolean))
+      )];
+      if (categories.length) params.set('category', categories.join(','));
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/venues-search?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        resultsEl.innerHTML = `<p class="venue-status-msg">Couldn't load venues: ${data.error || res.statusText}</p>`;
+        return;
+      }
+
+      const venues = data.venues || [];
+      if (!venues.length) {
+        resultsEl.innerHTML = '<p class="venue-status-msg">No top-rated venues found in that radius/budget — try widening the search.</p>';
+        return;
+      }
+
+      resultsEl.innerHTML = venues.slice(0, 8).map(v => {
+        const safeName = (v.name || '').replace(/"/g, '&quot;');
+        const photo = v.image_url
+          ? `<img class="venue-result-photo" src="${v.image_url}" alt="${safeName}" loading="lazy" onerror="this.outerHTML='<div class=&quot;venue-result-photo venue-result-photo-placeholder&quot;>🍽️</div>'">`
+          : `<div class="venue-result-photo venue-result-photo-placeholder">🍽️</div>`;
+        return `
+        <div class="venue-result-card">
+          ${photo}
+          <div class="venue-result-info">
+            <div class="venue-result-name">${v.name}</div>
+            <div class="venue-result-meta">${v.category || ''}${v.address ? ' · ' + v.address : ''}</div>
+          </div>
+          <div class="venue-result-rating">${v.rating ? '⭐ ' + v.rating : ''}${v.rating_count ? ' (' + v.rating_count + ')' : ''}</div>
+        </div>
+      `;
+      }).join('');
+    } catch (e) {
+      resultsEl.innerHTML = `<p class="venue-status-msg">Something went wrong reaching the venue search: ${e.message}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Find Top-Rated Venues';
+    }
+  };
+</script>
+
+</body>
+</html>
