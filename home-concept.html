@@ -382,7 +382,19 @@
   .act-time{ font-size:0.72rem; opacity:0.5; white-space:nowrap; color:var(--text); transition:color .35s ease; }
 
   /* ---------- STREAK ROW ---------- */
-  .profile-head{ display:flex; align-items:center; gap:14px; }
+  .profile-head{ display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
+  /* Profile hero avatar — docked in the nav's raised slot by default; on
+     open it FLIPs (JS: from-rect -> natural-rect transform) up into this
+     spot and sticks here (position:sticky) so it stays anchored at the
+     top of the stage while the rest of the profile content scrolls
+     underneath it. Sized at 150% of the 54px nav disc (54 * 1.5 = 81px). */
+  .profile-hero-avatar{
+    position:sticky; top:14px; z-index:20; margin:14px auto 0;
+    width:81px; height:81px; border-radius:50%; overflow:hidden;
+    border:3px solid var(--card-bg); box-shadow:0 10px 26px rgba(var(--shadow-rgb),0.35);
+    background:var(--raised-bg); display:block;
+  }
+  .profile-hero-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
 
   .streak-card{
     background:var(--card-bg); border:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:16px; padding:14px 16px;
@@ -469,13 +481,20 @@
   .stat-float .sf-val{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.05rem; color:var(--ink,#2a2438); }
   .stat-float .sf-label{ font-size:0.66rem; opacity:0.6; color:#2a2438; }
 
-  /* ---------- BOTTOM NAV ---------- */
-  .tabbar-wrap{ position:absolute; left:0; right:0; bottom:0; padding:0 18px 22px; }
+  /* ---------- BOTTOM NAV ----------
+     Sits outside .scroll-area (a sibling, not a descendant) so it's never
+     part of the scrolling flow — but it still needs an explicit z-index
+     above regular in-page content (.section/.sky-band use up to z-index:5)
+     or scrolled cards paint over it, since position:absolute with
+     z-index:auto stacks below any positioned sibling that sets an
+     explicit z-index, regardless of DOM order. */
+  .tabbar-wrap{ position:absolute; left:0; right:0; bottom:0; z-index:60; }
   .tabbar{
-    background:var(--card-bg); border:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:999px; padding:8px 10px;
+    background:var(--card-bg); border-top:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-radius:0;
+    padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
     display:flex; align-items:center; justify-content:space-between;
-    box-shadow:0 12px 30px rgba(var(--shadow-rgb),0.22);
-    position:relative; transition:background-color .35s ease;
+    box-shadow:0 -10px 26px rgba(var(--shadow-rgb),0.18);
+    position:relative; width:100%; transition:background-color .35s ease;
   }
   .tab-item{
     display:flex; flex-direction:column; align-items:center; gap:3px;
@@ -491,6 +510,11 @@
   }
   .tab-item.raised svg{ width:24px; height:24px; }
   .tab-item.raised span{ display:none; }
+  /* Nav avatar disc — the raised slot now docks the user's profile photo
+     instead of the map icon; the photo itself is the tappable element
+     that FLIPs up into the profile hero position (see JS). */
+  .tab-item.avatar-raised{ overflow:hidden; border:3px solid var(--card-bg); }
+  .tab-item.avatar-raised img{ width:100%; height:100%; object-fit:cover; display:block; }
 
   @media (max-width:430px){
     body{ padding:0; }
@@ -673,15 +697,13 @@
     </div>
 
     <div id="view-profile" hidden>
+      <div class="profile-hero-avatar" id="profile-avatar-hero"><img src="assets/profile/shane-avatar.jpg" alt="Shane"></div>
       <div class="section">
         <div class="profile-head">
-          <div class="avatar" style="width:64px; height:64px; font-size:1.3rem;"><img src="assets/profile/shane-avatar.jpg" alt="Shane"></div>
-          <div>
-            <h2 style="font-size:1.2rem; color:var(--text);">Shane</h2>
-            <div class="crew-sub" id="profile-level-text">Level 7 Explorer</div>
-          </div>
+          <h2 style="font-size:1.2rem; color:var(--text);">Shane</h2>
+          <div class="crew-sub" id="profile-level-text">Level 7 Explorer</div>
         </div>
-        <div class="rp-meta" id="profile-real-stats" style="margin-top:10px;"></div>
+        <div class="rp-meta" id="profile-real-stats" style="margin-top:10px; text-align:center;"></div>
       </div>
       <div class="section">
         <div class="streak-card">
@@ -733,16 +755,16 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
         <span>Explore</span>
       </div>
-      <div class="tab-item raised">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+      <div class="tab-item raised avatar-raised" id="nav-avatar-btn">
+        <img src="assets/profile/shane-avatar.jpg" alt="Profile" id="nav-avatar-img">
       </div>
       <div class="tab-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg>
         <span>Crew</span>
       </div>
-      <div class="tab-item" data-view="profile">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7"/></svg>
-        <span>Profile</span>
+      <div class="tab-item" data-view="map">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+        <span>Map</span>
       </div>
     </div>
   </div>
@@ -812,21 +834,128 @@
 
   const viewHome = document.getElementById('view-home');
   const viewProfile = document.getElementById('view-profile');
+  const scrollAreaEl = document.querySelector('.scroll-area');
+  const navAvatarBtn = document.getElementById('nav-avatar-btn');
+  const navAvatarImg = document.getElementById('nav-avatar-img');
+  const heroAvatar = document.getElementById('profile-avatar-hero');
+  let profileOpen = false;
+  let profileAnimating = false;
+
+  // Profile open/close is a FLIP transition: the avatar disc is a single
+  // element that lives in the profile view at rest (position:sticky, so
+  // it stays anchored while the rest of the page scrolls beneath it) and
+  // is only made to LOOK like it's docked in the nav by transforming it
+  // to the nav avatar's screen rect on open, then animating that
+  // transform back to none. Closing reverses it: transform from the
+  // hero's current rect to the (still-laid-out-but-hidden) nav avatar's
+  // rect, then swap views once the disc has "landed" back in the dock.
+  function openProfile(){
+    if(profileOpen || profileAnimating) return;
+    profileAnimating = true;
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    navAvatarBtn.classList.add('active');
+
+    const fromRect = navAvatarImg.getBoundingClientRect();
+    navAvatarImg.style.visibility = 'hidden';
+    viewHome.hidden = true;
+    viewProfile.hidden = false;
+    scrollAreaEl.scrollTop = 0;
+
+    const toRect = heroAvatar.getBoundingClientRect();
+    const dx = fromRect.left + fromRect.width / 2 - (toRect.left + toRect.width / 2);
+    const dy = fromRect.top + fromRect.height / 2 - (toRect.top + toRect.height / 2);
+    const scale = fromRect.width / toRect.width;
+
+    heroAvatar.style.transition = 'none';
+    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    heroAvatar.getBoundingClientRect(); // force reflow so the line below starts a real transition, not a no-op
+    heroAvatar.style.transition = 'transform .45s cubic-bezier(.22,.85,.32,1)';
+    heroAvatar.style.transform = 'translate(0,0) scale(1)';
+
+    const finish = () => {
+      heroAvatar.style.transition = '';
+      profileOpen = true;
+      profileAnimating = false;
+    };
+    heroAvatar.addEventListener('transitionend', function te(e){
+      if(e.propertyName !== 'transform') return;
+      heroAvatar.removeEventListener('transitionend', te);
+      clearTimeout(fallback);
+      finish();
+    }, {once:true});
+    const fallback = setTimeout(finish, 500); // safety net if transitionend doesn't fire (e.g. rect unchanged)
+  }
+
+  function closeProfile(onLanded){
+    if(!profileOpen || profileAnimating) return;
+    profileAnimating = true;
+
+    const fromRect = heroAvatar.getBoundingClientRect();
+    const toRect = navAvatarImg.getBoundingClientRect(); // still laid out while visibility:hidden
+    const dx = toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2);
+    const dy = toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2);
+    const scale = toRect.width / fromRect.width;
+
+    heroAvatar.style.transition = 'none';
+    heroAvatar.style.transform = 'translate(0,0) scale(1)';
+    heroAvatar.getBoundingClientRect(); // force reflow so the line below starts a real transition, not a no-op
+    heroAvatar.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
+    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+
+    const finish = () => {
+      heroAvatar.style.transition = '';
+      heroAvatar.style.transform = '';
+      navAvatarImg.style.visibility = '';
+      profileOpen = false;
+      profileAnimating = false;
+      if(onLanded) onLanded();
+    };
+    heroAvatar.addEventListener('transitionend', function te(e){
+      if(e.propertyName !== 'transform') return;
+      heroAvatar.removeEventListener('transitionend', te);
+      clearTimeout(fallback);
+      finish();
+    }, {once:true});
+    const fallback = setTimeout(finish, 450); // safety net if transitionend doesn't fire (e.g. rect unchanged)
+  }
+
+  navAvatarBtn.addEventListener('click', () => {
+    if(profileOpen){
+      document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+      document.querySelector('.tab-item[data-view="home"]').classList.add('active');
+      closeProfile(() => {
+        viewProfile.hidden = true;
+        viewHome.hidden = false;
+        scrollAreaEl.scrollTop = 0;
+      });
+    } else {
+      openProfile();
+    }
+  });
+
   document.querySelectorAll('.tab-item:not(.raised)').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      // Only Home/Profile have real views built out in this concept —
-      // Explore/Crew just stay on whichever view is already showing.
-      const view = tab.dataset.view;
-      if(view === 'profile'){
-        viewHome.hidden = true;
-        viewProfile.hidden = false;
-      } else if(view === 'home'){
-        viewProfile.hidden = true;
-        viewHome.hidden = false;
+      // Only Home has a real view built out in this concept — Explore/
+      // Crew/Map just stay on whichever view is already showing. But if
+      // the profile page was open, leaving it (via any nav tap, not just
+      // the avatar) should always fall back to Home once the avatar has
+      // landed back in its dock — otherwise the disc flies back to the
+      // nav while the profile content stays on screen underneath it.
+      const wasProfileOpen = profileOpen;
+      const showRequestedView = () => {
+        if(tab.dataset.view === 'home' || wasProfileOpen){
+          viewProfile.hidden = true;
+          viewHome.hidden = false;
+        }
+        scrollAreaEl.scrollTop = 0;
+      };
+      if(profileOpen){
+        closeProfile(showRequestedView);
+      } else {
+        showRequestedView();
       }
-      document.querySelector('.scroll-area').scrollTop = 0;
     });
   });
 
