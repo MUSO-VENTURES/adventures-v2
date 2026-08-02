@@ -1345,7 +1345,15 @@
     return data?.session?.access_token ?? null;
   }
 
-  const AV_PROFILE_COLUMNS = 'id, xp, level, adventure_coins, unlocked_stop_count, display_name';
+  const AV_PROFILE_COLUMNS = 'id, xp, level, adventure_coins, unlocked_stop_count, display_name, avatar_url';
+
+  // Generic silhouette shown until a player picks a real avatar photo —
+  // same data URI as /preview/index.html's PLACEHOLDER_AVATAR_URL, kept in
+  // sync so the two pages never visibly diverge for a signed-in player who
+  // hasn't set a photo yet.
+  const AV_PLACEHOLDER_AVATAR_URL = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#2a2438"/><circle cx="50" cy="38" r="18" fill="#f7f3ff" fill-opacity="0.85"/><path d="M50 62c-22 0-34 12-34 30v8h68v-8c0-18-12-30-34-30z" fill="#f7f3ff" fill-opacity="0.85"/></svg>'
+  );
 
   async function avFetchOrCreateProfile(userId, email) {
     if (!avSupabase) return null;
@@ -1374,6 +1382,7 @@
       signedOutCard.style.display = '';
       levelText.textContent = 'Sign in to track your real progress';
       realStats.textContent = '';
+      avRenderAvatars();
       return;
     }
     signedOutCard.style.display = 'none';
@@ -1382,6 +1391,20 @@
     const coins = avProfile?.adventure_coins ?? 0;
     levelText.textContent = `Level ${level} Explorer`;
     realStats.innerHTML = `${xp} XP &nbsp;·&nbsp; 🪙 ${coins} coins &nbsp;·&nbsp; ${avBadgeKeys.size} badge${avBadgeKeys.size === 1 ? '' : 's'} earned`;
+    avRenderAvatars();
+  }
+
+  // Keeps the nav-dock avatar and the profile-sheet hero avatar in sync
+  // with avProfile.avatar_url — same field the Phase 3 avatar-capture flow
+  // on /preview/index.html writes to, so a photo set there shows up here
+  // too. Falls back to the shared placeholder silhouette pre-sign-in or
+  // before a player has set a photo, replacing what used to be a hardcoded
+  // assets/profile/shane-avatar.jpg on both elements.
+  function avRenderAvatars() {
+    const avatarUrl = avProfile?.avatar_url || AV_PLACEHOLDER_AVATAR_URL;
+    if (navAvatarImg) navAvatarImg.src = avatarUrl;
+    const heroImg = heroAvatar?.querySelector('img');
+    if (heroImg) heroImg.src = avatarUrl;
   }
 
   let avSigninCooldownTimer = null;

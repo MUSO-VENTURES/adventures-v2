@@ -19,6 +19,12 @@
     --shadow-rgb:42,36,56;
     --lock-scrim-start:rgba(255,247,237,0.2);
     --lock-scrim-end:rgba(255,247,237,0.92);
+    /* Frosted-glass tokens for the bottom nav only (home-concept.html's
+       look) — everything else on this page uses the opaque --card, this
+       is a deliberate exception for the chrome that sits over the
+       parallax header. */
+    --card-bg:rgba(255,255,255,0.6);
+    --card-border:rgba(255,255,255,0.5);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -27,6 +33,7 @@
   :root[data-theme="dark"]{
     --cream:#0a0912; --ink:#f7f3ff; --card:#1b1730; --shadow-rgb:0,0,0;
     --lock-scrim-start:rgba(10,9,18,0.2); --lock-scrim-end:rgba(10,9,18,0.92);
+    --card-bg:rgba(255,255,255,0.07); --card-border:rgba(255,255,255,0.12);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; font-size:106.25%;}
@@ -79,6 +86,88 @@
   }
   header.hero h1{ font-size:clamp(1.8rem,4vw,2.6rem); margin-bottom:12px; }
   header.hero p{ opacity:0.75; font-size:1.02rem; line-height:1.6; }
+
+  /* ---------- ROKU-STYLE PARALLAX HEADER ----------
+     Ported from home-concept.html verbatim (same asset paths, one level up
+     since this page lives in /preview/) — real illustrated sky/city/
+     buildings/people layers, drag/swipe-able, auto-drifts ambiently. */
+  .sky-band{
+    position:relative; z-index:1; height:230px; overflow:hidden; background:#bfe0f5;
+  }
+  .px-layers{ position:absolute; inset:0; z-index:1; }
+  .px-layer{
+    position:absolute; top:0; left:0; height:100%; width:auto; max-width:none;
+    will-change:transform; pointer-events:none; display:block;
+  }
+  .px-scroll{
+    position:absolute; inset:0; z-index:2; overflow-x:auto; overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
+  .px-scroll::-webkit-scrollbar{ display:none; }
+  .px-spacer{ height:1px; }
+  /* Blends the header's hard bottom edge into the page background below it
+     instead of a hard cut — fully transparent until the last 65px, then
+     fades to the same themed background as the rest of the page. */
+  .sky-band-scrim{
+    position:absolute; inset:0; z-index:3; pointer-events:none;
+    background:linear-gradient(180deg, transparent 0%, transparent calc(100% - 65px), var(--cream) 100%);
+  }
+
+  /* ---------- BOTTOM NAV ----------
+     Fixed (not absolute like home-concept.html's phone-mock version —
+     there's no fixed-height stage here, this page really scrolls) full-
+     width bar that expands upward into a sheet for the profile page. See
+     openProfile()/closeProfile() below for the FLIP-transform animation. */
+  .tabbar-wrap{
+    position:fixed; left:0; right:0; bottom:0; z-index:600;
+    display:flex; flex-direction:column;
+  }
+  #profile-sheet{
+    flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+    background:var(--cream); transition:background-color .35s ease;
+  }
+  .tabbar{
+    background:var(--card-bg); border-top:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex; align-items:flex-end; justify-content:space-between;
+    box-shadow:0 -10px 26px rgba(var(--shadow-rgb),0.18);
+    position:relative; width:100%; flex-shrink:0; transition:background-color .35s ease;
+  }
+  .tab-item{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:8px 10px; border-radius:14px; color:var(--ink); opacity:0.42;
+    font-size:0.66rem; font-weight:700; flex:1; cursor:pointer; transition:color .35s ease;
+    text-decoration:none;
+  }
+  .tab-item svg{ width:21px; height:21px; }
+  .tab-item.active{ color:var(--coral); opacity:1; }
+  .tab-item.raised{
+    margin-top:-30px; padding:0 0 8px; flex:0 0 54px; gap:6px; opacity:1;
+  }
+  .tab-item.raised span{ font-size:0.66rem; font-weight:700; opacity:0.55; transition:opacity .35s ease, color .35s ease; }
+  .tab-item.raised.active span{ opacity:1; color:var(--coral); }
+  .nav-avatar-disc{
+    position:relative; width:54px; height:54px; border-radius:50%; overflow:hidden;
+    background:var(--ink); border:3px solid var(--card-bg);
+    box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4); transition:background-color .35s ease;
+  }
+  .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .nav-avatar-close{
+    position:absolute; inset:0; border:none; padding:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--ink); color:var(--cream); font-size:1.5rem; line-height:1;
+  }
+  .nav-avatar-close[hidden]{ display:none; }
+  .profile-hero-avatar{
+    position:sticky; top:14px; z-index:20; margin:14px auto 0;
+    width:108px; height:108px; border-radius:50%; overflow:hidden;
+    border:3px solid var(--card-bg); box-shadow:0 10px 26px rgba(var(--shadow-rgb),0.35);
+    background:var(--ink); display:block;
+  }
+  .profile-hero-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+  /* Leave room at the bottom of the page for the fixed tabbar so it never
+     overlaps the existing footer/last card. */
+  body{ padding-bottom:86px; }
 
   .controls-bar{
     max-width:1080px; margin:0 auto; padding:0 6vw 3vh;
@@ -358,6 +447,28 @@
   }
   .start-adv-btn:hover{ transform:scale(1.03); }
 
+  .real-venue-cta{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; border-radius:16px;
+    padding:18px 20px; margin-bottom:16px;
+  }
+  .real-venue-cta .rvc-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.05rem; }
+  .real-venue-cta .rvc-desc{ font-size:0.85rem; opacity:0.92; margin-top:2px; max-width:420px; }
+  .real-venue-cta .rvc-btn{
+    background:#fff; color:var(--coral); border:none; padding:11px 22px; border-radius:999px;
+    font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.88rem; cursor:pointer; flex-shrink:0;
+    transition:transform .15s;
+  }
+  .real-venue-cta .rvc-btn:hover{ transform:scale(1.03); }
+  .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
+
+  .reroll-btn{
+    background:transparent; border:2px solid var(--coral); color:var(--coral);
+    padding:7px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.78rem; cursor:pointer;
+  }
+  .reroll-btn:disabled{ opacity:0.5; cursor:default; }
+
   .itinerary-list{ display:flex; flex-direction:column; gap:10px; }
   .itinerary-stop{
     display:flex; align-items:center; gap:14px; background:var(--cream); border-radius:14px;
@@ -454,6 +565,63 @@
     background:rgba(var(--shadow-rgb),0.06);
   }
   #nextvenue-map{ width:100%; height:100%; }
+
+  /* ---------- ONBOARDING: PREFERENCE SETUP ----------
+     Ported from index.html's "Quick Setup"/"Full Discovery" component
+     (same field set, same selectPill/toggleChip behavior) with colors
+     adapted for a light card background instead of index.html's always-
+     dark showcase box — var(--cream) text swapped for var(--ink), the
+     rgba(255,247,237,X) light-on-dark accents swapped for
+     rgba(var(--shadow-rgb),X) dark-on-light, matching this page's own
+     existing convention (e.g. .pb-btn.secondary). */
+  .onboarding-card{ max-height:80vh; overflow-y:auto; }
+  .mode-toggle{ display:flex; justify-content:center; gap:10px; margin-bottom:24px; flex-wrap:wrap; }
+  .mode-tab{
+    background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
+    padding:9px 20px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    cursor:pointer; font-size:0.85rem; transition:all .2s;
+  }
+  .mode-tab.active{ background:var(--coral); border-color:var(--coral); color:#fff; }
+  .mode-tab:hover{ border-color:var(--coral); }
+  .onboarding-form .form-group{ margin-bottom:22px; }
+  .onboarding-form .form-label{
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.95rem; color:var(--ink); margin-bottom:8px; display:block;
+  }
+  .onboarding-form .form-hint{ font-size:0.78rem; opacity:0.6; margin-bottom:14px; margin-top:-4px; display:block; }
+  .onboarding-radius-tier-markers{ display:flex; gap:6px; margin-top:10px; }
+  .onboarding-radius-tier-marker{
+    flex:1; text-align:center; padding:4px 6px; border-radius:8px;
+    background:rgba(var(--shadow-rgb),0.05); color:var(--ink); opacity:0.5; font-size:0.68rem; font-weight:600; white-space:nowrap;
+  }
+  .onboarding-radius-tier-marker.reached{ opacity:1; background:rgba(232,80,63,0.12); color:var(--coral); }
+  .onboarding-form .pill-group{ display:flex; gap:8px; flex-wrap:wrap; }
+  .onboarding-form .pill-option{
+    background:rgba(var(--shadow-rgb),0.04); border:2px solid rgba(var(--shadow-rgb),0.12); color:var(--ink);
+    padding:9px 14px; border-radius:14px; cursor:pointer; font-size:0.85rem; transition:all .2s; text-align:left; flex:1 1 120px;
+  }
+  .onboarding-form .pill-option .pill-title{ font-weight:700; font-family:'Fredoka',sans-serif; display:block; }
+  .onboarding-form .pill-option .pill-desc{ font-size:0.72rem; opacity:0.6; margin-top:2px; display:block; }
+  .onboarding-form .pill-option:hover{ border-color:rgba(232,80,63,0.5); }
+  .onboarding-form .pill-option.selected{ background:rgba(232,80,63,0.12); border-color:var(--coral); }
+  .onboarding-form .pill-option.selected .pill-title{ color:var(--coral); }
+  .onboarding-form .age-badge{
+    display:inline-block; margin-left:6px; font-size:0.6rem; font-weight:700; background:rgba(var(--shadow-rgb),0.15);
+    padding:1px 6px; border-radius:999px; vertical-align:middle;
+  }
+  .onboarding-form .chip-multiselect{ display:flex; gap:8px; flex-wrap:wrap; }
+  .onboarding-form .multiselect-chip{
+    background:rgba(var(--shadow-rgb),0.04); border:2px solid rgba(var(--shadow-rgb),0.12); color:var(--ink);
+    padding:8px 14px; border-radius:999px; cursor:pointer; font-size:0.8rem; font-weight:600; transition:all .2s;
+  }
+  .onboarding-form .multiselect-chip:hover{ border-color:var(--teal); }
+  .onboarding-form .multiselect-chip.selected{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  .onboarding-form .form-select, .onboarding-form .form-input, .onboarding-form .form-textarea{
+    width:100%; background:rgba(var(--shadow-rgb),0.04); border:2px solid rgba(var(--shadow-rgb),0.12); color:var(--ink);
+    padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.9rem;
+  }
+  .onboarding-form .form-textarea{ min-height:70px; resize:vertical; }
+  .onboarding-full-fields{ display:none; }
+  .onboarding-full-fields.visible{ display:block; }
 
   /* Tier-level cap on total stops in a route — distinct from
      .itinerary-stop.locked, which means "not reached yet in sequence." */
@@ -620,6 +788,148 @@
   </div>
 </div>
 
+<div class="photobooth-overlay" id="avatar-capture-overlay" hidden>
+  <div class="photobooth-card">
+    <div class="photobooth-header">
+      <span>📷 Choose Your Profile Photo</span>
+      <span class="pb-close" onclick="closeAvatarCapture()">&times;</span>
+    </div>
+    <div id="avatar-capture-choice">
+      <div class="pb-hint" style="margin-bottom:16px;">This photo shows up as your avatar throughout the game.</div>
+      <div class="pb-controls">
+        <label class="pb-btn secondary" for="avatar-file-input" style="text-align:center; display:flex; align-items:center; justify-content:center;">🖼️ Choose from Library</label>
+        <button type="button" class="pb-btn primary" onclick="startAvatarCamera()">📸 Use Camera</button>
+      </div>
+      <input type="file" id="avatar-file-input" accept="image/*" hidden>
+    </div>
+    <div id="avatar-capture-camera" hidden>
+      <div class="pb-stage">
+        <video id="avatar-cam-video" autoplay playsinline muted></video>
+        <img id="avatar-cam-preview-img" style="display:none;" alt="Captured avatar preview">
+      </div>
+      <canvas id="avatar-cam-canvas" hidden></canvas>
+      <div class="pb-controls" id="avatar-cam-controls-live">
+        <button type="button" class="pb-btn secondary" onclick="avatarSwitchCamera()">🔄 Flip Camera</button>
+        <button type="button" class="pb-btn primary" onclick="avatarCapturePhoto()">📸 Capture</button>
+      </div>
+      <div class="pb-controls" id="avatar-cam-controls-preview" style="display:none;">
+        <button type="button" class="pb-btn secondary" onclick="avatarRetakePhoto()">&#8617; Retake</button>
+        <button type="button" class="pb-btn primary" onclick="avatarUseCapturedPhoto()">&check; Use This Photo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="photobooth-overlay" id="onboarding-overlay" hidden>
+  <div class="photobooth-card onboarding-card">
+    <div class="photobooth-header">
+      <span>🧭 Set Your Preferences</span>
+      <span class="pb-close" onclick="closeOnboarding()">&times;</span>
+    </div>
+    <div class="pb-hint" style="margin-bottom:14px;">Saved once, reused every time you start a Real Adventure — edit anytime from your profile.</div>
+
+    <div class="mode-toggle">
+      <div class="mode-tab active" data-mode="quick" onclick="setOnboardingMode('quick')">Quick Setup</div>
+      <div class="mode-tab" data-mode="full" onclick="setOnboardingMode('full')">Full Discovery</div>
+    </div>
+
+    <div class="onboarding-form">
+      <div class="form-group">
+        <span class="form-label">Budget</span>
+        <div class="pill-group" id="onb-budget-group">
+          <div class="pill-option" data-value="$" onclick="onbSelectPill(this,'onb-budget-group')"><span class="pill-title">$</span><span class="pill-desc">Keep it low-key</span></div>
+          <div class="pill-option selected" data-value="$$" onclick="onbSelectPill(this,'onb-budget-group')"><span class="pill-title">$$</span><span class="pill-desc">Comfortable spend</span></div>
+          <div class="pill-option" data-value="$$$" onclick="onbSelectPill(this,'onb-budget-group')"><span class="pill-title">$$$</span><span class="pill-desc">Treat yourself</span></div>
+          <div class="pill-option" data-value="$$$$" onclick="onbSelectPill(this,'onb-budget-group')"><span class="pill-title">$$$$</span><span class="pill-desc">No limits</span></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Search Radius</span>
+        <span class="form-hint">How far from you we'll look for a first venue</span>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <input type="range" id="onb-radius-slider" min="1" max="30" value="15" style="flex:1; accent-color:var(--coral);" oninput="document.getElementById('onb-radius-value').textContent = this.value">
+          <span id="onb-radius-value" style="font-weight:600; min-width:56px; color:var(--ink);">15 mi</span>
+        </div>
+        <div class="onboarding-radius-tier-markers">
+          <div class="onboarding-radius-tier-marker reached">≤30mi Free</div>
+          <div class="onboarding-radius-tier-marker">🔓 ≤50mi</div>
+          <div class="onboarding-radius-tier-marker">⭐ ≤100mi</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Content Rating</span>
+        <div class="pill-group" id="onb-rating-group">
+          <div class="pill-option selected" data-value="G-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟢 G-Rated</span><span class="pill-desc">Family-friendly, zero surprises</span></div>
+          <div class="pill-option" data-value="PG-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟡 PG-Rated</span><span class="pill-desc">A little flirty, nothing wild</span></div>
+          <div class="pill-option" data-value="NC-17" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟠 NC-17<span class="age-badge">18+</span></span><span class="pill-desc">Adult humor, still tasteful</span></div>
+          <div class="pill-option" data-value="Adults Only" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🔴 Adults Only<span class="age-badge">21+</span></span><span class="pill-desc">No limits</span></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Alcohol</span>
+        <div class="pill-group" id="onb-alcohol-group">
+          <div class="pill-option selected" data-value="Alcohol-Friendly" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title">🍷 Alcohol-Friendly</span><span class="pill-desc">Bars and drinks are fair game</span></div>
+          <div class="pill-option" data-value="Sober / Alcohol-Free" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title">🚫 Sober / Alcohol-Free</span><span class="pill-desc">Keep the whole route dry</span></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="form-label">Group Size</span>
+        <input type="number" class="form-input" id="onb-group-size" min="1" max="20" value="2">
+      </div>
+
+      <div class="onboarding-full-fields" id="onb-full-fields">
+        <div class="form-group">
+          <span class="form-label">Interests</span>
+          <span class="form-hint">Pick as many as apply</span>
+          <div class="chip-multiselect" id="onb-interests-group">
+            <div class="multiselect-chip" data-value="Food & Drink" onclick="onbToggleChip(this)">🍽️ Food & Drink</div>
+            <div class="multiselect-chip" data-value="Outdoors" onclick="onbToggleChip(this)">🌲 Outdoors</div>
+            <div class="multiselect-chip" data-value="Arts & Culture" onclick="onbToggleChip(this)">🎨 Arts & Culture</div>
+            <div class="multiselect-chip" data-value="Games & Competition" onclick="onbToggleChip(this)">🎮 Games & Competition</div>
+            <div class="multiselect-chip" data-value="Live Music" onclick="onbToggleChip(this)">🎵 Live Music</div>
+            <div class="multiselect-chip" data-value="Wellness" onclick="onbToggleChip(this)">🧘 Wellness</div>
+            <div class="multiselect-chip" data-value="Nightlife" onclick="onbToggleChip(this)">🌃 Nightlife</div>
+            <div class="multiselect-chip" data-value="Shopping" onclick="onbToggleChip(this)">🛍️ Shopping</div>
+            <div class="multiselect-chip" data-value="Pet-Friendly" onclick="onbToggleChip(this)">🐾 Pet-Friendly</div>
+            <div class="multiselect-chip" data-value="Comedy" onclick="onbToggleChip(this)">😂 Comedy</div>
+            <div class="multiselect-chip" data-value="Cultured" onclick="onbToggleChip(this)">🎭 Cultured</div>
+            <div class="multiselect-chip" data-value="Oddities & Curiosities" onclick="onbToggleChip(this)">🔮 Oddities & Curiosities</div>
+            <div class="multiselect-chip" id="onb-smoke-cigar-chip" data-value="Smoke & Cigar" onclick="onbToggleChip(this)">💨 Smoke &amp; Cigar<span class="age-badge">21+</span></div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label">What's the occasion?</span>
+          <select class="form-select" id="onb-goal-select">
+            <option value="">Select one...</option>
+            <option>First Date</option>
+            <option>Anniversary</option>
+            <option>Date Night Reset</option>
+            <option>Friend Hangout</option>
+            <option>Team Building</option>
+            <option>Celebration</option>
+            <option>Just Because</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label">Anything else?</span>
+          <span class="form-hint">Accessibility needs, allergies, preferences — whatever helps us fine-tune it</span>
+          <textarea class="form-textarea" id="onb-notes-field" placeholder="e.g. wheelchair accessible, nut allergy, prefers quiet spots..."></textarea>
+        </div>
+      </div>
+
+      <div class="pb-controls">
+        <button type="button" class="pb-btn primary" style="width:100%;" onclick="saveOnboardingPreferences()">Save My Preferences</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="xp-toast" id="xp-toast"></div>
 
 <nav>
@@ -629,6 +939,19 @@
 
 <div class="account-bar" id="account-bar">
   <!-- Populated by JS: either a sign-in form, or a level/coins chip once signed in. -->
+</div>
+
+<div class="sky-band" id="sky-band">
+  <div class="px-layers">
+    <img class="px-layer" id="px-sky" src="../assets/parallax/bay-area-test/sky.jpg" alt="">
+    <img class="px-layer" id="px-city" src="../assets/parallax/bay-area-test/city_longer.png" alt="">
+    <img class="px-layer" id="px-buildings" src="../assets/parallax/bay-area-test/buildings.png" alt="">
+    <img class="px-layer" id="px-people" src="../assets/parallax/bay-area-test/people.png" alt="">
+  </div>
+  <div class="px-scroll" id="px-scroll">
+    <div class="px-spacer" id="px-spacer"></div>
+  </div>
+  <div class="sky-band-scrim"></div>
 </div>
 
 <header class="hero">
@@ -645,7 +968,7 @@
   </div>
 </section>
 
-<div class="controls-bar">
+<div class="controls-bar" id="controls-bar">
   <div class="control-group">
     <label>Budget</label>
     <div class="pill-row" id="budget-group">
@@ -700,6 +1023,46 @@
   <p>This is a live preview of real, third-party venue data. MUSO Adventures does not own or operate these venues. This page is a concept preview, not the finished product.</p>
 </footer>
 
+<div class="tabbar-wrap" id="tabbar-wrap">
+  <div class="profile-sheet" id="profile-sheet" hidden>
+    <div class="profile-hero-avatar" id="profile-avatar-hero"><img src="" alt="" id="profile-hero-img"></div>
+    <div style="padding:10px 22px 0; text-align:center;">
+      <h2 style="font-size:1.2rem; color:var(--ink); font-family:'Fredoka',sans-serif;" id="profile-sheet-name">Player</h2>
+      <div style="opacity:0.6; font-size:0.85rem; margin-top:2px; color:var(--ink);" id="profile-sheet-level">Sign in to see your profile</div>
+    </div>
+    <div style="padding:22px; display:flex; flex-direction:column; gap:10px;" id="profile-sheet-actions">
+      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof openAvatarCapture==='function') openAvatarCapture();">📷 Change Photo</button>
+      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof openOnboarding==='function') openOnboarding(true);">⚙️ Edit My Preferences</button>
+      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof signOut==='function') signOut();">Sign Out</button>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab-item active" data-view="home" onclick="navScrollTo('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </div>
+    <div class="tab-item" onclick="navScrollTo('controls-bar')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+      <span>Explore</span>
+    </div>
+    <div class="tab-item raised" id="nav-avatar-btn">
+      <div class="nav-avatar-disc">
+        <img src="" alt="Profile" id="nav-avatar-img">
+        <button type="button" class="nav-avatar-close" id="nav-avatar-close" aria-label="Close profile" hidden>&times;</button>
+      </div>
+      <span>Profile</span>
+    </div>
+    <div class="tab-item" onclick="navScrollTo('adventure-section')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+      <span>Adventure</span>
+    </div>
+    <a class="tab-item" href="/shop/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <span>Shop</span>
+    </a>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
   // ---------- CONFIG ----------
@@ -733,6 +1096,11 @@
   // reason to bring players back.
   const FREE_VENUE_COUNT = 5;
 
+  // Generic silhouette shown until a player picks a real avatar photo.
+  const PLACEHOLDER_AVATAR_URL = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#2a2438"/><circle cx="50" cy="38" r="18" fill="#f7f3ff" fill-opacity="0.85"/><path d="M50 62c-22 0-34 12-34 30v8h68v-8c0-18-12-30-34-30z" fill="#f7f3ff" fill-opacity="0.85"/></svg>'
+  );
+
   let currentSession = null;   // Supabase auth session, or null if signed out
   let currentProfile = null;   // { level, xp, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count }
   let lastSearchUnlocked = false; // from the most recent venues-search response
@@ -752,7 +1120,7 @@
   // 0004_venue_search_and_age_gate.sql, previously unused on this page) so
   // a signed-in player who already completed the gate once never has to
   // re-confirm their age on a later login — see applyGateStateFromProfile().
-  const PROFILE_COLUMNS = 'id, xp, level, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count, birth_date, age_confirmed_at, disclaimer_accepted_at';
+  const PROFILE_COLUMNS = 'id, display_name, avatar_url, preferences, xp, level, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count, birth_date, age_confirmed_at, disclaimer_accepted_at';
 
   async function fetchOrCreateProfile(userId, email) {
     if (!supabaseClient) return null;
@@ -813,13 +1181,36 @@
   // after sign-in, after any unlock, and after every check-in, since any of
   // those can change xp/level/coins and/or award a badge.
   async function refreshProfileAndBadges() {
-    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); return; }
+    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); renderProfileSheetHeader(); return; }
     currentProfile = await fetchOrCreateProfile(currentSession.user.id, currentSession.user.email);
     const { data } = await supabaseClient
       .from('profile_badges')
       .select('badge_key')
       .eq('profile_id', currentSession.user.id);
     currentBadgeKeys = new Set((data || []).map(r => r.badge_key));
+    renderProfileSheetHeader();
+  }
+
+  // Keeps the nav-dock avatar, the profile-sheet hero avatar, and the
+  // sheet's name/level text in sync with currentProfile — called after
+  // every sign-in/sign-out/check-in/avatar-or-preferences change via
+  // refreshProfileAndBadges(), so none of them ever go stale.
+  function renderProfileSheetHeader() {
+    const navImg = document.getElementById('nav-avatar-img');
+    const heroImg = document.getElementById('profile-hero-img');
+    const nameEl = document.getElementById('profile-sheet-name');
+    const levelEl = document.getElementById('profile-sheet-level');
+    if (!navImg) return; // Phase 2 chrome not present (shouldn't happen, defensive)
+    const avatarUrl = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
+    navImg.src = avatarUrl;
+    heroImg.src = avatarUrl;
+    if (currentProfile) {
+      nameEl.textContent = currentProfile.display_name || 'Player';
+      levelEl.textContent = `Level ${currentProfile.level} · 🪙 ${currentProfile.adventure_coins}`;
+    } else {
+      nameEl.textContent = 'Player';
+      levelEl.textContent = 'Sign in to see your profile';
+    }
   }
 
   let signinCooldownTimer = null;
@@ -1043,7 +1434,11 @@
 
   async function renderRoutePicker() {
     const body = document.getElementById('adventure-body');
-    const { data: routes, error } = await supabaseClient.from('routes').select('id, title, description').order('created_at', { ascending: true });
+    // owner_party_id is null for curated/global routes — explicitly filtered
+    // here so a player's own ad-hoc real-venue route (owner_party_id set,
+    // readable to them under the 0016 RLS policy) never leaks into this
+    // curated picker.
+    const { data: routes, error } = await supabaseClient.from('routes').select('id, title, description').is('owner_party_id', null).order('created_at', { ascending: true });
     if (error || !routes || !routes.length) {
       body.innerHTML = '<div class="empty-state">No adventure routes are set up yet — check back soon.</div>';
       return;
@@ -1054,7 +1449,17 @@
       counts[r.id] = count || 0;
     }
     const unlockedStopCount = currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
-    body.innerHTML = `<div class="route-pick-list">${routes.map(r => {
+    const realVenueCta = `
+      <div class="real-venue-cta">
+        <div>
+          <div class="rvc-title">🎲 Chance Your Luck — Real Venue Adventure</div>
+          <div class="rvc-desc">We auto-pick the closest real spot matching your preferences as your first stop. Not feeling it? Reroll for a new one (3 free rolls per stop).</div>
+        </div>
+        <button type="button" class="rvc-btn" onclick="startRealVenueAdventure()">Start a Real Adventure</button>
+      </div>
+      <div class="curated-routes-divider">— or pick a curated route —</div>
+    `;
+    body.innerHTML = `${realVenueCta}<div class="route-pick-list">${routes.map(r => {
       const total = counts[r.id];
       const capped = total > unlockedStopCount;
       return `
@@ -1069,6 +1474,73 @@
     `;
     }).join('')}</div>`;
   }
+
+  // ---------- START A REAL-VENUE ADVENTURE ----------
+  // Gates on preferences.onboardingCompletedAt (Phase 4) — the curated
+  // system above stays fully independent of onboarding, per the approved
+  // plan ("alongside curated routes, not replacing them").
+  let onboardingIntent = null; // 'start_adventure' | null — read once by saveOnboardingPreferences()
+
+  window.startRealVenueAdventure = async function () {
+    if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
+
+    if (!currentProfile?.preferences?.onboardingCompletedAt) {
+      onboardingIntent = 'start_adventure';
+      window.openOnboarding(false);
+      return;
+    }
+
+    const body = document.getElementById('adventure-body');
+    body.innerHTML = '<div class="empty-state">🎲 Chancing your luck — finding your first real venue…</div>';
+
+    try {
+      // Same "don't trust the stale currentSession closure" re-fetch as
+      // startAdventure() above — an expired token here would otherwise
+      // surface as a confusing RLS rejection on the party lookup/insert.
+      const { data: { session: freshSession } } = await supabaseClient.auth.getSession();
+      if (!freshSession) {
+        currentSession = null;
+        renderAccountBar();
+        body.innerHTML = '<div class="empty-state">Your sign-in session has expired. Please sign in again above, then try again.</div>';
+        return;
+      }
+      currentSession = freshSession;
+      const userId = freshSession.user.id;
+
+      let { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
+      let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
+      if (!partyId) {
+        const { data: party, error: partyErr } = await supabaseClient
+          .from('parties').insert({ name: `${currentProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId })
+          .select('id').single();
+        if (partyErr) throw partyErr;
+        partyId = party.id;
+        const { error: memberErr } = await supabaseClient
+          .from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
+        if (memberErr) throw memberErr;
+      }
+
+      const token = await getAccessToken();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: 'init', partyId, lat: currentLat, lng: currentLng }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        body.innerHTML = `<div class="empty-state">Couldn't start a real-venue adventure: ${data.error || res.statusText}</div>`;
+        return;
+      }
+
+      try { localStorage.setItem(adventureStorageKey(userId), JSON.stringify({ adventureId: data.adventure.id })); } catch (e) {}
+      await loadItinerary(data.adventure.id);
+    } catch (e) {
+      const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
+      body.innerHTML = isRlsError
+        ? '<div class="empty-state">Your sign-in session expired partway through. Please sign in again above, then try again.</div>'
+        : `<div class="empty-state">Couldn't start a real-venue adventure: ${e.message}</div>`;
+    }
+  };
 
   window.startAdventure = async function (routeId) {
     const body = document.getElementById('adventure-body');
@@ -1140,7 +1612,7 @@
     const body = document.getElementById('adventure-body');
     body.innerHTML = '<div class="empty-state">Loading your itinerary…</div>';
 
-    const { data: adv } = await supabaseClient.from('adventures').select('id, route_id, status').eq('id', adventureId).maybeSingle();
+    const { data: adv } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle();
     if (!adv) {
       try { localStorage.removeItem(adventureStorageKey(currentSession.user.id)); } catch (e) {}
       await renderRoutePicker();
@@ -1163,6 +1635,7 @@
     activeAdventure = {
       adventureId,
       routeId: adv.route_id,
+      mode: adv.mode || 'curated',
       route: routeData.route,
       stops: routeData.stops,
       doneIds,
@@ -1201,15 +1674,31 @@
       const isCurrent = i === firstIncompleteIdx;
       const locked = !isDone && !isCurrent;
       let status;
+      const isRealVenue = activeAdventure.mode === 'real_venue';
       if (isDone) status = `<span class="is-status" style="color:var(--deep-teal);">✓ Checked in</span>`;
+      else if (isCurrent && isRealVenue && s.is_mystery) {
+        // advance() (real-venue-adventure edge function) hasn't successfully
+        // revealed this stop yet — best-effort, so offer a manual retry
+        // instead of a checkin button with nothing real to check into.
+        status = `
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            <span class="is-status" style="opacity:0.7;">🔮 Picking your next stop…</span>
+            <button type="button" class="reroll-btn" onclick="retryAdvance()">Try again</button>
+          </div>
+        `;
+      }
       else if (isCurrent) {
         const safeName = (s.name || 'this stop').replace(/'/g, "\\'");
         const hasPhoto = !!pendingPhotoCaptures[s.id];
         const photoControl = hasPhoto
           ? `<span class="photo-ready-badge" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Photo ready &check;</span>`
           : `<button type="button" class="photo-add-btn" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Add photo (+${CHECKIN_PHOTO_COINS} coins)</button>`;
+        const rerollControl = isRealVenue
+          ? `<button type="button" class="reroll-btn" data-stop-id="${s.id}" onclick="rerollStop('${s.id}')">🎰 Chance Your Luck</button>`
+          : '';
         status = `
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+            ${rerollControl}
             ${photoControl}
             <button type="button" class="checkin-btn" onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
           </div>
@@ -1466,6 +1955,27 @@
         showToast(toastMsg);
       }
 
+      // Real-venue adventures don't know the next stop's venue until now —
+      // advance() (real-venue-adventure edge function) reveals the next
+      // placeholder stop near wherever the player is standing right now,
+      // then a full itinerary reload picks up its real name/coords (the
+      // advance response itself doesn't carry lat/lng — route-detail's
+      // venues(...) join is the single source of truth for that, same as
+      // every other stop). Best-effort: if it fails (no signal, no new
+      // venues nearby), the stop just stays "Unknown Location" and the
+      // player can retry from the itinerary view — the check-in itself has
+      // already succeeded either way.
+      if (activeAdventure.mode === 'real_venue') {
+        try {
+          await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+            body: JSON.stringify({ action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng }),
+          });
+        } catch (e) {}
+        await loadItinerary(activeAdventure.adventureId);
+      }
+
       // Show the "here's the path to your next stop" map — skipped when a
       // badge celebration is about to take over the screen, so the two
       // full-screen overlays never compete for the same moment.
@@ -1477,6 +1987,51 @@
     } catch (e) {
       alert('Could not reach the check-in service: ' + e.message);
     }
+  };
+
+  // ---------- REAL-VENUE ADVENTURE: REROLL + RETRY ----------
+  window.rerollStop = async function (routeStopId) {
+    if (!activeAdventure || !currentSession) return;
+    const btn = document.querySelector(`.reroll-btn[data-stop-id="${routeStopId}"]`);
+    if (btn) { btn.disabled = true; btn.textContent = '🎰 Rolling…'; }
+    try {
+      const token = await getAccessToken();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: 'reroll', routeStopId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || (res.status === 402 ? 'Not enough Adventure Coins for another roll.' : 'Could not reroll.'));
+        if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
+        return;
+      }
+      if (data.spent) {
+        showToast(`🎰 New venue! −${data.spent} coins`);
+        await refreshProfileAndBadges();
+        renderAccountBar();
+      } else {
+        showToast(`🎰 New venue! (${data.freeRollsRemaining} free roll${data.freeRollsRemaining === 1 ? '' : 's'} left)`);
+      }
+      await loadItinerary(activeAdventure.adventureId);
+    } catch (e) {
+      alert('Could not reach the reroll service: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
+    }
+  };
+
+  window.retryAdvance = async function () {
+    if (!activeAdventure || !currentSession) return;
+    try {
+      const token = await getAccessToken();
+      await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng }),
+      });
+    } catch (e) {}
+    await loadItinerary(activeAdventure.adventureId);
   };
 
   // ---------- CHECK-IN PHOTO BOOTH ----------
@@ -1577,6 +2132,252 @@
     pbCapturedBlob = null;
     pbTargetStopId = null;
     document.getElementById('photobooth-overlay').setAttribute('hidden', '');
+  };
+
+  // ---------- AVATAR CAPTURE ----------
+  // Two ways in (file picker or camera), one way out: saveAvatarBlob()
+  // uploads to the `avatars` bucket and writes profiles.avatar_url — same
+  // storage bucket/path pattern already used by preview/profile.html's
+  // file-picker upload. The camera path reuses the check-in photo booth's
+  // canvas-draw/mirror-flip/toBlob mechanics (pbStartCamera/capturePhoto,
+  // above) but on its own dedicated <video>/<canvas> elements rather than
+  // the photo booth's, since that overlay has its own check-in-specific
+  // state (pbTargetStopId) this shouldn't touch.
+  let avatarCamStream = null;
+  let avatarCamFacingMode = 'user'; // front camera by default — this is a selfie, not a check-in photo
+  let avatarCamCapturedBlob = null;
+
+  window.openAvatarCapture = function () {
+    document.getElementById('avatar-capture-overlay').removeAttribute('hidden');
+    document.getElementById('avatar-capture-choice').hidden = false;
+    document.getElementById('avatar-capture-camera').hidden = true;
+  };
+
+  window.closeAvatarCapture = function () {
+    avatarStopStream();
+    avatarCamCapturedBlob = null;
+    document.getElementById('avatar-capture-overlay').setAttribute('hidden', '');
+  };
+
+  window.startAvatarCamera = async function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("This browser doesn't support camera access. Try the \"Choose from Library\" option instead.");
+      return;
+    }
+    document.getElementById('avatar-capture-choice').hidden = true;
+    document.getElementById('avatar-capture-camera').hidden = false;
+    await avatarStartCamera();
+  };
+
+  async function avatarStartCamera() {
+    avatarStopStream();
+    const video = document.getElementById('avatar-cam-video');
+    const img = document.getElementById('avatar-cam-preview-img');
+    img.style.display = 'none';
+    video.style.display = 'block';
+    document.getElementById('avatar-cam-controls-live').style.display = 'flex';
+    document.getElementById('avatar-cam-controls-preview').style.display = 'none';
+    try {
+      avatarCamStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: avatarCamFacingMode },
+        audio: false,
+      });
+      video.srcObject = avatarCamStream;
+    } catch (e) {
+      alert("Couldn't access your camera: " + e.message + "\n\nMake sure you've allowed camera access for this site, then try again.");
+      document.getElementById('avatar-capture-choice').hidden = false;
+      document.getElementById('avatar-capture-camera').hidden = true;
+    }
+  }
+
+  function avatarStopStream() {
+    if (avatarCamStream) {
+      avatarCamStream.getTracks().forEach((t) => t.stop());
+      avatarCamStream = null;
+    }
+  }
+
+  window.avatarSwitchCamera = async function () {
+    avatarCamFacingMode = avatarCamFacingMode === 'environment' ? 'user' : 'environment';
+    await avatarStartCamera();
+  };
+
+  window.avatarCapturePhoto = function () {
+    const video = document.getElementById('avatar-cam-video');
+    const canvas = document.getElementById('avatar-cam-canvas');
+    canvas.width = video.videoWidth || 720;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (avatarCamFacingMode === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      avatarCamCapturedBlob = blob;
+      const img = document.getElementById('avatar-cam-preview-img');
+      img.src = URL.createObjectURL(blob);
+      img.style.display = 'block';
+      video.style.display = 'none';
+      document.getElementById('avatar-cam-controls-live').style.display = 'none';
+      document.getElementById('avatar-cam-controls-preview').style.display = 'flex';
+      avatarStopStream();
+    }, 'image/jpeg', 0.85);
+  };
+
+  window.avatarRetakePhoto = function () {
+    avatarCamCapturedBlob = null;
+    avatarStartCamera();
+  };
+
+  window.avatarUseCapturedPhoto = function () {
+    if (!avatarCamCapturedBlob) return;
+    saveAvatarBlob(avatarCamCapturedBlob, 'jpg');
+  };
+
+  document.getElementById('avatar-file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    saveAvatarBlob(file, ext);
+  });
+
+  async function saveAvatarBlob(blob, ext) {
+    if (!currentSession) { alert('Sign in first to set a profile photo.'); return; }
+    const path = `${currentSession.user.id}/avatar.${ext}`;
+    const { error: uploadError } = await supabaseClient.storage
+      .from('avatars')
+      .upload(path, blob, { upsert: true, cacheControl: '3600', contentType: blob.type || 'image/jpeg' });
+    if (uploadError) { alert('Could not upload photo: ' + uploadError.message); return; }
+    const { data: pub } = supabaseClient.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = pub.publicUrl + '?t=' + Date.now();
+    const { error: updateError } = await supabaseClient.from('profiles').update({ avatar_url: avatarUrl }).eq('id', currentSession.user.id);
+    if (updateError) { alert('Uploaded, but could not save to your profile: ' + updateError.message); return; }
+    if (currentProfile) currentProfile.avatar_url = avatarUrl;
+    renderProfileSheetHeader();
+    closeAvatarCapture();
+    // First-time setup chains straight into preferences after the photo
+    // saves — see openOnboarding()/onboardingInProgress below.
+    if (onboardingInProgress) openOnboardingPreferencesStep();
+  }
+
+  // ---------- ONBOARDING: PREFERENCE SETUP ----------
+  // One-time setup (avatar photo, then Quick Setup/Full Discovery, ported
+  // from index.html's exact field set) saved to profiles.preferences and
+  // reused as defaults for every real-venue adventure. Editable anytime via
+  // "Edit My Preferences" in the profile sheet (isEdit=true skips the
+  // avatar step and pre-fills from the saved values).
+  let onboardingInProgress = false;
+
+  window.openOnboarding = function (isEdit) {
+    if (!currentSession) { alert('Sign in first to set up your preferences.'); return; }
+    if (isEdit) {
+      openOnboardingPreferencesStep(currentProfile?.preferences || null);
+      return;
+    }
+    onboardingInProgress = true;
+    openAvatarCapture();
+  };
+
+  function openOnboardingPreferencesStep(prefill) {
+    onboardingInProgress = false;
+    document.getElementById('onboarding-overlay').removeAttribute('hidden');
+    if (prefill) {
+      onbSelectValue('onb-budget-group', prefill.budget);
+      onbSelectValue('onb-rating-group', prefill.contentRating);
+      onbSelectValue('onb-alcohol-group', prefill.alcohol);
+      document.getElementById('onb-radius-slider').value = prefill.radiusMiles || 15;
+      document.getElementById('onb-radius-value').textContent = prefill.radiusMiles || 15;
+      document.getElementById('onb-group-size').value = prefill.groupSize || 2;
+      document.getElementById('onb-goal-select').value = prefill.occasion || '';
+      document.getElementById('onb-notes-field').value = prefill.notes || '';
+      document.querySelectorAll('#onb-interests-group .multiselect-chip').forEach((chip) => {
+        chip.classList.toggle('selected', (prefill.interests || []).includes(chip.dataset.value));
+      });
+      if ((prefill.interests || []).length) setOnboardingMode('full');
+    }
+  }
+
+  window.closeOnboarding = function () {
+    onboardingInProgress = false;
+    document.getElementById('onboarding-overlay').setAttribute('hidden', '');
+  };
+
+  function onbSelectValue(groupId, value) {
+    document.querySelectorAll('#' + groupId + ' .pill-option').forEach((p) => {
+      p.classList.toggle('selected', p.dataset.value === value);
+    });
+  }
+
+  window.setOnboardingMode = function (mode) {
+    document.querySelectorAll('#onboarding-overlay .mode-tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+    document.getElementById('onb-full-fields').classList.toggle('visible', mode === 'full');
+  };
+
+  window.onbSelectPill = function (el, groupId) {
+    document.querySelectorAll('#' + groupId + ' .pill-option').forEach((p) => p.classList.remove('selected'));
+    el.classList.add('selected');
+  };
+
+  window.onbToggleChip = function (el) {
+    el.classList.toggle('selected');
+  };
+
+  window.saveOnboardingPreferences = async function () {
+    if (!currentSession) return;
+    const budget = document.querySelector('#onb-budget-group .pill-option.selected');
+    const rating = document.querySelector('#onb-rating-group .pill-option.selected');
+    const alcohol = document.querySelector('#onb-alcohol-group .pill-option.selected');
+
+    // Same defense-in-depth re-check as index.html's generateDiscoverySummary:
+    // the server (real-venue-adventure edge function) is the actual
+    // enforcement point, this just avoids a confusing UX where the pill
+    // saves but the player can't tell why real venues never show up.
+    if (rating && (rating.dataset.value === 'NC-17' || rating.dataset.value === 'Adults Only')) {
+      let gateOk = false;
+      try {
+        const saved = JSON.parse(localStorage.getItem(GATE_STORAGE_KEY) || 'null');
+        const requiredAge = rating.dataset.value === 'Adults Only' ? 21 : 18;
+        gateOk = !!(saved && saved.disclaimerAccepted && typeof saved.age === 'number' && saved.age >= requiredAge);
+      } catch (e) {}
+      if (!gateOk) {
+        alert(`That content rating needs age confirmation first — please complete the age check above.`);
+        document.getElementById('gate-overlay').removeAttribute('hidden');
+        return;
+      }
+    }
+
+    const interests = Array.from(document.querySelectorAll('#onb-interests-group .multiselect-chip.selected')).map((c) => c.dataset.value);
+    const preferences = {
+      budget: budget ? budget.dataset.value : '$$',
+      radiusMiles: Number(document.getElementById('onb-radius-slider').value) || 15,
+      contentRating: rating ? rating.dataset.value : 'G-Rated',
+      alcohol: alcohol ? alcohol.dataset.value : 'Alcohol-Friendly',
+      groupSize: Number(document.getElementById('onb-group-size').value) || 2,
+      interests,
+      occasion: document.getElementById('onb-goal-select').value,
+      notes: document.getElementById('onb-notes-field').value.trim(),
+      onboardingCompletedAt: new Date().toISOString(),
+    };
+
+    const { error } = await supabaseClient.from('profiles').update({ preferences }).eq('id', currentSession.user.id);
+    if (error) { alert('Could not save your preferences: ' + error.message); return; }
+    if (currentProfile) currentProfile.preferences = preferences;
+    closeOnboarding();
+
+    // If this onboarding pass was triggered by "Start a Real Adventure"
+    // (not a plain "Edit My Preferences" from the profile sheet), continue
+    // straight into starting the adventure — the venues are revealed right
+    // after preferences are set, per the intended new-player flow.
+    if (onboardingIntent === 'start_adventure') {
+      onboardingIntent = null;
+      showToast('Preferences saved! Finding your first venue…');
+      startRealVenueAdventure();
+    } else {
+      showToast('Preferences saved!');
+    }
   };
 
   // ---------- CELEBRATIONS + PRAISE COPY ----------
@@ -1793,6 +2594,12 @@
 
   const birthdateInput = document.getElementById('gate-birthdate');
   birthdateInput.max = new Date().toISOString().slice(0,10);
+  // Anchors the native date picker's year scroll/type range to something
+  // sane (matches the server's own 120-year check constraint — see
+  // profiles_birth_date_range_check in 0006_birthday_capture.sql) so typing
+  // into the year segment can't land on nonsense like "0069" with nothing
+  // to bound it.
+  birthdateInput.min = new Date(new Date().setFullYear(new Date().getFullYear() - 120)).toISOString().slice(0,10);
 
   function checkGateState(){
     const btn = document.getElementById('gate-enter-btn');
@@ -2264,6 +3071,230 @@
       btn.textContent = 'Find Real Venues';
     }
   };
+
+  // ---------- PARALLAX HEADER ----------
+  // Ported verbatim from home-concept.html — same element ids, same drag/
+  // auto-drift mechanics, only the asset paths changed (this page is one
+  // level deeper, so ../assets/... instead of assets/...).
+  (function initParallaxHeader(){
+    const wrap = document.getElementById('sky-band');
+    const pxScroll = document.getElementById('px-scroll');
+    const pxSpacer = document.getElementById('px-spacer');
+    const skyImg = document.getElementById('px-sky');
+    const cityImg = document.getElementById('px-city');
+    const buildingsImg = document.getElementById('px-buildings');
+    const peopleImg = document.getElementById('px-people');
+    if (!wrap || !pxScroll) return;
+
+    const SPEED = { sky: 0.1, city: 0.3, buildings: 0.55, people: 1 };
+    const CITY_NEEDLE_NATIVE_X = 3914;
+    const CITY_SAFETY_MARGIN_NATIVE = 20;
+    let cityBaseOffset = 0;
+
+    function computeCityBaseOffset(){
+      if (!cityImg.naturalHeight || !peopleImg.naturalHeight) return;
+      const scale = wrap.clientHeight / cityImg.naturalHeight;
+      const peopleWidth = peopleImg.getBoundingClientRect().width;
+      const maxScroll = Math.max(peopleWidth - wrap.clientWidth, 0);
+      const viewportNativeWidth = wrap.clientWidth / scale;
+      const edgeNativeX = CITY_NEEDLE_NATIVE_X - CITY_SAFETY_MARGIN_NATIVE - viewportNativeWidth;
+      const edgeRendered = edgeNativeX * scale;
+      cityBaseOffset = -(edgeRendered - maxScroll * SPEED.city);
+    }
+
+    function sizeSpacer(){
+      const w = peopleImg.getBoundingClientRect().width;
+      pxSpacer.style.width = Math.max(w, wrap.clientWidth) + 'px';
+    }
+
+    function applyParallax(){
+      const s = pxScroll.scrollLeft;
+      skyImg.style.transform = `translateX(${-s * SPEED.sky}px)`;
+      cityImg.style.transform = `translateX(${cityBaseOffset - s * SPEED.city}px)`;
+      buildingsImg.style.transform = `translateX(${-s * SPEED.buildings}px)`;
+      peopleImg.style.transform = `translateX(${-s * SPEED.people}px)`;
+    }
+
+    let ticking = false;
+    pxScroll.addEventListener('scroll', () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => { applyParallax(); ticking = false; });
+    }, { passive: true });
+
+    function refreshLayout(){ sizeSpacer(); computeCityBaseOffset(); applyParallax(); }
+    window.addEventListener('resize', refreshLayout);
+    if (peopleImg.complete) refreshLayout(); else peopleImg.addEventListener('load', refreshLayout);
+    if (cityImg.complete) refreshLayout(); else cityImg.addEventListener('load', refreshLayout);
+
+    const AUTO_SPEED = 0.35;
+    let autoDir = 1;
+    let autoPaused = false;
+    let resumeTimer = null;
+
+    function autoStep(){
+      if (!autoPaused) {
+        const max = pxScroll.scrollWidth - pxScroll.clientWidth;
+        let next = pxScroll.scrollLeft + AUTO_SPEED * autoDir;
+        if (next >= max) { next = max; autoDir = -1; }
+        else if (next <= 0) { next = 0; autoDir = 1; }
+        pxScroll.scrollLeft = next;
+      }
+      requestAnimationFrame(autoStep);
+    }
+    requestAnimationFrame(autoStep);
+
+    function pauseAuto(){
+      autoPaused = true;
+      clearTimeout(resumeTimer);
+      resumeTimer = setTimeout(() => { autoPaused = false; }, 2500);
+    }
+    ['pointerdown', 'wheel', 'touchstart'].forEach((evt) => {
+      pxScroll.addEventListener(evt, pauseAuto, { passive: true });
+    });
+  })();
+
+  // ---------- BOTTOM NAV: SCROLL + PROFILE SHEET ----------
+  window.navScrollTo = function (target) {
+    if (document.getElementById('tabbar-wrap').dataset.profileOpen === '1') {
+      closeProfile();
+    }
+    document.querySelectorAll('.tabbar .tab-item').forEach((t) => t.classList.remove('active'));
+    if (target === 'home') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.querySelector('.tab-item[data-view="home"]')?.classList.add('active');
+      return;
+    }
+    const el = document.getElementById(target);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const tabbarWrap = document.getElementById('tabbar-wrap');
+  const tabbarEl = document.querySelector('.tabbar');
+  const profileSheet = document.getElementById('profile-sheet');
+  const navAvatarBtn = document.getElementById('nav-avatar-btn');
+  const navAvatarImg = document.getElementById('nav-avatar-img');
+  const navAvatarClose = document.getElementById('nav-avatar-close');
+  const heroAvatar = document.getElementById('profile-avatar-hero');
+  let profileOpen = false;
+  let profileAnimating = false;
+
+  // Same "the nav bar itself expands into a sheet" FLIP-transform technique
+  // as home-concept.html — see that file's comments for the full mechanics.
+  // Adapted for a real scrolling page instead of a fixed-height phone mock:
+  // navExpandedHeight() measures against the actual viewport and leaves
+  // the sticky top <nav> visible, and there's no single "home view" element
+  // to fade — the sheet's own opaque background is enough to cover the
+  // page underneath it.
+  function navCollapsedHeight(){
+    return tabbarEl.getBoundingClientRect().height;
+  }
+  function navExpandedHeight(){
+    const navEl = document.querySelector('nav');
+    return window.innerHeight - (navEl ? navEl.getBoundingClientRect().height : 0);
+  }
+
+  function openProfile(){
+    if (profileOpen || profileAnimating) return;
+    profileAnimating = true;
+    document.querySelectorAll('.tab-item').forEach((t) => t.classList.remove('active'));
+    navAvatarBtn.classList.add('active');
+
+    const fromRect = navAvatarImg.getBoundingClientRect();
+    navAvatarImg.style.transition = 'none';
+    navAvatarImg.style.opacity = '0';
+    navAvatarImg.style.pointerEvents = 'none';
+    navAvatarClose.hidden = false;
+    profileSheet.hidden = false;
+
+    const collapsedH = navCollapsedHeight();
+    const expandedH = navExpandedHeight();
+    tabbarWrap.style.transition = 'none';
+    tabbarWrap.style.height = expandedH + 'px';
+    const toRect = heroAvatar.getBoundingClientRect();
+    tabbarWrap.style.height = collapsedH + 'px';
+
+    const dx = fromRect.left + fromRect.width / 2 - (toRect.left + toRect.width / 2);
+    const dy = fromRect.top + fromRect.height / 2 - (toRect.top + toRect.height / 2);
+    const scale = fromRect.width / toRect.width;
+    heroAvatar.style.transition = 'none';
+    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    heroAvatar.getBoundingClientRect();
+
+    tabbarWrap.style.transition = 'height .45s cubic-bezier(.22,.85,.32,1)';
+    heroAvatar.style.transition = 'transform .45s cubic-bezier(.22,.85,.32,1)';
+    tabbarWrap.style.height = expandedH + 'px';
+    heroAvatar.style.transform = 'translate(0,0) scale(1)';
+
+    const finish = () => {
+      tabbarWrap.style.transition = '';
+      heroAvatar.style.transition = '';
+      tabbarWrap.dataset.profileOpen = '1';
+      profileOpen = true;
+      profileAnimating = false;
+    };
+    tabbarWrap.addEventListener('transitionend', function te(e){
+      if (e.propertyName !== 'height') return;
+      tabbarWrap.removeEventListener('transitionend', te);
+      clearTimeout(fallback);
+      finish();
+    }, { once: true });
+    const fallback = setTimeout(finish, 550);
+  }
+
+  window.closeProfile = function (){
+    if (!profileOpen || profileAnimating) return;
+    profileAnimating = true;
+    document.querySelectorAll('.tab-item').forEach((t) => t.classList.remove('active'));
+    document.querySelector('.tab-item[data-view="home"]')?.classList.add('active');
+
+    const fromRect = heroAvatar.getBoundingClientRect();
+    const toRect = navAvatarImg.getBoundingClientRect();
+    const dx = toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2);
+    const dy = toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2);
+    const scale = toRect.width / fromRect.width;
+    const collapsedH = navCollapsedHeight();
+
+    heroAvatar.style.transition = 'none';
+    heroAvatar.style.transform = 'translate(0,0) scale(1)';
+    heroAvatar.getBoundingClientRect();
+
+    tabbarWrap.style.transition = 'height .4s cubic-bezier(.4,0,.2,1)';
+    heroAvatar.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
+    tabbarWrap.style.height = collapsedH + 'px';
+    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+
+    const finish = () => {
+      tabbarWrap.style.transition = '';
+      tabbarWrap.style.height = '';
+      heroAvatar.style.transition = '';
+      heroAvatar.style.transform = '';
+      navAvatarImg.style.transition = 'opacity .3s ease';
+      navAvatarImg.style.opacity = '1';
+      navAvatarImg.style.pointerEvents = '';
+      navAvatarClose.hidden = true;
+      profileSheet.hidden = true;
+      profileSheet.scrollTop = 0;
+      delete tabbarWrap.dataset.profileOpen;
+      profileOpen = false;
+      profileAnimating = false;
+    };
+    tabbarWrap.addEventListener('transitionend', function te(e){
+      if (e.propertyName !== 'height') return;
+      tabbarWrap.removeEventListener('transitionend', te);
+      clearTimeout(fallback);
+      finish();
+    }, { once: true });
+    const fallback = setTimeout(finish, 500);
+  };
+
+  navAvatarBtn.addEventListener('click', () => {
+    if (profileOpen) closeProfile(); else openProfile();
+  });
+  navAvatarClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeProfile();
+  });
 
   initAuth();
 </script>

@@ -2032,6 +2032,12 @@
 
   const birthdateInput = document.getElementById('gate-birthdate');
   birthdateInput.max = new Date().toISOString().slice(0,10);
+  // Anchors the native date picker's year scroll/type range to something
+  // sane (matches the server's own 120-year check constraint — see
+  // profiles_birth_date_range_check in 0006_birthday_capture.sql) so typing
+  // into the year segment can't land on nonsense like "0069" with nothing
+  // to bound it.
+  birthdateInput.min = new Date(new Date().setFullYear(new Date().getFullYear() - 120)).toISOString().slice(0,10);
 
   function checkGateState(){
     const btn = document.getElementById('gate-enter-btn');
