@@ -807,6 +807,37 @@
     font-size:0.95rem;
   }
   .gate-input:focus{ outline:none; border-color:var(--coral); }
+
+  /* ---------- BIRTHDAY WHEEL PICKER (Apple-style month/day/year scroller) ---------- */
+  .dob-wheel-wrap{
+    background:var(--cream); border:2px solid rgba(var(--shadow-rgb),0.14);
+    border-radius:12px; overflow:hidden;
+  }
+  .dob-wheel-picker{ position:relative; display:flex; height:180px; }
+  .dob-wheel-col{
+    flex:1; overflow-y:scroll; scroll-snap-type:y mandatory;
+    scrollbar-width:none; -ms-overflow-style:none;
+  }
+  .dob-wheel-col::-webkit-scrollbar{ display:none; }
+  .dob-wheel-col-year{ flex:1.3; }
+  .dob-wheel-pad{ height:72px; }
+  .dob-wheel-item{
+    scroll-snap-align:center; height:36px; line-height:36px; text-align:center;
+    font-size:0.95rem; opacity:0.32; transition:opacity .15s; cursor:pointer;
+    font-family:'Nunito', sans-serif; color:var(--ink); user-select:none;
+  }
+  .dob-wheel-item.selected{ opacity:1; font-weight:700; }
+  .dob-wheel-highlight{
+    position:absolute; top:72px; left:8px; right:8px; height:36px;
+    border-top:1px solid rgba(var(--shadow-rgb),0.18); border-bottom:1px solid rgba(var(--shadow-rgb),0.18);
+    pointer-events:none; border-radius:6px; background:rgba(var(--shadow-rgb),0.05);
+  }
+  .dob-wheel-fade-top, .dob-wheel-fade-bottom{
+    position:absolute; left:0; right:0; height:56px; pointer-events:none; z-index:2;
+  }
+  .dob-wheel-fade-top{ top:0; background:linear-gradient(var(--cream), rgba(255,255,255,0)); }
+  .dob-wheel-fade-bottom{ bottom:0; background:linear-gradient(rgba(255,255,255,0), var(--cream)); }
+  .dob-wheel-summary{ text-align:center; font-size:0.8rem; font-weight:600; opacity:0.7; padding-top:8px; }
   .gate-check-row{
     display:flex; align-items:flex-start; gap:10px;
     margin-bottom:14px;
@@ -934,8 +965,19 @@
     </div>
 
     <div class="gate-field-row">
-      <label for="gate-birthdate" class="gate-field-label">Your birthday</label>
-      <input type="date" id="gate-birthdate" class="gate-input">
+      <label class="gate-field-label">Your birthday</label>
+      <div class="dob-wheel-wrap">
+        <div class="dob-wheel-picker">
+          <div class="dob-wheel-fade-top"></div>
+          <div class="dob-wheel-col" id="dob-col-month"></div>
+          <div class="dob-wheel-col" id="dob-col-day"></div>
+          <div class="dob-wheel-col dob-wheel-col-year" id="dob-col-year"></div>
+          <div class="dob-wheel-highlight"></div>
+          <div class="dob-wheel-fade-bottom"></div>
+        </div>
+      </div>
+      <div class="dob-wheel-summary" id="dob-wheel-summary" aria-live="polite"></div>
+      <input type="hidden" id="gate-birthdate">
       <span class="gate-field-hint">Unlocks 21+ content when you're eligible — and lets us send you something for your birthday 🎂</span>
     </div>
     <div class="gate-field-row">
@@ -2031,13 +2073,100 @@
   }
 
   const birthdateInput = document.getElementById('gate-birthdate');
-  birthdateInput.max = new Date().toISOString().slice(0,10);
-  // Anchors the native date picker's year scroll/type range to something
-  // sane (matches the server's own 120-year check constraint — see
-  // profiles_birth_date_range_check in 0006_birthday_capture.sql) so typing
-  // into the year segment can't land on nonsense like "0069" with nothing
-  // to bound it.
-  birthdateInput.min = new Date(new Date().setFullYear(new Date().getFullYear() - 120)).toISOString().slice(0,10);
+
+  // Apple-style scrollable month/day/year picker — replaces the old native
+  // <input type="date">, which let a typed/scrolled year land on nonsense
+  // like "0069" with nothing to bound it (browsers don't reliably clamp
+  // digit-by-digit typing into the year segment). This writes the same
+  // YYYY-MM-DD shape into the hidden #gate-birthdate input and fires
+  // 'change' on it, so calculateAgeClient()/checkGateState() below don't
+  // need to know the picker changed at all. Bounded to the same 120-year
+  // window as the server's own check constraint (see
+  // profiles_birth_date_range_check in 0006_birthday_capture.sql).
+  (function initDobWheelPicker(){
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const ITEM_H = 36;
+    const nowYear = new Date().getFullYear();
+    const minYear = nowYear - 120;
+    const maxYear = nowYear;
+
+    const monthCol = document.getElementById('dob-col-month');
+    const dayCol = document.getElementById('dob-col-day');
+    const yearCol = document.getElementById('dob-col-year');
+    const summaryEl = document.getElementById('dob-wheel-summary');
+    if (!monthCol || !dayCol || !yearCol) return;
+
+    function daysInMonth(month, year){ return new Date(year, month, 0).getDate(); }
+
+    const today = new Date();
+    // Defaults to 25 years ago at today's month/day — an arbitrary but
+    // plausible adult starting point, close enough that most players only
+    // need to scroll the year wheel a bit to reach their real birth year.
+    const state = { month: today.getMonth() + 1, day: today.getDate(), year: nowYear - 25 };
+
+    function buildColumn(col, values, labelFn){
+      const pad = '<div class="dob-wheel-pad"></div>';
+      col.innerHTML = pad + values.map((v) =>
+        `<div class="dob-wheel-item" data-value="${v}">${labelFn ? labelFn(v) : v}</div>`
+      ).join('') + pad;
+      col.querySelectorAll('.dob-wheel-item').forEach((el, i) => {
+        el.addEventListener('click', () => col.scrollTo({ top: i * ITEM_H, behavior: 'smooth' }));
+      });
+    }
+
+    function applySelectedClass(col){
+      const idx = Math.round(col.scrollTop / ITEM_H);
+      const items = col.querySelectorAll('.dob-wheel-item');
+      items.forEach((el, i) => el.classList.toggle('selected', i === idx));
+      return items[idx] || null;
+    }
+
+    function scrollColToValue(col, value){
+      const items = Array.from(col.querySelectorAll('.dob-wheel-item'));
+      const idx = items.findIndex((el) => el.dataset.value == value);
+      if (idx === -1) return;
+      col.scrollTop = idx * ITEM_H;
+      applySelectedClass(col);
+    }
+
+    function commitValue(){
+      const mm = String(state.month).padStart(2, '0');
+      const dd = String(state.day).padStart(2, '0');
+      birthdateInput.value = `${state.year}-${mm}-${dd}`;
+      if (summaryEl) summaryEl.textContent = `${monthNames[state.month - 1]} ${state.day}, ${state.year}`;
+      birthdateInput.dispatchEvent(new Event('change'));
+    }
+
+    function rebuildDayColumn(preserveDay){
+      const count = daysInMonth(state.month, state.year);
+      buildColumn(dayCol, Array.from({ length: count }, (_, i) => i + 1));
+      state.day = Math.min(preserveDay || state.day, count);
+      scrollColToValue(dayCol, state.day);
+    }
+
+    function attachScrollHandler(col, onSettle){
+      let timer = null;
+      col.addEventListener('scroll', () => {
+        applySelectedClass(col);
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const el = applySelectedClass(col);
+          if (el) onSettle(Number(el.dataset.value));
+        }, 130);
+      }, { passive: true });
+    }
+
+    buildColumn(monthCol, Array.from({ length: 12 }, (_, i) => i + 1), (v) => monthNames[v - 1]);
+    buildColumn(yearCol, Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i));
+    rebuildDayColumn(state.day);
+    scrollColToValue(monthCol, state.month);
+    scrollColToValue(yearCol, state.year);
+    commitValue();
+
+    attachScrollHandler(monthCol, (val) => { state.month = val; rebuildDayColumn(state.day); commitValue(); });
+    attachScrollHandler(dayCol, (val) => { state.day = val; commitValue(); });
+    attachScrollHandler(yearCol, (val) => { state.year = val; rebuildDayColumn(state.day); commitValue(); });
+  })();
 
   function checkGateState(){
     const btn = document.getElementById('gate-enter-btn');
