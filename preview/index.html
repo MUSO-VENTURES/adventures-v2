@@ -517,6 +517,10 @@
     font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.82rem; cursor:pointer; flex-shrink:0;
   }
   .checkin-btn:disabled{ opacity:0.5; cursor:default; }
+  .test-mode-link{
+    font-size:0.7rem; opacity:0.55; text-decoration:underline; cursor:pointer; margin-top:2px;
+  }
+  .test-mode-link:hover{ opacity:0.85; }
 
   .photo-ready-badge{
     display:inline-flex; align-items:center; gap:6px; background:rgba(14,165,160,0.14);
@@ -559,6 +563,28 @@
   .pb-btn.primary{ background:var(--coral); color:#fff; }
   .pb-btn.secondary{ background:rgba(var(--shadow-rgb),0.08); color:var(--ink); }
 
+  /* ---------- END-OF-ADVENTURE SUMMARY ----------
+     Photo-grid/cap pattern matches preview/profile.html's Photobooth
+     moments card exactly, for visual consistency between "here's this
+     trip's photos" and "here's all your photos ever." */
+  .summary-card{ max-width:480px; max-height:86vh; overflow-y:auto; }
+  .summary-stats-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
+  .summary-stat{ background:var(--cream); border-radius:14px; padding:12px 10px; text-align:center; }
+  .summary-stat .num{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.2rem; color:var(--coral); }
+  .summary-stat .label{ font-size:0.7rem; opacity:0.65; }
+  .summary-badge-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .summary-badge-chip{
+    background:rgba(232,80,63,0.12); color:var(--coral); border-radius:999px; padding:5px 12px;
+    font-size:0.78rem; font-weight:700; font-family:'Fredoka',sans-serif;
+  }
+  .photo-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:10px; margin-top:6px; }
+  .photo-item{ border-radius:12px; overflow:hidden; position:relative; aspect-ratio:1; background:rgba(var(--shadow-rgb),0.06); }
+  .photo-item img{ width:100%; height:100%; object-fit:cover; }
+  .photo-item .cap{
+    position:absolute; bottom:0; left:0; right:0; background:linear-gradient(0deg, rgba(var(--shadow-rgb),0.75), transparent);
+    color:#fff; font-size:0.68rem; padding:14px 7px 5px;
+  }
+
   /* ---------- QR CHECK-IN STEP ----------
      Runs before the check-in actually submits. Venues don't have real,
      printed per-location QR codes yet, so this shows a template code and
@@ -596,6 +622,23 @@
     background:rgba(var(--shadow-rgb),0.06);
   }
   #nextvenue-map{ width:100%; height:100%; }
+
+  /* ---------- REAL-VENUE ADVENTURE: PERSISTENT PROGRESS MAP ----------
+     Sibling of #adventure-body (not a child) so renderItinerary()'s
+     innerHTML replace never tears down the live google.maps.Map instance.
+     Accumulates a pin for every stop revealed so far plus the walking-
+     directions leg between each consecutive pair — see renderProgressMap(). */
+  .progress-map-wrap{
+    width:100%; aspect-ratio:4/3; border-radius:16px; overflow:hidden; margin-top:16px;
+    background:rgba(var(--shadow-rgb),0.06); position:relative;
+  }
+  .progress-map-wrap[hidden]{ display:none; }
+  #adventure-progress-map{ width:100%; height:100%; }
+  .progress-map-hint{
+    position:absolute; left:0; right:0; bottom:0; padding:10px 14px;
+    background:linear-gradient(transparent, rgba(var(--shadow-rgb),0.75));
+    color:#fff; font-size:0.8rem; font-weight:600; pointer-events:none;
+  }
 
   /* ---------- ONBOARDING: PREFERENCE SETUP ----------
      Ported from index.html's "Quick Setup"/"Full Discovery" component
@@ -830,6 +873,17 @@
   </div>
 </div>
 
+<div class="photobooth-overlay" id="adventure-summary-overlay" hidden>
+  <div class="photobooth-card summary-card">
+    <div class="photobooth-header">
+      <span>🏁 Adventure Complete!</span>
+      <span class="pb-close" onclick="closeAdventureSummary()">&times;</span>
+    </div>
+    <div id="adventure-summary-body"></div>
+    <button type="button" class="pb-btn primary" style="width:100%; margin-top:16px;" onclick="closeAdventureSummary(); clearActiveAdventure();">Start Another Adventure</button>
+  </div>
+</div>
+
 <div class="photobooth-overlay" id="avatar-capture-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
@@ -1007,6 +1061,10 @@
     <h2>📱 Start a MUSO Adventure</h2>
     <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
     <div id="adventure-body"></div>
+    <div class="progress-map-wrap" id="adventure-progress-map-wrap" hidden>
+      <div id="adventure-progress-map"></div>
+      <div class="progress-map-hint" id="adventure-progress-hint"></div>
+    </div>
   </div>
 </section>
 
@@ -1674,6 +1732,19 @@
     const { data: checkIns } = await supabaseClient.from('check_ins').select('route_stop_id').eq('adventure_id', adventureId);
     const doneIds = new Set((checkIns || []).map(c => c.route_stop_id));
 
+    // loadItinerary() rebuilds activeAdventure from scratch on every call
+    // (every checkin/reroll/advance re-fetches) — carry the running
+    // session totals forward across those rebuilds rather than losing them,
+    // but only for the SAME adventure; a genuinely new one starts at zero.
+    const carryForward = activeAdventure && activeAdventure.adventureId === adventureId
+      ? {
+          sessionXpEarned: activeAdventure.sessionXpEarned,
+          sessionCoinsEarned: activeAdventure.sessionCoinsEarned,
+          sessionBadges: activeAdventure.sessionBadges,
+          summaryShown: activeAdventure.summaryShown,
+        }
+      : { sessionXpEarned: 0, sessionCoinsEarned: 0, sessionBadges: [], summaryShown: false };
+
     activeAdventure = {
       adventureId,
       routeId: adv.route_id,
@@ -1684,6 +1755,7 @@
       unlockedStopCount: routeData.unlockedStopCount ?? FREE_STOP_COUNT,
       totalStops: routeData.totalStops ?? routeData.stops.length,
       stopsLocked: !!routeData.locked,
+      ...carryForward,
     };
     renderItinerary();
   }
@@ -1738,11 +1810,15 @@
         const rerollControl = isRealVenue
           ? `<button type="button" class="reroll-btn" data-stop-id="${s.id}" onclick="rerollStop('${s.id}')">🎰 Chance Your Luck</button>`
           : '';
+        const testControl = TEST_MODE
+          ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')">🧪 Test check-in (skip photo)</span>`
+          : '';
         status = `
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
             ${rerollControl}
             ${photoControl}
             <button type="button" class="checkin-btn" onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
+            ${testControl}
           </div>
         `;
       }
@@ -1782,11 +1858,77 @@
       <div class="itinerary-list">${rows}</div>
       ${tierLockHtml}
     `;
+
+    renderProgressMap();
+
+    // Show the recap exactly once per completed adventure — allDone stays
+    // true across every subsequent re-render (reroll, progress map update,
+    // etc.), so this guards against popping the overlay back open every time.
+    if (allDone && !activeAdventure.summaryShown) {
+      activeAdventure.summaryShown = true;
+      showAdventureSummary();
+    }
   }
+
+  // ---------- END-OF-ADVENTURE SUMMARY ----------
+  // Applies to any completed adventure, curated or real-venue — a photo
+  // strip and a congratulations message are equally worth showing either
+  // way, and check_ins/photo_url isn't mode-specific.
+  async function showAdventureSummary() {
+    const overlay = document.getElementById('adventure-summary-overlay');
+    const bodyEl = document.getElementById('adventure-summary-body');
+    if (!overlay || !bodyEl || !activeAdventure) return;
+
+    const { adventureId, sessionXpEarned = 0, sessionCoinsEarned = 0, sessionBadges = [] } = activeAdventure;
+
+    bodyEl.innerHTML = '<div class="empty-state">Loading your recap…</div>';
+    overlay.removeAttribute('hidden');
+
+    // Same query shape as preview/profile.html's renderPhotobooth(), just
+    // filtered by adventure_id instead of checked_in_by, and chronological
+    // (ascending) so the strip reads like the trip actually happened.
+    const { data: photos } = await supabaseClient
+      .from('check_ins')
+      .select('id, photo_url, checked_in_at, route_stops(name)')
+      .eq('adventure_id', adventureId)
+      .not('photo_url', 'is', null)
+      .order('checked_in_at', { ascending: true });
+
+    const photoGridHtml = (photos && photos.length)
+      ? `<div class="photo-grid">${photos.map((p) => `
+          <div class="photo-item">
+            <img src="${p.photo_url}" loading="lazy">
+            <div class="cap">${(p.route_stops && p.route_stops.name) || 'Stop'}</div>
+          </div>
+        `).join('')}</div>`
+      : '<p style="opacity:0.6; font-size:0.85rem;">No photos captured this time — add one at check-in next time for a full strip here.</p>';
+
+    const badgesHtml = sessionBadges.length
+      ? `<div class="summary-badge-row">${sessionBadges.map((b) => `<span class="summary-badge-chip">${b.emoji || '🏅'} ${b.name}</span>`).join('')}</div>`
+      : '';
+
+    bodyEl.innerHTML = `
+      <p style="opacity:0.75; font-size:0.9rem; margin-bottom:14px;">You checked in at every stop — nice work! Here's what this adventure earned.</p>
+      <div class="summary-stats-row">
+        <div class="summary-stat"><div class="num">+${sessionXpEarned}</div><div class="label">XP earned</div></div>
+        <div class="summary-stat"><div class="num">+${sessionCoinsEarned}</div><div class="label">Coins earned</div></div>
+        <div class="summary-stat"><div class="num">${sessionBadges.length}</div><div class="label">New badge${sessionBadges.length === 1 ? '' : 's'}</div></div>
+      </div>
+      ${badgesHtml}
+      <div style="font-family:'Fredoka',sans-serif; font-weight:700; margin:16px 0 8px;">📸 Your adventure</div>
+      ${photoGridHtml}
+    `;
+  }
+
+  window.closeAdventureSummary = function () {
+    const overlay = document.getElementById('adventure-summary-overlay');
+    if (overlay) overlay.setAttribute('hidden', '');
+  };
 
   window.clearActiveAdventure = function () {
     try { localStorage.removeItem(adventureStorageKey(currentSession.user.id)); } catch (e) {}
     activeAdventure = null;
+    resetProgressMap();
     renderRoutePicker();
   };
 
@@ -1874,6 +2016,118 @@
       lat: ADVENTURE_START_LAT() + Math.sin(angle) * dist,
       lng: ADVENTURE_START_LNG() + Math.cos(angle) * dist,
     };
+  }
+
+  // ---------- REAL-VENUE ADVENTURE: PERSISTENT PROGRESS MAP ----------
+  // Unlike showNextVenueMap() below (a transient "surprise reveal" popup
+  // tuned for curated routes, cleared and redrawn from scratch every call),
+  // this map lives as a sibling of #adventure-body so renderItinerary()'s
+  // innerHTML replace never tears it down, and accumulates: a numbered pin
+  // for every stop revealed so far (teal once checked in, coral while still
+  // pending), a walking-directions leg between each consecutive pair of
+  // *completed* stops, and one more leg from the player's current position
+  // to whichever stop is still active — "the pin stays on the map... the
+  // line connecting each spot on the route."
+  let progressMap = null;
+  let progressMapMarkers = new Map(); // stop.id -> google.maps.Marker
+  let progressMapRenderers = [];      // one DirectionsRenderer per leg drawn
+  let progressMapLegsDrawn = new Set(); // leg keys already requested, so a re-render never double-fetches the same leg
+
+  function resetProgressMap() {
+    progressMapMarkers.forEach((m) => m.setMap(null));
+    progressMapMarkers = new Map();
+    progressMapRenderers.forEach((r) => r.setMap(null));
+    progressMapRenderers = [];
+    progressMapLegsDrawn = new Set();
+    const wrap = document.getElementById('adventure-progress-map-wrap');
+    if (wrap) wrap.setAttribute('hidden', '');
+  }
+
+  function renderProgressMap() {
+    const wrap = document.getElementById('adventure-progress-map-wrap');
+    if (!wrap) return;
+    if (!activeAdventure || activeAdventure.mode !== 'real_venue' || typeof google === 'undefined' || !google.maps) {
+      wrap.setAttribute('hidden', '');
+      return;
+    }
+
+    const { stops, doneIds } = activeAdventure;
+    const firstIncompleteIdx = stops.findIndex((s) => !doneIds.has(s.id));
+    // Every stop up through the current one is "known" — stops after that
+    // are still unrevealed is_mystery placeholders with nothing to pin yet.
+    const knownStops = firstIncompleteIdx === -1 ? stops : stops.slice(0, firstIncompleteIdx + 1);
+    const revealedStops = knownStops.filter((s) => !s.is_mystery);
+    if (!revealedStops.length) { wrap.setAttribute('hidden', ''); return; }
+
+    wrap.removeAttribute('hidden');
+    if (!progressMap) {
+      progressMap = new google.maps.Map(document.getElementById('adventure-progress-map'), {
+        disableDefaultUI: true, zoomControl: true, clickableIcons: false,
+      });
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+
+    revealedStops.forEach((s, i) => {
+      const pos = stopCoords(s, i);
+      bounds.extend(pos);
+      if (!progressMapMarkers.has(s.id)) {
+        const marker = new google.maps.Marker({
+          position: pos, map: progressMap, title: `${i + 1}. ${s.name}`,
+          label: { text: String(i + 1), color: '#fff', fontWeight: '700', fontSize: '11px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE, scale: 12,
+            fillColor: doneIds.has(s.id) ? '#0ea5a0' : '#e8503f', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2,
+          },
+        });
+        progressMapMarkers.set(s.id, marker);
+      }
+    });
+
+    for (let i = 0; i < revealedStops.length - 1; i++) {
+      const a = revealedStops[i], b = revealedStops[i + 1];
+      const legKey = `${a.id}|${b.id}`;
+      if (progressMapLegsDrawn.has(legKey)) continue;
+      progressMapLegsDrawn.add(legKey);
+      const renderer = new google.maps.DirectionsRenderer({
+        map: progressMap, suppressMarkers: true, polylineOptions: { strokeColor: '#e8503f', strokeWeight: 4 },
+      });
+      progressMapRenderers.push(renderer);
+      new google.maps.DirectionsService().route(
+        { origin: stopCoords(a, i), destination: stopCoords(b, i + 1), travelMode: google.maps.TravelMode.WALKING },
+        (result, status) => { if (status === 'OK') renderer.setDirections(result); },
+      );
+    }
+
+    // The "directions to get there" leg — from wherever the player is right
+    // now to the active, not-yet-checked-in stop (if any).
+    const currentStop = firstIncompleteIdx !== -1 ? stops[firstIncompleteIdx] : null;
+    if (currentStop && !currentStop.is_mystery) {
+      const here = { lat: currentLat, lng: currentLng };
+      bounds.extend(here);
+      const legKey = `here|${currentStop.id}`;
+      if (!progressMapLegsDrawn.has(legKey)) {
+        progressMapLegsDrawn.add(legKey);
+        const renderer = new google.maps.DirectionsRenderer({
+          map: progressMap, suppressMarkers: true,
+          polylineOptions: { strokeColor: '#0b6e68', strokeWeight: 4, strokeOpacity: 0.85 },
+        });
+        progressMapRenderers.push(renderer);
+        new google.maps.DirectionsService().route(
+          { origin: here, destination: stopCoords(currentStop, knownStops.length - 1), travelMode: google.maps.TravelMode.WALKING },
+          (result, status) => { if (status === 'OK') renderer.setDirections(result); },
+        );
+      }
+    }
+
+    progressMap.fitBounds(bounds, 48);
+
+    const hintEl = document.getElementById('adventure-progress-hint');
+    if (hintEl) {
+      hintEl.textContent = currentStop
+        ? `Stop ${knownStops.length} of ${stops.length} — head to ${currentStop.name}`
+        : "Adventure complete — here's your full route.";
+    }
   }
 
   let nvMap = null;
@@ -1982,6 +2236,16 @@
       updateRadiusLockUI();
 
       const progress = data.progress || {};
+      // Running per-session totals for the end-of-adventure summary (Phase
+      // 5) — in-memory only, the real numbers already live in
+      // coin_transactions/profile_badges/profiles.xp; this just avoids
+      // re-deriving "what did THIS adventure earn" from the ledger.
+      activeAdventure.sessionXpEarned = (activeAdventure.sessionXpEarned || 0) + (progress.xpGained || 0);
+      activeAdventure.sessionCoinsEarned = (activeAdventure.sessionCoinsEarned || 0) + (progress.coinsGained || 0);
+      if (progress.newBadges && progress.newBadges.length) {
+        activeAdventure.sessionBadges = (activeAdventure.sessionBadges || []).concat(progress.newBadges);
+      }
+
       let toastMsg = '';
       if (progress.xpGained) {
         toastMsg = progress.leveledUp
@@ -2032,19 +2296,65 @@
   };
 
   // ---------- REAL-VENUE ADVENTURE: REROLL + RETRY ----------
+  // Cosmetic-only: reads the stop's already-fetched candidate_pool (RLS
+  // already lets any party member read route_stops) and flashes through it
+  // at 250ms/item as a "teaser" of the other options, while the real
+  // reroll POST happens in parallel. Never trusted for the actual result —
+  // that always comes from the server response once both this and the
+  // network call finish. Returns a stop function; no-ops harmlessly if the
+  // pool can't be fetched (falls back to the plain "Rolling…" button state).
+  function startRerollCycle(routeStopId, nameEl, descEl) {
+    let timer = null;
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    supabaseClient.from('route_stops').select('candidate_pool').eq('id', routeStopId).single()
+      .then(({ data: row }) => {
+        const pool = row && Array.isArray(row.candidate_pool) ? row.candidate_pool : [];
+        if (!pool.length || !nameEl.isConnected) return;
+        let i = 0;
+        const maxTicks = Math.min(pool.length * 2, 16); // safety cap (~4s) in case the network call hangs
+        timer = setInterval(() => {
+          const c = pool[i % pool.length];
+          nameEl.textContent = c.name;
+          descEl.textContent = `⭐ ${c.rating ?? '?'} · ${c.category || ''}`;
+          i++;
+          if (i >= maxTicks) stop();
+        }, 250);
+      })
+      .catch(() => {});
+    return stop;
+  }
+
   window.rerollStop = async function (routeStopId) {
     if (!activeAdventure || !currentSession) return;
     const btn = document.querySelector(`.reroll-btn[data-stop-id="${routeStopId}"]`);
     if (btn) { btn.disabled = true; btn.textContent = '🎰 Rolling…'; }
+
+    const stopEl = btn ? btn.closest('.itinerary-stop') : null;
+    const nameEl = stopEl ? stopEl.querySelector('.is-name') : null;
+    const descEl = stopEl ? stopEl.querySelector('.is-desc') : null;
+    const originalName = nameEl ? nameEl.textContent : null;
+    const originalDesc = descEl ? descEl.textContent : null;
+    const stopCycle = (nameEl && descEl) ? startRerollCycle(routeStopId, nameEl, descEl) : () => {};
+
     try {
       const token = await getAccessToken();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-        body: JSON.stringify({ action: 'reroll', routeStopId }),
-      });
+      // Keep the cycling animation on screen for at least ~1.5s regardless
+      // of how fast the network responds — Promise.all waits for whichever
+      // finishes last, so a slow reroll just keeps it spinning longer.
+      const [res] = await Promise.all([
+        fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+          body: JSON.stringify({ action: 'reroll', routeStopId }),
+        }),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]);
       const data = await res.json();
+      stopCycle();
+
       if (!res.ok) {
+        if (nameEl && originalName != null) nameEl.textContent = originalName;
+        if (descEl && originalDesc != null) descEl.textContent = originalDesc;
         alert(data.error || (res.status === 402 ? 'Not enough Adventure Coins for another roll.' : 'Could not reroll.'));
         if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
         return;
@@ -2058,6 +2368,9 @@
       }
       await loadItinerary(activeAdventure.adventureId);
     } catch (e) {
+      stopCycle();
+      if (nameEl && originalName != null) nameEl.textContent = originalName;
+      if (descEl && originalDesc != null) descEl.textContent = originalDesc;
       alert('Could not reach the reroll service: ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
     }
@@ -2077,6 +2390,13 @@
   };
 
   // ---------- CHECK-IN PHOTO BOOTH ----------
+  // Unlisted, query-param-gated dev affordance (?test=1) — same "not linked
+  // from the real app" precedent as /sandbox/index.html. QR check-in is
+  // already a fully decorative simulated scan (see openQrScan() — no real
+  // camera, no location check, works fine from a desk), so the only real
+  // playtesting friction is needing a webcam for the selfie every stop;
+  // this skips just that, nothing else.
+  const TEST_MODE = new URLSearchParams(location.search).get('test') === '1';
   const CHECKIN_PHOTO_COINS = 20; // must match muso-backend/supabase/functions/checkin/index.ts
   let pendingPhotoCaptures = {};  // routeStopId -> { blob, previewUrl }
   let pbStream = null;

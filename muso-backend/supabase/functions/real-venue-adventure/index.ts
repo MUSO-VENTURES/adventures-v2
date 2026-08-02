@@ -235,9 +235,15 @@ async function searchNearbyVenues(
   return (candidates ?? []) as Candidate[];
 }
 
+// Used both to auto-pick a stop (init/advance) and to reroll one — "a
+// random highly rated venue," not a deterministic always-take-the-#1 pick.
+// Weight favors featured (premium/sponsor) partner_tier 3x, same as
+// before, now multiplied by the venue's own Yelp rating (0-5 stars,
+// defaulting unrated venues to a neutral 3 so they're deprioritized but
+// never literally unreachable).
 function weightedRandomPick(candidates: Candidate[]): Candidate {
   const isFeatured = (c: Candidate) => c.partner_tier === "premium" || c.partner_tier === "sponsor";
-  const weights = candidates.map((c) => (isFeatured(c) ? 3 : 1));
+  const weights = candidates.map((c) => (isFeatured(c) ? 3 : 1) * (c.rating ?? 3));
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
   for (let i = 0; i < candidates.length; i++) {
@@ -338,8 +344,8 @@ Deno.serve(async (req) => {
     }
 
     const stopCount = profile.unlocked_stop_count ?? 3;
-    const first = candidates[0];
-    const remainingPool = candidates.slice(1);
+    const first = weightedRandomPick(candidates);
+    const remainingPool = candidates.filter((c) => c.id !== first.id);
 
     const { data: route, error: routeErr } = await admin
       .from("routes")
@@ -429,10 +435,20 @@ Deno.serve(async (req) => {
     const rerollCount = stop.reroll_count ?? 0;
     let spent = 0;
     if (rerollCount >= FREE_REROLLS) {
+      // Real-venue routes are 1:1 with the adventure that created them, so
+      // this always resolves to exactly the adventure this reroll belongs
+      // to — derived server-side rather than trusted from the client.
+      const { data: advRow } = await admin
+        .from("adventures")
+        .select("id")
+        .eq("route_id", stop.route_id)
+        .maybeSingle();
+
       const { data: success, error: debitErr } = await admin.rpc("debit_coins", {
         p_profile_id: userId,
         p_amount: EXTRA_ROLL_COST,
         p_reason: "extra_roll",
+        p_adventure_id: advRow?.id ?? null,
       });
       if (debitErr) return jsonResponse({ error: debitErr.message }, 400);
       if (!success) {
@@ -518,8 +534,8 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No new nearby venues found for the next stop — try again shortly." }, 404);
     }
 
-    const picked = fresh[0];
-    const remainingPool = fresh.slice(1);
+    const picked = weightedRandomPick(fresh);
+    const remainingPool = fresh.filter((c) => c.id !== picked.id);
 
     const { data: updated, error: updateErr } = await admin
       .from("route_stops")

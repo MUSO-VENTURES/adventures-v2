@@ -18,21 +18,237 @@
 // every other coin/xp mutation in this schema. The response's `progress`
 // field carries whatever's new so the client can show a celebration.
 
-import { handleOptions, jsonResponse } from "../_shared/cors.ts";
-import { getSupabaseAdmin, getSupabaseAsUser } from "../_shared/supabaseAdmin.ts";
-import {
-  planNextStopNotification,
-  buildVenueNotificationMessage,
-  type RouteStopRow,
-  type VenueContactRow,
-} from "../_shared/nextStopNotification.ts";
-import { sendEmail, sendSms } from "../_shared/notify.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Inlined from ../_shared/cors.ts, ../_shared/supabaseAdmin.ts,
+// ../_shared/nextStopNotification.ts and ../_shared/notify.ts — the
+// Supabase dashboard's single-function editor does not reliably bundle
+// sibling _shared/*.ts files added via its "Add File" UI (reproducibly
+// fails with "Module not found ... _shared/cors.ts" even when the files
+// are present with correct names/content). Inlining sidesteps that bundler
+// bug. The canonical source of truth for these helpers is still
+// muso-backend/supabase/functions/_shared/*.ts — keep both in sync if
+// either changes.
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+};
+
+function handleOptions(req: Request): Response | null {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  return null;
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function getSupabaseAdmin() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!url || !serviceKey) {
+    throw new Error("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured");
+  }
+
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function getSupabaseAsUser(req: Request) {
+  const url = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const authHeader = req.headers.get("Authorization");
+
+  if (!url || !anonKey) {
+    throw new Error("SUPABASE_URL / SUPABASE_ANON_KEY not configured");
+  }
+  if (!authHeader) {
+    throw new Error("Missing Authorization header");
+  }
+
+  return createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: authHeader } },
+  });
+}
+
+interface RouteStopRow {
+  id: string;
+  route_id: string;
+  venue_id: string | null;
+  stop_order: number;
+  name: string;
+  is_mystery: boolean;
+  game_prep_notes: string | null;
+}
+
+interface VenueContactRow {
+  id: string;
+  venue_id: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  notify_by: "email" | "sms" | "both";
+  is_primary: boolean;
+}
+
+interface NotificationPlan {
+  shouldNotify: boolean;
+  reason?: "no_next_stop" | "next_stop_has_no_venue" | "no_contact_on_file";
+  nextStop?: RouteStopRow;
+  contact?: VenueContactRow;
+  etaMinutes: number;
+}
+
+const DEFAULT_ETA_MINUTES = 20;
+
+function planNextStopNotification(
+  allStops: RouteStopRow[],
+  justCheckedInStopOrder: number,
+  contactsByVenue: Map<string, VenueContactRow[]>,
+  etaMinutes: number = DEFAULT_ETA_MINUTES,
+): NotificationPlan {
+  const sorted = [...allStops].sort((a, b) => a.stop_order - b.stop_order);
+  const nextStop = sorted.find((s) => s.stop_order === justCheckedInStopOrder + 1);
+
+  if (!nextStop) {
+    return { shouldNotify: false, reason: "no_next_stop", etaMinutes };
+  }
+
+  if (!nextStop.venue_id) {
+    return { shouldNotify: false, reason: "next_stop_has_no_venue", nextStop, etaMinutes };
+  }
+
+  const contacts = contactsByVenue.get(nextStop.venue_id) ?? [];
+  const contact =
+    contacts.find((c) => c.is_primary && (c.email || c.phone)) ??
+    contacts.find((c) => c.email || c.phone);
+
+  if (!contact) {
+    return { shouldNotify: false, reason: "no_contact_on_file", nextStop, etaMinutes };
+  }
+
+  return { shouldNotify: true, nextStop, contact, etaMinutes };
+}
+
+interface NotificationMessage {
+  subject: string;
+  body: string;
+}
+
+function buildVenueNotificationMessage(params: {
+  venueName: string;
+  partySize: number;
+  etaMinutes: number;
+  gamePrepNotes: string | null;
+  partyLabel: string;
+}): NotificationMessage {
+  const { venueName, partySize, etaMinutes, gamePrepNotes, partyLabel } = params;
+
+  const subject = `MUSO Adventures: a group of ${partySize} is headed your way (~${etaMinutes} min)`;
+
+  const lines = [
+    `Hey ${venueName}!`,
+    ``,
+    `${partyLabel} just checked in at their previous stop on a MUSO Adventures route and you're next. Estimated arrival: about ${etaMinutes} minutes from now.`,
+    ``,
+    `Party size: ${partySize}`,
+  ];
+
+  if (gamePrepNotes) {
+    lines.push(``, `Game-related prep for this stop: ${gamePrepNotes}`);
+  }
+
+  lines.push(
+    ``,
+    `No action needed unless you'd like to save them a table or get set up. Thanks for being a MUSO Adventures partner!`,
+  );
+
+  return { subject, body: lines.join("\n") };
+}
+
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "MUSO Adventures <hello@musoadventures.com>";
+
+const TWILIO_ACCOUNT_SID = Deno.env.get("TWILIO_ACCOUNT_SID");
+const TWILIO_AUTH_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN");
+const TWILIO_FROM_NUMBER = Deno.env.get("TWILIO_FROM_NUMBER");
+
+async function sendEmail(to: string, subject: string, body: string): Promise<void> {
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM,
+      to: [to],
+      subject,
+      text: body,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Resend API error (${res.status}): ${errText}`);
+  }
+}
+
+async function sendSms(to: string, body: string): Promise<void> {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) {
+    throw new Error("Twilio env vars are not configured");
+  }
+
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
+  const creds = btoa(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${creds}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      To: to,
+      From: TWILIO_FROM_NUMBER,
+      Body: body,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Twilio API error (${res.status}): ${errText}`);
+  }
+}
 
 const CHECKIN_XP = 50;
+// Must match CHECKIN_PHOTO_COINS in preview/index.html. The client has
+// displayed "+20 coins" messaging for a check-in photo since the photo
+// booth shipped, but nothing here ever actually credited it — this was a
+// real gap, not intentional, found while wiring up per-adventure coin
+// attribution (0018_adventure_attribution.sql adds 'photo_bonus' to the
+// coin_transactions reason allow-list this now writes against).
+const CHECKIN_PHOTO_COINS = 20;
 
 type Badge = { key: string; name: string; description: string; emoji: string };
 type Progress = {
   xpGained: number;
+  coinsGained: number;
   oldLevel?: number;
   newLevel?: number;
   leveledUp: boolean;
@@ -108,9 +324,17 @@ Deno.serve(async (req) => {
   //    just earned. This runs regardless of how the venue-notification step
   //    below goes — checking in is the player-facing win, the notification
   //    email is a side effect and shouldn't gate it.
-  const [{ count: totalCheckins }, xpResultRes] = await Promise.all([
+  const [{ count: totalCheckins }, xpResultRes, coinsResultRes] = await Promise.all([
     admin.from("check_ins").select("id", { count: "exact", head: true }).eq("checked_in_by", userId),
     admin.rpc("award_xp", { p_profile_id: userId, p_amount: CHECKIN_XP }),
+    photoUrl
+      ? admin.rpc("credit_coins", {
+          p_profile_id: userId,
+          p_amount: CHECKIN_PHOTO_COINS,
+          p_reason: "photo_bonus",
+          p_adventure_id: adventureId,
+        })
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const xpResult = (xpResultRes.data ?? {}) as {
@@ -118,6 +342,9 @@ Deno.serve(async (req) => {
     newLevel?: number;
     leveledUp?: boolean;
   };
+  // Best-effort — an odd coin-credit failure shouldn't fail the check-in
+  // itself, it just means this particular photo bonus didn't land.
+  const coinsGained = photoUrl && !coinsResultRes?.error ? CHECKIN_PHOTO_COINS : 0;
   const isFirstCheckin = (totalCheckins ?? 0) === 1;
 
   const badgeKeysToAward: string[] = [];
@@ -150,7 +377,12 @@ Deno.serve(async (req) => {
 
   const newBadges: Badge[] = [];
   for (const key of badgeKeysToAward) {
-    const { data: awardedNew } = await admin.rpc("award_badge", { p_profile_id: userId, p_badge_key: key });
+    const { data: awardedNew } = await admin.rpc("award_badge", {
+      p_profile_id: userId,
+      p_badge_key: key,
+      p_meta: {},
+      p_adventure_id: adventureId,
+    });
     if (awardedNew) {
       const { data: badgeRow } = await admin
         .from("badges")
@@ -163,6 +395,7 @@ Deno.serve(async (req) => {
 
   const progress: Progress = {
     xpGained: CHECKIN_XP,
+    coinsGained,
     oldLevel: xpResult.oldLevel,
     newLevel: xpResult.newLevel,
     leveledUp: !!xpResult.leveledUp,

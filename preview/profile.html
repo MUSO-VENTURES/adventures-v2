@@ -146,6 +146,25 @@
     background:none; border:1.5px solid var(--plum); color:var(--plum); border-radius:999px;
     padding:4px 12px; font-size:0.72rem; font-weight:700; cursor:pointer; font-family:'Fredoka',sans-serif;
   }
+
+  /* ---------- TROPHY CASE ----------
+     One card per completed adventure: title/date, its own mini photo
+     strip (same .photo-grid/.photo-item shape as Photobooth moments,
+     just this adventure's check_ins instead of all of them), badge
+     chips and net coins earned — attributed via adventure_id, added in
+     migration 0018_adventure_attribution.sql. */
+  .trophy-list{ display:flex; flex-direction:column; gap:16px; margin-top:6px; }
+  .trophy-item{ background:var(--cream); border-radius:16px; padding:16px; }
+  .trophy-item-header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:6px; }
+  .trophy-item-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; }
+  .trophy-item-date{ font-size:0.75rem; opacity:0.55; }
+  .trophy-item-stats{ font-size:0.78rem; opacity:0.75; margin-bottom:10px; }
+  .trophy-badge-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .trophy-badge-chip{
+    background:rgba(91,75,138,0.14); color:var(--plum); border-radius:999px; padding:4px 11px;
+    font-size:0.72rem; font-weight:700; font-family:'Fredoka',sans-serif;
+  }
+  .trophy-item .photo-grid{ grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px; }
 </style>
 <script>
   // Binary day/night, driven by the viewer's own device clock (always
@@ -228,6 +247,11 @@
     <div class="card">
       <h2>Photobooth moments</h2>
       <div id="photo-content" class="empty-note">Loading…</div>
+    </div>
+
+    <div class="card">
+      <h2>Trophy case</h2>
+      <div id="trophy-content" class="empty-note">Loading…</div>
     </div>
 
     <div class="card">
@@ -544,6 +568,82 @@
     `).join('')}</div>`;
   }
 
+  async function renderTrophyCase() {
+    const el = document.getElementById('trophy-content');
+
+    const { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', session.user.id);
+    const partyIds = (memberRows || []).map((r) => r.party_id);
+    if (!partyIds.length) {
+      el.textContent = 'No completed adventures yet — finish one to see it here.';
+      return;
+    }
+
+    const { data: adventures, error } = await supabaseClient
+      .from('adventures')
+      .select('id, completed_at, routes(title)')
+      .in('party_id', partyIds)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false });
+
+    if (error) { el.textContent = "Couldn't load your trophy case yet."; return; }
+    if (!adventures || !adventures.length) {
+      el.textContent = 'No completed adventures yet — finish one to see it here.';
+      return;
+    }
+
+    const adventureIds = adventures.map((a) => a.id);
+
+    // Three separate per-adventure lookups, same shape as renderPhotobooth()/
+    // renderBadges() elsewhere on this page — just filtered by adventure_id
+    // (added in 0018_adventure_attribution.sql) instead of/alongside
+    // profile_id, then grouped client-side by adventure.
+    const [{ data: photoRows }, { data: badgeRows }, { data: coinRows }] = await Promise.all([
+      supabaseClient.from('check_ins').select('adventure_id, photo_url, checked_in_at, route_stops(name)')
+        .in('adventure_id', adventureIds).not('photo_url', 'is', null).order('checked_in_at', { ascending: true }),
+      supabaseClient.from('profile_badges').select('adventure_id, badge_key, badges(name, emoji)')
+        .eq('profile_id', session.user.id).in('adventure_id', adventureIds),
+      supabaseClient.from('coin_transactions').select('adventure_id, amount')
+        .eq('profile_id', session.user.id).in('adventure_id', adventureIds),
+    ]);
+
+    const photosByAdventure = {};
+    (photoRows || []).forEach((p) => { (photosByAdventure[p.adventure_id] ||= []).push(p); });
+    const badgesByAdventure = {};
+    (badgeRows || []).forEach((b) => { (badgesByAdventure[b.adventure_id] ||= []).push(b); });
+    const coinsByAdventure = {};
+    (coinRows || []).forEach((c) => { coinsByAdventure[c.adventure_id] = (coinsByAdventure[c.adventure_id] || 0) + c.amount; });
+
+    el.innerHTML = `<div class="trophy-list">${adventures.map((a) => {
+      const photos = photosByAdventure[a.id] || [];
+      const badges = badgesByAdventure[a.id] || [];
+      const coins = coinsByAdventure[a.id] || 0;
+      const title = (a.routes && a.routes.title) || 'Adventure';
+      const date = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
+      const photoGridHtml = photos.length
+        ? `<div class="photo-grid">${photos.map((p) => `
+            <div class="photo-item">
+              <img src="${p.photo_url}" loading="lazy">
+              <div class="cap">${(p.route_stops && p.route_stops.name) || 'Stop'}</div>
+            </div>
+          `).join('')}</div>`
+        : '';
+      const badgeRowHtml = badges.length
+        ? `<div class="trophy-badge-row">${badges.map((b) => `<span class="trophy-badge-chip">${(b.badges && b.badges.emoji) || '🏅'} ${(b.badges && b.badges.name) || b.badge_key}</span>`).join('')}</div>`
+        : '';
+      return `
+        <div class="trophy-item">
+          <div class="trophy-item-header">
+            <span class="trophy-item-title">${title}</span>
+            <span class="trophy-item-date">${date}</span>
+          </div>
+          <div class="trophy-item-stats">🪙 ${coins >= 0 ? '+' : ''}${coins} coins earned</div>
+          ${badgeRowHtml}
+          ${photoGridHtml}
+        </div>
+      `;
+    }).join('')}</div>`;
+  }
+
   async function init() {
     const { data: { session: s } } = await supabaseClient.auth.getSession();
     session = s;
@@ -575,6 +675,7 @@
     renderBadges();
     renderLeaderboard();
     renderPhotobooth();
+    renderTrophyCase();
   }
 
   init();
