@@ -417,6 +417,44 @@
   .pb-btn.primary{ background:var(--coral); color:#fff; }
   .pb-btn.secondary{ background:rgba(var(--shadow-rgb),0.08); color:var(--ink); }
 
+  /* ---------- QR CHECK-IN STEP ----------
+     Runs before the check-in actually submits. Venues don't have real,
+     printed per-location QR codes yet, so this shows a template code and
+     auto-completes after a beat — swap in real per-venue QR values here
+     once venues have them printed, no other flow changes needed. */
+  .qrscan-stage{
+    position:relative; width:100%; aspect-ratio:1; max-width:220px; margin:0 auto 16px;
+    background:#fff; border-radius:16px; padding:16px; overflow:hidden;
+    box-shadow:0 8px 24px rgba(0,0,0,0.18);
+  }
+  .qrscan-stage svg{ width:100%; height:100%; display:block; }
+  .qrscan-scanline{
+    position:absolute; left:6%; right:6%; top:6%; height:3px; border-radius:2px;
+    background:linear-gradient(90deg, transparent, var(--coral), transparent);
+    opacity:0; box-shadow:0 0 10px 1px rgba(232,80,63,0.6);
+  }
+  .qrscan-scanline.scanning{ animation:qr-sweep 1.8s ease-in-out; }
+  @keyframes qr-sweep{
+    0%{ opacity:0; top:6%; }
+    8%{ opacity:1; }
+    92%{ opacity:1; }
+    100%{ opacity:0; top:88%; }
+  }
+  .qrscan-hint-icon{ display:inline-block; margin-right:4px; }
+
+  /* ---------- NEXT-VENUE PROGRESS MAP ----------
+     Shown right after a successful check-in (when there's another stop
+     ahead): a pin where the player just checked in, a pin at the next
+     stop, and the path between them, using each stop's venue lat/lng
+     (falls back to a deterministic offset from the adventure's starting
+     point — see stopCoords() — until every demo venue has real
+     coordinates seeded). */
+  .nextvenue-map-wrap{
+    width:100%; aspect-ratio:4/3; border-radius:16px; overflow:hidden; margin-bottom:14px;
+    background:rgba(var(--shadow-rgb),0.06);
+  }
+  #nextvenue-map{ width:100%; height:100%; }
+
   /* Tier-level cap on total stops in a route — distinct from
      .itinerary-stop.locked, which means "not reached yet in sequence." */
   .stop-tier-lock{
@@ -548,6 +586,36 @@
     <div class="pb-controls" id="pb-controls-preview" style="display:none;">
       <button type="button" class="pb-btn secondary" onclick="retakePhoto()">&#8617; Retake</button>
       <button type="button" class="pb-btn primary" onclick="useCapturedPhoto()">&check; Use This Photo</button>
+    </div>
+  </div>
+</div>
+
+<div class="photobooth-overlay" id="qrscan-overlay" hidden>
+  <div class="photobooth-card">
+    <div class="photobooth-header">
+      <span>📷 Scan to Check In</span>
+      <span class="pb-close" onclick="closeQrScan()">&times;</span>
+    </div>
+    <div class="qrscan-stage">
+      <svg id="qrscan-code" viewBox="0 0 200 200"></svg>
+      <div class="qrscan-scanline" id="qrscan-scanline"></div>
+    </div>
+    <div class="pb-hint" id="qrscan-hint">
+      <span class="qrscan-hint-icon">🔎</span>Scanning the QR code at <strong>this stop</strong>…
+    </div>
+  </div>
+</div>
+
+<div class="photobooth-overlay" id="nextvenue-overlay" hidden>
+  <div class="photobooth-card">
+    <div class="photobooth-header">
+      <span id="nextvenue-title">✓ Checked in!</span>
+      <span class="pb-close" onclick="closeNextVenue()">&times;</span>
+    </div>
+    <div class="nextvenue-map-wrap"><div id="nextvenue-map"></div></div>
+    <div class="pb-hint" id="nextvenue-hint"></div>
+    <div class="pb-controls">
+      <button type="button" class="pb-btn primary" id="nextvenue-btn" onclick="closeNextVenue()">Continue</button>
     </div>
   </div>
 </div>
@@ -1143,7 +1211,7 @@
         status = `
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
             ${photoControl}
-            <button type="button" class="checkin-btn" onclick="checkInStop('${s.id}')">I'm here — Check in</button>
+            <button type="button" class="checkin-btn" onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
           </div>
         `;
       }
@@ -1189,6 +1257,149 @@
     try { localStorage.removeItem(adventureStorageKey(currentSession.user.id)); } catch (e) {}
     activeAdventure = null;
     renderRoutePicker();
+  };
+
+  // ---------- QR CHECK-IN STEP ----------
+  // Draws a fixed, deterministic "QR code"-looking grid — not a real
+  // decodable code, since venues don't have printed per-location codes
+  // yet. Swap this step's auto-advance for real camera-based QR decoding
+  // once they do; everything downstream (beginCheckIn -> checkInStop)
+  // stays the same either way.
+  let qrTemplateRendered = false;
+  function renderTemplateQr() {
+    if (qrTemplateRendered) return;
+    qrTemplateRendered = true;
+    const N = 21; // classic small-QR module count, just for the look of it
+    const cell = 200 / N;
+    let seed = 1337;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    const inFinderZone = (x, y) => {
+      const inCorner = (cx, cy) => x >= cx && x < cx + 7 && y >= cy && y < cy + 7;
+      return inCorner(0, 0) || inCorner(N - 7, 0) || inCorner(0, N - 7);
+    };
+    let modules = '';
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (inFinderZone(x, y)) continue;
+        if (rand() > 0.56) {
+          modules += `<rect x="${(x * cell).toFixed(2)}" y="${(y * cell).toFixed(2)}" width="${cell.toFixed(2)}" height="${cell.toFixed(2)}" fill="#1a1a2e"/>`;
+        }
+      }
+    }
+    const finders = [[0, 0], [N - 7, 0], [0, N - 7]].map(([fx, fy]) => `
+      <rect x="${fx * cell}" y="${fy * cell}" width="${7 * cell}" height="${7 * cell}" fill="#1a1a2e"/>
+      <rect x="${(fx + 1) * cell}" y="${(fy + 1) * cell}" width="${5 * cell}" height="${5 * cell}" fill="#fff"/>
+      <rect x="${(fx + 2) * cell}" y="${(fy + 2) * cell}" width="${3 * cell}" height="${3 * cell}" fill="#1a1a2e"/>
+    `).join('');
+    document.getElementById('qrscan-code').innerHTML = `<rect width="200" height="200" fill="#fff"/>${modules}${finders}`;
+  }
+
+  let qrScanTimer = null;
+  window.openQrScan = function (routeStopId, stopName) {
+    renderTemplateQr();
+    document.getElementById('qrscan-hint').innerHTML = `<span class="qrscan-hint-icon">🔎</span>Scanning the QR code at <strong>${stopName || 'this stop'}</strong>…`;
+    document.getElementById('qrscan-overlay').removeAttribute('hidden');
+    const scanline = document.getElementById('qrscan-scanline');
+    scanline.classList.remove('scanning');
+    void scanline.offsetWidth; // restart the sweep animation on every open
+    scanline.classList.add('scanning');
+
+    clearTimeout(qrScanTimer);
+    qrScanTimer = setTimeout(() => {
+      document.getElementById('qrscan-hint').innerHTML = `<span class="qrscan-hint-icon">✅</span>Checked in via QR!`;
+      qrScanTimer = setTimeout(() => {
+        closeQrScan();
+        checkInStop(routeStopId);
+      }, 550);
+    }, 1800);
+  };
+
+  window.closeQrScan = function () {
+    clearTimeout(qrScanTimer);
+    document.getElementById('qrscan-overlay').setAttribute('hidden', '');
+  };
+
+  window.beginCheckIn = function (routeStopId, stopName) {
+    openQrScan(routeStopId, stopName);
+  };
+
+  // ---------- NEXT-VENUE PROGRESS MAP ----------
+  const ADVENTURE_START_LAT = () => currentLat;
+  const ADVENTURE_START_LNG = () => currentLng;
+  function stopCoords(stop, index) {
+    if (typeof stop.lat === 'number' && typeof stop.lng === 'number') {
+      return { lat: stop.lat, lng: stop.lng };
+    }
+    // Deterministic fallback so the progress map still works before every
+    // demo venue has real coordinates seeded (muso-backend migration
+    // 0015_stop_coordinates.sql) — fans stops out around the adventure's
+    // starting point instead of stacking them on top of each other.
+    const angle = ((index * 47) % 360) * Math.PI / 180;
+    const dist = 0.01 + index * 0.004;
+    return {
+      lat: ADVENTURE_START_LAT() + Math.sin(angle) * dist,
+      lng: ADVENTURE_START_LNG() + Math.cos(angle) * dist,
+    };
+  }
+
+  let nvMap = null;
+  let nvMarkers = [];
+  let nvDirRenderer = null;
+  function clearNextVenueMap() {
+    nvMarkers.forEach((m) => m.setMap(null));
+    nvMarkers = [];
+    if (nvDirRenderer) {
+      nvDirRenderer.setMap(null);
+      nvDirRenderer = null;
+    }
+  }
+
+  function showNextVenueMap(justVisited, nextStop, justIdx) {
+    if (typeof google === 'undefined' || !google.maps) return; // Maps script hasn't loaded — skip the visual, check-in itself already succeeded
+    clearNextVenueMap();
+
+    const nextLabel = nextStop.is_mystery ? 'a surprise location' : nextStop.name;
+    document.getElementById('nextvenue-title').textContent = '✓ Checked in!';
+    document.getElementById('nextvenue-hint').innerHTML = `Next stop: <strong>${nextLabel}</strong> — here's the path to get there.`;
+    document.getElementById('nextvenue-btn').textContent = `Continue to ${nextLabel}`;
+    document.getElementById('nextvenue-overlay').removeAttribute('hidden');
+
+    const fromPos = stopCoords(justVisited, justIdx);
+    const toPos = stopCoords(nextStop, justIdx + 1);
+
+    if (!nvMap) {
+      nvMap = new google.maps.Map(document.getElementById('nextvenue-map'), {
+        disableDefaultUI: true, zoomControl: true, clickableIcons: false,
+      });
+    }
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend(fromPos);
+    bounds.extend(toPos);
+    nvMap.fitBounds(bounds, 48);
+
+    nvMarkers.push(new google.maps.Marker({
+      position: fromPos, map: nvMap, title: 'You just checked in here',
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9, fillColor: '#0ea5a0', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+    }));
+    nvMarkers.push(new google.maps.Marker({
+      position: toPos, map: nvMap, title: `Next: ${nextLabel}`,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#e8503f', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+    }));
+
+    nvDirRenderer = new google.maps.DirectionsRenderer({
+      map: nvMap, suppressMarkers: true, polylineOptions: { strokeColor: '#e8503f', strokeWeight: 4 },
+    });
+    new google.maps.DirectionsService().route(
+      { origin: fromPos, destination: toPos, travelMode: google.maps.TravelMode.WALKING },
+      (result, status) => { if (status === 'OK') nvDirRenderer.setDirections(result); },
+    );
+  }
+
+  window.closeNextVenue = function () {
+    document.getElementById('nextvenue-overlay').setAttribute('hidden', '');
   };
 
   window.checkInStop = async function (routeStopId) {
@@ -1253,6 +1464,15 @@
         queueCelebrations(progress.newBadges);
       } else if (toastMsg) {
         showToast(toastMsg);
+      }
+
+      // Show the "here's the path to your next stop" map — skipped when a
+      // badge celebration is about to take over the screen, so the two
+      // full-screen overlays never compete for the same moment.
+      if (!(progress.newBadges && progress.newBadges.length)) {
+        const justVisitedIdx = activeAdventure.stops.findIndex((s) => s.id === routeStopId);
+        const nextStop = activeAdventure.stops[justVisitedIdx + 1];
+        if (nextStop) showNextVenueMap(activeAdventure.stops[justVisitedIdx], nextStop, justVisitedIdx);
       }
     } catch (e) {
       alert('Could not reach the check-in service: ' + e.message);

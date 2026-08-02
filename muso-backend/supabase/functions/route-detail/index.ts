@@ -94,9 +94,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: routeErr?.message ?? "Route not found" }, 404);
   }
 
+  // venues(lat, lng) pulls each stop's coordinates in via its venue_id FK
+  // (venues is readable by any authenticated user, same RLS policy the
+  // unjoined query already relied on) — the itinerary progress map needs
+  // real coordinates to plot the "you are here" / "next stop" pins and the
+  // path between them.
   const { data: stops, error: stopsErr } = await client
     .from("route_stops")
-    .select("id, stop_order, name, description, emoji, is_mystery")
+    .select("id, stop_order, name, description, emoji, is_mystery, venues(lat, lng, address)")
     .eq("route_id", routeId)
     .order("stop_order", { ascending: true });
 
@@ -122,11 +127,14 @@ Deno.serve(async (req) => {
   const totalStops = (stops ?? []).length;
   const visibleStops = (stops ?? []).filter((s) => (s.stop_order as number) <= unlockedStopCount);
 
-  const itinerary = visibleStops.map((s: Record<string, unknown>) =>
-    s.is_mystery
-      ? { ...s, name: "Unknown Location", description: "We pick. You don't find out until you arrive." }
-      : s,
-  );
+  const itinerary = visibleStops.map((s: Record<string, unknown>) => {
+    const venue = s.venues as { lat: number | null; lng: number | null; address: string | null } | null;
+    const { venues: _venues, ...rest } = s;
+    const withCoords = { ...rest, lat: venue?.lat ?? null, lng: venue?.lng ?? null, address: venue?.address ?? null };
+    return withCoords.is_mystery
+      ? { ...withCoords, name: "Unknown Location", description: "We pick. You don't find out until you arrive." }
+      : withCoords;
+  });
 
   return jsonResponse({
     route,
