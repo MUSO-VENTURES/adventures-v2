@@ -158,6 +158,14 @@
   }
   .path-chip span{color:var(--coral);}
 
+  .hero-play-cta{
+    display:inline-block; margin-top:32px; background:var(--coral); color:#fff;
+    text-decoration:none; padding:16px 34px; border-radius:999px;
+    font-weight:700; font-size:1.05rem; box-shadow:0 10px 30px rgba(232,80,63,0.35);
+    transition:transform .15s, background .2s;
+  }
+  .hero-play-cta:hover{ background:var(--deep-teal); transform:scale(1.03); }
+
   .scroll-cue{
     margin-top:60px;
     font-size:0.85rem;
@@ -1006,6 +1014,7 @@
       <a href="#users">For Every Crew</a>
       <a href="#leaderboard">Leaderboard</a>
       <a href="/shop/">Shop</a>
+      <a href="/preview/index.html" class="nav-cta">▶ Play Now</a>
       <div class="nav-account" id="nav-account">
         <!-- Populated by JS: a Sign In button, or "Signed in as ... / Sign out" once authenticated. -->
       </div>
@@ -1023,7 +1032,8 @@
       <div class="path-chip">🎯 Adventurous <span>→</span> Axe throwing</div>
       <div class="path-chip">🎲 Spontaneous <span>→</span> Mystery stop</div>
     </div>
-    <div class="scroll-cue"><span>see how it works</span><span class="arrow"></span></div>
+    <a href="/preview/index.html" class="hero-play-cta">▶ Play Now</a>
+    <div class="scroll-cue"><span>or see how it works</span><span class="arrow"></span></div>
   </div>
 </section>
 
@@ -1975,7 +1985,12 @@
     msg.textContent = 'Sending link…';
     const { error } = await navSupabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href },
+      // Deliberately NOT window.location.href — signing in from the
+      // marketing page should land the player straight in the actual game,
+      // not back on the marketing page with no way to reach it. Same
+      // project/anon key, so /preview/ already sees the session as signed
+      // in the instant the link is followed.
+      options: { emailRedirectTo: window.location.origin + '/preview/index.html' },
     });
     if (!error) {
       msg.textContent = 'Check your email for a sign-in link.';
