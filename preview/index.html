@@ -1274,39 +1274,61 @@
   // tabs refreshing near-simultaneously can invalidate each other), every
   // authenticated action would fail immediately as "signed out" without
   // ever giving Supabase's own auto-refresh a chance to recover. Always
-  // ask the client directly instead — getSession() transparently refreshes
-  // an expired-but-still-valid token, and only returns null if the player
-  // is actually signed out.
+  // ask the client directly instead.
+  //
+  // getSession() alone isn't enough, though: it can hand back a session
+  // object that's present but whose access_token already expired — the
+  // proactive background refresh timer supabase-js relies on gets
+  // throttled/paused by the browser when a tab is backgrounded (switching
+  // apps mid-adventure, reading a phone notification, etc.), so the token
+  // can go stale without the client noticing until the *server* rejects it.
+  // That's what was showing up as "session expired" partway through play
+  // instead of only at the start — every in-game action (choose/reroll/
+  // check-in) went through this function with a token nobody had checked
+  // for actual expiry. checkSessionFreshness() below checks expires_at
+  // ourselves and forces a real refreshSession() when it's expired or
+  // about to be, rather than trusting presence alone.
+  async function checkSessionFreshness(session) {
+    if (!session) return null;
+    const expiresAt = session.expires_at; // unix seconds
+    const expiringSoon = !expiresAt || (expiresAt * 1000 - Date.now()) < 60000;
+    if (!expiringSoon) return session;
+    const { data, error } = await supabaseClient.auth.refreshSession();
+    if (error) return null;
+    return data?.session ?? null;
+  }
+
   async function getAccessToken() {
     if (!supabaseClient) return null;
     const { data } = await supabaseClient.auth.getSession();
-    if (data?.session && !currentSession) {
+    const session = await checkSessionFreshness(data?.session ?? null);
+    if (session && !currentSession) {
       // Local state had fallen out of sync with the real session — resync
       // it so the rest of the UI (account bar, gated actions) stops acting
       // signed-out too.
-      currentSession = data.session;
+      currentSession = session;
       renderAccountBar();
     }
-    return data?.session?.access_token ?? null;
+    return session?.access_token ?? null;
   }
 
   // Used before mutations that need a real session (starting an adventure,
-  // inserting a party) — same "don't trust the stale currentSession
-  // closure" reasoning as getAccessToken() above, plus one retry: the
-  // multi-tab refresh-token race can leave getSession() returning null for
-  // a brief moment even on a genuinely still-signed-in browser (one tab's
-  // refresh invalidates another's in-flight token, which then recovers a
-  // beat later once the new token round-trips back through
-  // onAuthStateChange). A single short retry smooths over that window
-  // without masking a real, lasting sign-out — if it's still null after
-  // the retry, the player really does need to sign in again.
+  // inserting a party) — same freshness check as getAccessToken() above,
+  // plus one retry: the multi-tab refresh-token race can leave getSession()
+  // returning null for a brief moment even on a genuinely still-signed-in
+  // browser (one tab's refresh invalidates another's in-flight token,
+  // which then recovers a beat later once the new token round-trips back
+  // through onAuthStateChange). A single short retry smooths over that
+  // window without masking a real, lasting sign-out — if it's still null
+  // after the retry, the player really does need to sign in again.
   async function getFreshSession() {
     if (!supabaseClient) return null;
     const first = await supabaseClient.auth.getSession();
-    if (first.data?.session) return first.data.session;
+    const fresh = await checkSessionFreshness(first.data?.session ?? null);
+    if (fresh) return fresh;
     await new Promise((resolve) => setTimeout(resolve, 400));
     const second = await supabaseClient.auth.getSession();
-    return second.data?.session ?? null;
+    return await checkSessionFreshness(second.data?.session ?? null);
   }
 
   // Includes birth_date/age_confirmed_at/disclaimer_accepted_at (added in
