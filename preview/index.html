@@ -1341,6 +1341,47 @@
     return await checkSessionFreshness(second.data?.session ?? null);
   }
 
+  // A session that passed getFreshSession()'s local expires_at check can
+  // still get rejected server-side as "new row violates row-level security
+  // policy" — e.g. the token was issued in a different browser context
+  // (tapping a magic link opens Gmail's own in-app browser, which has its
+  // own separate storage from whatever the player later plays in) and the
+  // two have drifted out of sync in a way plain client-side expiry math
+  // can't catch. Rather than surfacing that as a dead end, force one real
+  // refreshSession() and retry the call once before giving up — this is
+  // what "expired partway through" actually meant in practice.
+  async function withRlsRetry(fn) {
+    try {
+      return await fn();
+    } catch (e) {
+      const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
+      if (!isRlsError) throw e;
+      const { data, error } = await supabaseClient.auth.refreshSession();
+      if (error || !data?.session) throw e;
+      currentSession = data.session;
+      return await fn();
+    }
+  }
+
+  // Shared by startAdventure()/startRealVenueAdventure() — both need "the
+  // current player's party, creating one if this is their first adventure"
+  // and had identical copies of this logic.
+  async function ensurePartyId(userId) {
+    let { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
+    let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
+    if (!partyId) {
+      const { data: party, error: partyErr } = await supabaseClient
+        .from('parties').insert({ name: `${currentProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId })
+        .select('id').single();
+      if (partyErr) throw partyErr;
+      partyId = party.id;
+      const { error: memberErr } = await supabaseClient
+        .from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
+      if (memberErr) throw memberErr;
+    }
+    return partyId;
+  }
+
   // Includes birth_date/age_confirmed_at/disclaimer_accepted_at (added in
   // 0004_venue_search_and_age_gate.sql, previously unused on this page) so
   // a signed-in player who already completed the gate once never has to
@@ -1685,18 +1726,7 @@
       currentSession = freshSession;
       const userId = freshSession.user.id;
 
-      let { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
-      let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
-      if (!partyId) {
-        const { data: party, error: partyErr } = await supabaseClient
-          .from('parties').insert({ name: `${currentProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId })
-          .select('id').single();
-        if (partyErr) throw partyErr;
-        partyId = party.id;
-        const { error: memberErr } = await supabaseClient
-          .from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
-        if (memberErr) throw memberErr;
-      }
+      const partyId = await withRlsRetry(() => ensurePartyId(userId));
 
       const token = await getAccessToken();
       const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
@@ -1748,18 +1778,7 @@
       currentSession = freshSession;
       const userId = freshSession.user.id;
 
-      let { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
-      let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
-      if (!partyId) {
-        const { data: party, error: partyErr } = await supabaseClient
-          .from('parties').insert({ name: `${currentProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId })
-          .select('id').single();
-        if (partyErr) throw partyErr;
-        partyId = party.id;
-        const { error: memberErr } = await supabaseClient
-          .from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
-        if (memberErr) throw memberErr;
-      }
+      const partyId = await withRlsRetry(() => ensurePartyId(userId));
 
       const { count: stopCount } = await supabaseClient.from('route_stops').select('id', { count: 'exact', head: true }).eq('route_id', routeId);
       // adventures.stop_count reflects what's actually reachable right now —
