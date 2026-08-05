@@ -1280,6 +1280,25 @@
     return data?.session?.access_token ?? null;
   }
 
+  // Used before mutations that need a real session (starting an adventure,
+  // inserting a party) — same "don't trust the stale currentSession
+  // closure" reasoning as getAccessToken() above, plus one retry: the
+  // multi-tab refresh-token race can leave getSession() returning null for
+  // a brief moment even on a genuinely still-signed-in browser (one tab's
+  // refresh invalidates another's in-flight token, which then recovers a
+  // beat later once the new token round-trips back through
+  // onAuthStateChange). A single short retry smooths over that window
+  // without masking a real, lasting sign-out — if it's still null after
+  // the retry, the player really does need to sign in again.
+  async function getFreshSession() {
+    if (!supabaseClient) return null;
+    const first = await supabaseClient.auth.getSession();
+    if (first.data?.session) return first.data.session;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const second = await supabaseClient.auth.getSession();
+    return second.data?.session ?? null;
+  }
+
   // Includes birth_date/age_confirmed_at/disclaimer_accepted_at (added in
   // 0004_venue_search_and_age_gate.sql, previously unused on this page) so
   // a signed-in player who already completed the gate once never has to
@@ -1610,9 +1629,11 @@
 
     try {
       // Same "don't trust the stale currentSession closure" re-fetch as
-      // startAdventure() above — an expired token here would otherwise
+      // startAdventure() below — an expired token here would otherwise
       // surface as a confusing RLS rejection on the party lookup/insert.
-      const { data: { session: freshSession } } = await supabaseClient.auth.getSession();
+      // getFreshSession() retries once before concluding the session is
+      // really gone, to smooth over the multi-tab refresh-token race.
+      const freshSession = await getFreshSession();
       if (!freshSession) {
         currentSession = null;
         renderAccountBar();
@@ -1672,7 +1693,10 @@
       // confusing error players were hitting. Re-fetching the session right
       // before we need it, and bailing out with a clear message if it's
       // missing, turns that into an actionable "please sign in again."
-      const { data: { session: freshSession } } = await supabaseClient.auth.getSession();
+      // getFreshSession() retries once first, to smooth over the multi-tab
+      // refresh-token race rather than treating a brief blip as a real
+      // sign-out.
+      const freshSession = await getFreshSession();
       if (!freshSession) {
         currentSession = null;
         renderAccountBar();
