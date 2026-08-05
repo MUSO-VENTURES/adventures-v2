@@ -1151,8 +1151,8 @@
 
 <header class="hero">
   <span class="eyebrow">Live preview</span>
-  <h1>Real venues. Real ratings. Real directions.</h1>
-  <p>This pulls live, top-rated venues near your chosen radius via Yelp, drops them on an interactive map, and routes you between them with turn-by-turn directions — exactly what MUSO Adventures does under the hood.</p>
+  <h1>Real venues. Real choices. Real adventure.</h1>
+  <p>Every stop offers you three real, contrasting nearby venues — cozy vs. bold vs. lively — pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral — just choose your own adventure.</p>
 </header>
 
 <section class="adventure-section" id="adventure-section">
@@ -1166,57 +1166,6 @@
     </div>
   </div>
 </section>
-
-<div class="controls-bar" id="controls-bar">
-  <div class="control-group">
-    <label>Budget</label>
-    <div class="pill-row" id="budget-group">
-      <div class="pill-btn" data-value="$">$</div>
-      <div class="pill-btn selected" data-value="$$">$$</div>
-      <div class="pill-btn" data-value="$$$">$$$</div>
-      <div class="pill-btn" data-value="$$$$">$$$$</div>
-    </div>
-  </div>
-  <div class="control-group">
-    <label>Search radius</label>
-    <div class="radius-row">
-      <input type="range" id="radius-slider" min="1" max="100" value="15" data-cap="30">
-      <span id="radius-value">15 mi</span>
-    </div>
-    <div class="radius-tier-markers" id="radius-tier-markers">
-      <div class="radius-tier-marker reached" data-tier="free" style="left:15%;">≤30mi Free</div>
-      <div class="radius-tier-marker" data-tier="unlock" style="left:40%;">🔓 50mi</div>
-      <div class="radius-tier-marker" data-tier="exclusive" style="left:75%;">⭐ 100mi</div>
-    </div>
-    <div class="radius-lock-hint" id="radius-lock-hint" hidden>
-      🔒 Unlocks up to 50 mi — <button type="button" class="radius-unlock-btn" onclick="unlockFeature('radius')">150 coins</button>
-    </div>
-  </div>
-  <div class="control-group">
-    <button type="button" class="find-btn" id="find-btn" onclick="loadVenues()">Find Real Venues</button>
-  </div>
-  <div class="control-group">
-    <button type="button" class="find-btn" id="route-btn" onclick="planRoute()" style="background:var(--deep-teal);" disabled>Plan Route Between Them</button>
-  </div>
-</div>
-
-<p class="status-msg" id="status-msg">Set your radius and budget, then click "Find Real Venues" to populate the map.</p>
-
-<div class="preview-layout">
-  <div>
-    <div id="map"></div>
-    <div class="route-summary" id="route-summary"></div>
-  </div>
-  <div class="venue-cards-scroll">
-    <div class="venue-cards" id="venue-cards">
-      <div class="empty-state">Venues you find will show up here with real photos, ratings, and directions.</div>
-    </div>
-    <p class="free-spots-note" id="free-spots-note" hidden></p>
-    <div class="locked-wrap" id="venue-locked-wrap" hidden>
-      <div class="venue-cards" id="venue-cards-extra"></div>
-    </div>
-  </div>
-</div>
 
 <footer>
   <p>This is a live preview of real, third-party venue data. MUSO Adventures does not own or operate these venues. This page is a concept preview, not the finished product.</p>
@@ -1240,7 +1189,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
       <span>Home</span>
     </div>
-    <div class="tab-item" onclick="navScrollTo('controls-bar')">
+    <div class="tab-item" onclick="navScrollTo('adventure-section')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
       <span>Explore</span>
     </div>
@@ -1302,7 +1251,6 @@
 
   let currentSession = null;   // Supabase auth session, or null if signed out
   let currentProfile = null;   // { level, xp, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count }
-  let lastSearchUnlocked = false; // from the most recent venues-search response
   let currentBadgeKeys = new Set(); // badge_key set for the signed-in player
   let activeAdventure = null;  // { adventureId, routeId, route, stops, doneIds } once an adventure is underway
   let celebrationQueue = [];   // badges waiting to be celebrated, one modal at a time
@@ -1490,8 +1438,6 @@
     currentBadgeKeys = new Set();
     activeAdventure = null;
     renderAccountBar();
-    updateLockedVenueUI();
-    updateRadiusLockUI();
     loadAdventureSection();
   };
 
@@ -1524,91 +1470,12 @@
       if (!res.ok) { alert(data.error || 'Could not unlock that yet.'); return; }
       await refreshProfileAndBadges();
       renderAccountBar();
-      updateLockedVenueUI();
-      updateRadiusLockUI();
-      if (feature === 'venue_search') loadVenues();
       if (feature === 'extra_stops' && activeAdventure) await loadItinerary(activeAdventure.adventureId);
       if (data.newBadge) queueCelebrations([data.newBadge]);
     } catch (e) {
       alert('Could not reach the unlock service: ' + e.message);
     }
   };
-
-  function updateRadiusLockUI() {
-    // Three tiers (0012_radius_tiers.sql): 30mi free, 50mi self-serve
-    // unlock, 100mi exclusive (manual grant only — no coin/level path).
-    const cap = currentProfile?.unlocked_radius_miles ?? FREE_RADIUS_MILES;
-    const slider = document.getElementById('radius-slider');
-    const valueEl = document.getElementById('radius-value');
-    const hint = document.getElementById('radius-lock-hint');
-
-    // The slider element itself always keeps max="100" so the full range is
-    // visible on the track; `cap` (stored on the element) is what actually
-    // limits how far a player can drag it — see paintRadiusTrack().
-    slider.dataset.cap = cap;
-    if (Number(slider.value) > cap) {
-      slider.value = cap;
-      valueEl.textContent = slider.value + ' mi';
-    }
-    if (typeof paintRadiusTrack === 'function') paintRadiusTrack();
-
-    // Only the 30->50 step is ever purchasable/earnable here. Once a
-    // player is at 50mi there's nothing left to buy — 100mi is invite-only.
-    hint.hidden = cap >= RADIUS_UNLOCK_MILES;
-
-    const markers = document.querySelectorAll('#radius-tier-markers .radius-tier-marker');
-    markers.forEach(m => {
-      const tier = m.dataset.tier;
-      const reached = tier === 'free'
-        || (tier === 'unlock' && cap >= RADIUS_UNLOCK_MILES)
-        || (tier === 'exclusive' && cap >= RADIUS_EXCLUSIVE_MILES);
-      m.classList.toggle('reached', reached);
-    });
-  }
-
-  function updateLockedVenueUI() {
-    const wrap = document.getElementById('venue-locked-wrap');
-    let overlay = document.getElementById('lock-overlay');
-    if (overlay) overlay.remove();
-
-    // The free FREE_VENUE_COUNT cards (in #venue-cards) are never teased —
-    // only cards in the separate #venue-cards-extra section can be.
-    const extraCards = document.querySelectorAll('#venue-cards-extra .venue-card');
-    if (!extraCards.length) return; // nothing beyond the free spots this search
-
-    if (lastSearchUnlocked) {
-      extraCards.forEach(c => c.classList.remove('teaser'));
-      return;
-    }
-
-    extraCards.forEach(c => c.classList.add('teaser'));
-
-    const level = currentProfile?.level ?? 1;
-    const xp = currentProfile?.xp ?? 0;
-    const coins = currentProfile?.adventure_coins ?? 0;
-    const pct = Math.min(100, Math.round((xp / xpForLevel(UNLOCK_LEVEL)) * 100));
-
-    const div = document.createElement('div');
-    div.id = 'lock-overlay';
-    div.className = 'lock-overlay';
-    div.innerHTML = currentSession ? `
-      <div class="lock-icon">🔒</div>
-      <h3>More venues await</h3>
-      <p>Your first ${FREE_VENUE_COUNT} spots are free to play. Reach Level ${UNLOCK_LEVEL} (you're Level ${level}) — earned by finishing an adventure — or spend ${VENUE_SEARCH_COST} Adventure Coins to unlock the rest right now.</p>
-      <div class="lock-progress"><div class="lock-progress-fill" style="width:${pct}%"></div></div>
-      <div class="lock-actions">
-        <button type="button" class="unlock-coins-btn" ${coins < VENUE_SEARCH_COST ? 'disabled' : ''} onclick="unlockFeature('venue_search')">Unlock for ${VENUE_SEARCH_COST} coins</button>
-      </div>
-    ` : `
-      <div class="lock-icon">🔒</div>
-      <h3>More venues await</h3>
-      <p>Your first ${FREE_VENUE_COUNT} spots are free to play right now. Sign in to save your progress, then level up or spend coins to unlock the rest.</p>
-      <div class="lock-actions">
-        <button type="button" class="unlock-signin-btn" onclick="document.getElementById('signin-email')?.focus()">Sign in</button>
-      </div>
-    `;
-    wrap.appendChild(div);
-  }
 
   // ---------- START AN ADVENTURE ----------
   function adventureStorageKey(userId) { return `muso_active_adventure_${userId}`; }
@@ -2424,8 +2291,6 @@
 
       await refreshProfileAndBadges();
       renderAccountBar();
-      updateLockedVenueUI();
-      updateRadiusLockUI();
 
       const progress = data.progress || {};
       // Running per-session totals for the end-of-adventure summary (Phase
@@ -3139,7 +3004,6 @@
     await refreshProfileAndBadges();
     renderAccountBar();
     await applyGateStateFromProfile();
-    updateRadiusLockUI();
     loadAdventureSection();
 
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
@@ -3147,8 +3011,6 @@
       await refreshProfileAndBadges();
       renderAccountBar();
       await applyGateStateFromProfile();
-      updateLockedVenueUI();
-      updateRadiusLockUI();
       loadAdventureSection();
     });
 
@@ -3157,8 +3019,6 @@
       setTimeout(async () => {
         await refreshProfileAndBadges();
         renderAccountBar();
-        updateLockedVenueUI();
-        updateRadiusLockUI();
       }, 2500);
     }
 
@@ -3172,18 +3032,12 @@
   const DEFAULT_LAT = 37.6819; // Livermore, CA — fallback when geolocation is denied/unavailable
   const DEFAULT_LNG = -121.768;
 
-  // Participant's actual location, when we have it. initMap() and every
-  // search/route call use these instead of the raw defaults, so the whole
-  // page centers on "you" by default rather than a fixed pin.
+  // Participant's actual location, when we have it — the fork-in-the-road
+  // venue search (real-venue-adventure edge function) and the persistent
+  // progress map both use these instead of the raw defaults, so the game
+  // centers on "you" by default rather than a fixed pin.
   let currentLat = DEFAULT_LAT;
   let currentLng = DEFAULT_LNG;
-  let usingRealLocation = false;
-
-  let map, directionsService, directionsRenderer, startMarker;
-  let venueMarkers = [];
-  let currentVenues = [];
-  let usableVenues = []; // currentVenues, trimmed to the free/unlocked subset for routing
-  let infoWindow;
 
   function requestGeolocation(){
     if (!('geolocation' in navigator)) return;
@@ -3191,14 +3045,6 @@
       (pos) => {
         currentLat = pos.coords.latitude;
         currentLng = pos.coords.longitude;
-        usingRealLocation = true;
-        // If the map is already up (geolocation resolved after initMap
-        // fired), recenter it and move the start pin to the real spot.
-        if (map && startMarker) {
-          map.setCenter({ lat: currentLat, lng: currentLng });
-          startMarker.setPosition({ lat: currentLat, lng: currentLng });
-          startMarker.setTitle('Starting point — your location');
-        }
       },
       () => { /* denied or unavailable — silently keep the Livermore fallback */ },
       { timeout: 8000, maximumAge: 5 * 60 * 1000 },
@@ -3438,355 +3284,6 @@
     } catch (e) {}
   })();
 
-  // ---------- CONTROLS ----------
-  document.querySelectorAll('#budget-group .pill-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#budget-group .pill-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-    });
-  });
-  function paintRadiusTrack() {
-    const slider = document.getElementById('radius-slider');
-    const cap = Number(slider.dataset.cap || 30);
-    const val = Number(slider.value);
-    const valPct = (val / 100) * 100;
-    const capPct = (cap / 100) * 100;
-    slider.style.background = `linear-gradient(to right,
-      var(--coral) 0%, var(--coral) ${valPct}%,
-      rgba(232,80,63,0.3) ${valPct}%, rgba(232,80,63,0.3) ${capPct}%,
-      rgba(var(--shadow-rgb),0.12) ${capPct}%, rgba(var(--shadow-rgb),0.12) 100%)`;
-  }
-  document.getElementById('radius-slider').addEventListener('input', function(){
-    // The track always spans the full 1-100mi range so players can see what
-    // 50mi/100mi look like, but dragging past their unlocked cap snaps back
-    // — the locked zone is visible, not draggable.
-    const cap = Number(this.dataset.cap || 30);
-    if (Number(this.value) > cap) this.value = cap;
-    document.getElementById('radius-value').textContent = this.value + ' mi';
-    paintRadiusTrack();
-  });
-
-  // ---------- MAP ----------
-  // Custom "MUSO" map skin — brand cream/coral/teal palette instead of the
-  // default Google grey/green look. POI clutter and transit lines are hidden
-  // since our own venue markers carry that information.
-  const MUSO_MAP_STYLE = [
-    { elementType: 'geometry', stylers: [{ color: '#fff7ed' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#fff7ed' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#2a2438' }] },
-    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#5b4b8a' }, { weight: 0.6 }] },
-    { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
-    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#fff3e6' }] },
-    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#cdeee9' }] },
-    { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#f0e4d4' }] },
-    { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-    { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#ffe8d1' }] },
-    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f2994a' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e8873a' }] },
-    { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0ea5a0' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0a7d78' }] },
-  ];
-
-  window.initMap = function(){
-    map = new google.maps.Map(document.getElementById('map'), {
-      center: { lat: currentLat, lng: currentLng },
-      zoom: 11,
-      disableDefaultUI: false,
-      streetViewControl: false,
-      mapTypeControl: false,
-      fullscreenControl: true,
-      styles: MUSO_MAP_STYLE,
-    });
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer({ map, suppressMarkers: true });
-    infoWindow = new google.maps.InfoWindow();
-
-    startMarker = new google.maps.Marker({
-      position: { lat: currentLat, lng: currentLng },
-      map,
-      title: usingRealLocation ? 'Starting point — your location' : 'Starting point — Livermore, CA',
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 9,
-        fillColor: '#2a2438',
-        fillOpacity: 1,
-        strokeColor: '#fff7ed',
-        strokeWeight: 2,
-      },
-    });
-  };
-
-  function clearVenueMarkers(){
-    venueMarkers.forEach(m => m.setMap(null));
-    venueMarkers = [];
-  }
-
-  function starString(rating){
-    if (!rating) return '';
-    const full = Math.round(rating);
-    return '⭐'.repeat(Math.max(1, Math.min(5, full))) + ' ' + rating;
-  }
-
-  function venueCardHtml(v, i){
-    return `
-      <div class="venue-card" onclick="focusVenue(${i})">
-        <div class="venue-photo" style="background-image:url('${v.image_url ? v.image_url.replace(/'/g, "\\'") : ''}')">
-          <span class="venue-num">${i + 1}</span>
-          ${v.price ? `<span class="venue-price">${v.price}</span>` : ''}
-        </div>
-        <div class="venue-body">
-          <div class="venue-name">${v.name}${v.partner_tier && v.partner_tier !== 'basic' ? ' ⭐' : ''}</div>
-          <div class="venue-meta">${v.category || ''}${v.address ? ' · ' + v.address : ''}</div>
-          <div class="venue-rating">${starString(v.rating)}${v.rating_count ? ' (' + v.rating_count + ')' : ''}</div>
-          <div class="venue-actions">
-            <button class="btn-view" onclick="event.stopPropagation(); focusVenue(${i})">View on map</button>
-            <button class="btn-directions" onclick="event.stopPropagation(); directionsToVenue(${i})">Get directions</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function renderVenueCards(venues){
-    const el = document.getElementById('venue-cards');
-    const extraWrap = document.getElementById('venue-locked-wrap');
-    const extraEl = document.getElementById('venue-cards-extra');
-    const note = document.getElementById('free-spots-note');
-
-    if (!venues.length) {
-      el.innerHTML = '<div class="empty-state">No venues found in that radius/budget — try widening the search.</div>';
-      extraWrap.hidden = true;
-      extraEl.innerHTML = '';
-      note.hidden = true;
-      return;
-    }
-
-    // First FREE_VENUE_COUNT spots are always real and playable, no unlock
-    // needed. Anything past that renders into the separate locked section
-    // so the paywall overlay (added in updateLockedVenueUI) only covers
-    // those extra cards, not the free ones above them.
-    const free = venues.slice(0, FREE_VENUE_COUNT);
-    const extra = venues.slice(FREE_VENUE_COUNT);
-
-    el.innerHTML = free.map((v, i) => venueCardHtml(v, i)).join('');
-
-    if (extra.length) {
-      extraWrap.hidden = false;
-      extraEl.innerHTML = extra.map((v, i) => venueCardHtml(v, i + FREE_VENUE_COUNT)).join('');
-    } else {
-      extraWrap.hidden = true;
-      extraEl.innerHTML = '';
-    }
-
-    note.hidden = false;
-    note.textContent = `📍 Your first ${Math.min(FREE_VENUE_COUNT, venues.length)} spots are free to play — no sign-in or unlock required.`;
-
-    updateLockedVenueUI();
-  }
-
-  function addMarkersForVenues(venues){
-    clearVenueMarkers();
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend(startMarker.getPosition());
-
-    venues.forEach((v, i) => {
-      if (v.lat == null || v.lng == null) return;
-      const marker = new google.maps.Marker({
-        position: { lat: v.lat, lng: v.lng },
-        map,
-        label: { text: String(i + 1), color: '#fff', fontWeight: '700', fontFamily: 'Fredoka, sans-serif' },
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 14,
-          fillColor: '#e8503f',
-          fillOpacity: 1,
-          strokeColor: '#fff',
-          strokeWeight: 2,
-        },
-      });
-      marker.addListener('click', () => openInfoWindow(i));
-      venueMarkers.push(marker);
-      bounds.extend(marker.getPosition());
-    });
-
-    map.fitBounds(bounds, 60);
-  }
-
-  function openInfoWindow(i){
-    const v = currentVenues[i];
-    if (!v || !venueMarkers[i]) return;
-    infoWindow.setContent(`
-      <div style="max-width:220px; font-family:'Nunito',sans-serif;">
-        ${v.image_url ? `<img src="${v.image_url}" style="width:100%; height:100px; object-fit:cover; border-radius:8px; margin-bottom:6px;">` : ''}
-        <div style="font-weight:700; font-family:'Fredoka',sans-serif; margin-bottom:2px;">${v.name}</div>
-        <div style="font-size:0.8rem; opacity:0.7; margin-bottom:4px;">${v.category || ''}${v.address ? ' · ' + v.address : ''}</div>
-        <div style="font-size:0.82rem; font-weight:700; color:#0a7d78;">${starString(v.rating)}</div>
-      </div>
-    `);
-    infoWindow.open(map, venueMarkers[i]);
-  }
-
-  window.focusVenue = function(i){
-    const marker = venueMarkers[i];
-    if (!marker) return;
-    map.panTo(marker.getPosition());
-    map.setZoom(15);
-    openInfoWindow(i);
-  };
-
-  window.directionsToVenue = function(i){
-    const v = currentVenues[i];
-    if (!v) return;
-    directionsService.route({
-      origin: startMarker.getPosition(),
-      destination: { lat: v.lat, lng: v.lng },
-      travelMode: google.maps.TravelMode.DRIVING,
-    }, (result, status) => {
-      if (status === 'OK') {
-        directionsRenderer.setDirections(result);
-        const leg = result.routes[0].legs[0];
-        showRouteSummary(`Directions to <b>${v.name}</b>: ${leg.distance.text}, about ${leg.duration.text}.`);
-      } else {
-        showRouteSummary(`Couldn't get directions to ${v.name} (${status}).`);
-      }
-    });
-  };
-
-  // Featured (premium/sponsor) venues can request a fixed, 1-indexed stop
-  // slot via featured_position (e.g. always the final "headliner" stop).
-  // Everyone else — including other featured venues with no fixed slot —
-  // just fills in around them in their existing (rating-priority) order.
-  // If two venues somehow claim the same slot, the first one wins the pin
-  // and the second falls back to floating.
-  function applyFeaturedPositions(venues){
-    const n = venues.length;
-    const pinned = new Map();
-    const floaters = [];
-    venues.forEach(v => {
-      const pos = v.featured_position;
-      if (pos && pos >= 1 && pos <= n && !pinned.has(pos - 1)) {
-        pinned.set(pos - 1, v);
-      } else {
-        floaters.push(v);
-      }
-    });
-    const result = new Array(n);
-    pinned.forEach((v, idx) => { result[idx] = v; });
-    let fi = 0;
-    for (let i = 0; i < n; i++) {
-      if (!result[i]) result[i] = floaters[fi++];
-    }
-    return result;
-  }
-
-  window.planRoute = function(){
-    if (!usableVenues.length) return;
-    const orderedVenues = applyFeaturedPositions(usableVenues);
-    const hasPinnedStop = orderedVenues.some(v => v.featured_position);
-    const waypoints = orderedVenues.slice(0, -1).map(v => ({ location: { lat: v.lat, lng: v.lng }, stopover: true }));
-    const last = orderedVenues[orderedVenues.length - 1];
-
-    directionsService.route({
-      origin: startMarker.getPosition(),
-      destination: { lat: last.lat, lng: last.lng },
-      waypoints,
-      // A pinned featured stop means the order is fixed by that placement,
-      // not by shortest-path — so only let Google reorder freely when
-      // nothing on this route has purchased a set slot.
-      optimizeWaypoints: !hasPinnedStop,
-      travelMode: google.maps.TravelMode.DRIVING,
-    }, (result, status) => {
-      if (status === 'OK') {
-        directionsRenderer.setDirections(result);
-        const legs = result.routes[0].legs;
-        const totalMiles = legs.reduce((sum, l) => sum + l.distance.value, 0) / 1609.34;
-        const totalMins = legs.reduce((sum, l) => sum + l.duration.value, 0) / 60;
-        const pinnedNote = hasPinnedStop ? ' Stop order follows a featured venue\'s reserved placement.' : '';
-        showRouteSummary(`Full route: ${legs.length} legs, about ${totalMiles.toFixed(1)} miles and ${Math.round(totalMins)} minutes total driving.${pinnedNote}`);
-      } else {
-        showRouteSummary(`Couldn't build a full route (${status}). Try fewer venues or a smaller radius.`);
-      }
-    });
-  };
-
-  function showRouteSummary(html){
-    const el = document.getElementById('route-summary');
-    el.innerHTML = html;
-    el.classList.add('visible');
-  }
-
-  // ---------- LOAD VENUES ----------
-  window.loadVenues = async function(){
-    const btn = document.getElementById('find-btn');
-    const routeBtn = document.getElementById('route-btn');
-    const statusEl = document.getElementById('status-msg');
-    const budget = document.querySelector('#budget-group .pill-btn.selected');
-    const radius = document.getElementById('radius-slider').value;
-
-    if (SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
-      statusEl.textContent = 'Live venue search isn\'t configured on this page yet — add your Supabase anon key at the top of the script to enable it.';
-      return;
-    }
-
-    btn.disabled = true;
-    btn.textContent = 'Searching…';
-    routeBtn.disabled = true;
-    statusEl.textContent = 'Looking for top-rated real venues near your radius…';
-    document.getElementById('route-summary').classList.remove('visible');
-
-    try {
-      const params = new URLSearchParams({
-        radiusMiles: radius,
-        startLat: String(currentLat),
-        startLng: String(currentLng),
-      });
-      if (budget) params.set('budget', budget.dataset.value);
-
-      // Signed-in players send their own session token so venues-search can
-      // check their level/coins/unlock status server-side; signed-out
-      // visitors fall back to the anon key and always get unlocked:false.
-      const userToken = await getAccessToken();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/venues-search?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${userToken || SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY,
-        },
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        statusEl.textContent = `Couldn't load venues: ${data.error || res.statusText}`;
-        renderVenueCards([]);
-        return;
-      }
-
-      lastSearchUnlocked = data.unlocked === true;
-      currentVenues = (data.venues || []).filter(v => v.lat != null && v.lng != null).slice(0, 10);
-      // Routing only ever uses the free/unlocked subset — the extra, teased
-      // cards are for enticement (visible on the map as pins) but aren't
-      // playable until they're actually unlocked.
-      usableVenues = lastSearchUnlocked ? currentVenues : currentVenues.slice(0, FREE_VENUE_COUNT);
-      renderVenueCards(currentVenues);
-      addMarkersForVenues(currentVenues);
-      const extraCount = currentVenues.length - usableVenues.length;
-      statusEl.textContent = currentVenues.length
-        ? `Found ${currentVenues.length} real, top-rated venues within ${data.searchedRadiusMiles || radius} miles.${extraCount > 0 ? ` Your first ${FREE_VENUE_COUNT} are free to play — level up or unlock coins to see ${extraCount} more.` : ''}`
-        : 'No venues found in that radius/budget — try widening the search.';
-      routeBtn.disabled = usableVenues.length < 2;
-    } catch (e) {
-      statusEl.textContent = `Something went wrong reaching the venue search: ${e.message}`;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Find Real Venues';
-    }
-  };
-
   // ---------- PARALLAX HEADER ----------
   // Ported verbatim from home-concept.html — same element ids, same drag/
   // auto-drift mechanics, only the asset paths changed (this page is one
@@ -4014,7 +3511,11 @@
   initAuth();
 </script>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCk-1_2kd8IOjDDtp29c7IRVbh1DtlK_Y8&callback=initMap" async defer></script>
+<!-- No callback needed — the persistent progress map and next-venue map
+     both lazily create their own google.maps.Map instances on demand
+     (guarded by `typeof google === 'undefined'` checks) rather than
+     waiting for a page-load-time callback. -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCk-1_2kd8IOjDDtp29c7IRVbh1DtlK_Y8" async defer></script>
 
 </body>
 </html>
