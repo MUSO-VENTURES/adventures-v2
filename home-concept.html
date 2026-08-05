@@ -1256,6 +1256,14 @@
     let autoPaused = false;
     let resumeTimer = null;
 
+    // Only runs while the header is actually in the viewport — this used
+    // to schedule requestAnimationFrame unconditionally for the whole page
+    // lifetime, painting 4 will-change:transform layers every frame even
+    // long after it had scrolled off-screen, a plausible contributor to
+    // the page hanging/crashing on phones.
+    let inView = false;
+    let rafId = null;
+
     function autoStep(){
       if(!autoPaused){
         const max = pxScroll.scrollWidth - pxScroll.clientWidth;
@@ -1264,9 +1272,18 @@
         else if(next <= 0){ next = 0; autoDir = 1; }
         pxScroll.scrollLeft = next;
       }
+      rafId = inView ? requestAnimationFrame(autoStep) : null;
+    }
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => {
+        inView = entries[0].isIntersecting;
+        if (inView && rafId === null) rafId = requestAnimationFrame(autoStep);
+      }, { threshold: 0 }).observe(wrap);
+    } else {
+      inView = true;
       requestAnimationFrame(autoStep);
     }
-    requestAnimationFrame(autoStep);
 
     function pauseAuto(){
       autoPaused = true;

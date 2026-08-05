@@ -3422,6 +3422,16 @@
     let autoPaused = false;
     let resumeTimer = null;
 
+    // The auto-drift loop used to schedule requestAnimationFrame
+    // unconditionally for the entire page lifetime, painting 4
+    // will-change:transform layers on every frame even long after the
+    // player had scrolled the header off-screen and would never see it
+    // again — sustained GPU/CPU load for zero visible benefit, plausible
+    // contributor to the page hanging/crashing on phones. Now it only
+    // runs while the header is actually in the viewport.
+    let inView = false;
+    let rafId = null;
+
     function autoStep(){
       if (!autoPaused) {
         const max = pxScroll.scrollWidth - pxScroll.clientWidth;
@@ -3430,9 +3440,18 @@
         else if (next <= 0) { next = 0; autoDir = 1; }
         pxScroll.scrollLeft = next;
       }
+      rafId = inView ? requestAnimationFrame(autoStep) : null;
+    }
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => {
+        inView = entries[0].isIntersecting;
+        if (inView && rafId === null) rafId = requestAnimationFrame(autoStep);
+      }, { threshold: 0 }).observe(wrap);
+    } else {
+      inView = true;
       requestAnimationFrame(autoStep);
     }
-    requestAnimationFrame(autoStep);
 
     function pauseAuto(){
       autoPaused = true;

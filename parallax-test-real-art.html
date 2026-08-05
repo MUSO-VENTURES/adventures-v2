@@ -190,6 +190,14 @@
   let autoScrollPaused = false;
   let resumeTimer = null;
 
+  // Only runs while the strip is actually in the viewport — this used to
+  // schedule requestAnimationFrame unconditionally for the whole page
+  // lifetime, painting several layers every frame even long after it had
+  // scrolled off-screen, a plausible contributor to the page hanging/
+  // crashing on phones.
+  let autoScrollInView = false;
+  let autoScrollRafId = null;
+
   function autoScrollStep(){
     if(!autoScrollPaused){
       const max = pxScroll.scrollWidth - pxScroll.clientWidth;
@@ -198,9 +206,18 @@
       else if(next <= 0){ next = 0; autoScrollDir = 1; }
       pxScroll.scrollLeft = next;
     }
+    autoScrollRafId = autoScrollInView ? requestAnimationFrame(autoScrollStep) : null;
+  }
+
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((entries) => {
+      autoScrollInView = entries[0].isIntersecting;
+      if (autoScrollInView && autoScrollRafId === null) autoScrollRafId = requestAnimationFrame(autoScrollStep);
+    }, { threshold: 0 }).observe(pxScroll);
+  } else {
+    autoScrollInView = true;
     requestAnimationFrame(autoScrollStep);
   }
-  requestAnimationFrame(autoScrollStep);
 
   function pauseAutoScroll(){
     autoScrollPaused = true;
