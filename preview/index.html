@@ -1222,8 +1222,18 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
   const GATE_STORAGE_KEY = 'muso_gate_accepted_v1'; // shared with the main site
 
+  // Explicit even though these match supabase-js's own defaults — the
+  // point is to guarantee "stay signed in until you manually log out"
+  // rather than depend on a default that could silently change in a
+  // future library version. persistSession writes the session to
+  // localStorage (survives closing the tab/browser entirely, not just
+  // reloads); autoRefreshToken keeps it alive indefinitely in the
+  // background, well past the ~1hr JWT lifetime, for as long as the
+  // underlying refresh token stays valid.
   const supabaseClient = (SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' && window.supabase)
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      })
     : null;
 
   // ---------- GAMIFICATION STATE ----------

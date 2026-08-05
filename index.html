@@ -1938,7 +1938,9 @@
   // wiring needed. This is deliberately separate from the age-gate/venue
   // logic below: it's just "am I signed in," always visible in the nav.
   const navSupabase = (SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' && window.supabase)
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      })
     : null;
   let navSession = null;
 
