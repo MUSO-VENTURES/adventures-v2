@@ -2,39 +2,54 @@
 // Body: { action: 'init', partyId: string, lat: number, lng: number }
 //     | { action: 'reroll', routeStopId: string }
 //     | { action: 'advance', adventureId: string, lat: number, lng: number }
+//     | { action: 'choose', routeStopId: string, venueId: string }
 // Requires Authorization: Bearer <user JWT> (Supabase Auth).
 //
-// Backs "Chance Your Luck" real-venue adventures: instead of picking a
+// Backs "fork in the road" real-venue adventures: instead of picking a
 // curator-authored route, a party's stops are assembled on the fly from
 // live nearby venues (matched to the player's saved profiles.preferences),
-// one stop at a time. Every stop is represented as an ordinary routes +
-// route_stops row (owner_party_id scopes it private to the creating party —
-// see 0016_real_venue_adventures.sql), so the existing checkin/route-detail
+// one stop at a time — and instead of the game silently auto-picking a
+// venue, each stop offers 3 real, contrasting-theme choices (cozy vs.
+// adventurous vs. nightlife, etc. — see pickContrastingChoices()) for the
+// player to pick from, "choose your own adventure" style. Every stop is
+// represented as an ordinary routes + route_stops row (owner_party_id
+// scopes it private to the creating party — see
+// 0016_real_venue_adventures.sql), so the existing checkin/route-detail
 // edge functions, and all the XP/badge/coin/photo-booth/progress-map UI
 // built on top of them, work completely unmodified — verified by reading
 // checkin/index.ts in full during planning. This function's only job is to
 // create/update those rows correctly.
+//
+// Three-state stop lifecycle (route_stops, real-venue mode):
+//   1. Unrevealed  — is_mystery=true,  venue_id=null (placeholder, nothing
+//      computed yet — reuses the exact "Unknown Location" masking
+//      route-detail already does for curator-authored mystery stops).
+//   2. Choices offered — is_mystery=false, venue_id=null,
+//      offered_choices=[3 candidates] (0019_stop_choice_offers.sql) — the
+//      fork in the road. `reroll` regenerates this set; `choose` commits one.
+//   3. Committed — is_mystery=false, venue_id=<chosen>, offered_choices=null
+//      — identical to the old single-auto-pick "revealed" state; checkin
+//      becomes available.
 //
 // Progressive reveal + premature-completion fix: checkin marks an adventure
 // "completed" the moment check_ins count >= route_stops count for its
 // route. Curated routes have every stop pre-authored, so that's correct.
 // A real-venue route doesn't know stop 2's venue until the player has
 // checked into stop 1 and shared their new location — so `init` instead
-// pre-creates ALL of the party's target stop_count as placeholder rows
-// up front (is_mystery = true, venue_id = null, reusing the exact same
-// "Unknown Location" masking route-detail already does for curator-authored
-// mystery stops), and only stop 1 is immediately revealed. `advance` then
-// fills in the next placeholder in place (UPDATE, not INSERT) once the
-// player reaches it. route_stops count is therefore correct — equal to the
-// target stop count — from the moment `init` returns, so checkin's
-// completion math is never wrong, and the target stop count is
-// automatically enforced (advance simply has nothing left to fill once
-// every placeholder is revealed).
+// pre-creates ALL of the party's target stop_count as placeholder rows up
+// front, and only stop 1 gets its choices offered immediately. `advance`
+// then fills in the next placeholder's offered_choices in place (UPDATE,
+// not INSERT) once the player reaches it. route_stops count is therefore
+// correct — equal to the target stop count — from the moment `init`
+// returns, so checkin's completion math is never wrong, and the target
+// stop count is automatically enforced (advance simply has nothing left to
+// fill once every placeholder has been committed).
 //
 // Server-side trust: preferences are always re-read fresh from the caller's
 // own profile row, never taken from the request body — a player can't spoof
 // someone else's budget/content-rating to search a wider net than they've
-// unlocked.
+// unlocked. Likewise `choose` never trusts a client-supplied venueId alone
+// — it must match one of that exact stop's server-computed offered_choices.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -235,10 +250,10 @@ async function searchNearbyVenues(
   return (candidates ?? []) as Candidate[];
 }
 
-// Used both to auto-pick a stop (init/advance) and to reroll one — "a
-// random highly rated venue," not a deterministic always-take-the-#1 pick.
-// Weight favors featured (premium/sponsor) partner_tier 3x, same as
-// before, now multiplied by the venue's own Yelp rating (0-5 stars,
+// The within-theme pick used by pickContrastingChoices() below — "a random
+// highly rated venue" from a given bucket, not a deterministic
+// always-take-the-#1 pick. Weight favors featured (premium/sponsor)
+// partner_tier 3x, multiplied by the venue's own Yelp rating (0-5 stars,
 // defaulting unrated venues to a neutral 3 so they're deprioritized but
 // never literally unreachable).
 function weightedRandomPick(candidates: Candidate[]): Candidate {
@@ -251,6 +266,94 @@ function weightedRandomPick(candidates: Candidate[]): Candidate {
     if (r <= 0) return candidates[i];
   }
   return candidates[candidates.length - 1];
+}
+
+// ---------------------------------------------------------------
+// Fork-in-the-road: contrasting theme buckets for the 3-choice reveal.
+// Best-effort keyword match against Yelp's own category string — same
+// "good enough, not perfect" spirit as the family-safe filtering above.
+// ---------------------------------------------------------------
+
+type Theme = { key: string; label: string; emoji: string; color: string };
+
+const THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "cozy", label: "Cozy & Chill", emoji: "🍷", color: "#5b4b8a",
+    keywords: ["wine", "lounge", "cafe", "coffee", "tea", "bookstore", "spa"],
+  },
+  {
+    key: "adventurous", label: "Bold & Active", emoji: "🎯", color: "#e8503f",
+    keywords: ["axe", "escape", "arcade", "bowling", "minigolf", "gokart", "climbing", "hiking", "park", "adventure"],
+  },
+  {
+    key: "social", label: "Social & Lively", emoji: "🎤", color: "#0b6e68",
+    keywords: ["karaoke", "bar", "nightlife", "club", "pub", "brewery", "cocktail"],
+  },
+  {
+    key: "artsy", label: "Artsy & Unique", emoji: "🎨", color: "#f2994a",
+    keywords: ["museum", "gallery", "theater", "theatre", "art", "music", "comedy"],
+  },
+  {
+    key: "foodie", label: "Foodie Find", emoji: "🍜", color: "#0ea5a0",
+    keywords: ["restaurant", "food", "noodle", "pizza", "bbq", "dessert", "bakery", "diner"],
+  },
+];
+const GENERAL_THEME: Theme = { key: "local", label: "Local Pick", emoji: "📍", color: "#2a2438" };
+
+function classifyTheme(candidate: Candidate): Theme {
+  const cat = (candidate.category ?? "").toLowerCase();
+  for (const bucket of THEME_BUCKETS) {
+    if (bucket.keywords.some((kw) => cat.includes(kw))) {
+      const { keywords: _keywords, ...theme } = bucket;
+      return theme;
+    }
+  }
+  return GENERAL_THEME;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Picks up to n candidates from DISTINCT contrasting themes — "cozy vs.
+// adventurous vs. nightlife," not three similar wine bars — weighted
+// toward higher-rated/featured venues within each theme via
+// weightedRandomPick. Backfills from the general remaining pool if fewer
+// than n themes have any matching candidates (e.g. a sparse market).
+function pickContrastingChoices(candidates: Candidate[], n: number): (Candidate & { theme: Theme })[] {
+  const byTheme = new Map<string, { theme: Theme; items: Candidate[] }>();
+  for (const c of candidates) {
+    const theme = classifyTheme(c);
+    if (!byTheme.has(theme.key)) byTheme.set(theme.key, { theme, items: [] });
+    byTheme.get(theme.key)!.items.push(c);
+  }
+
+  const chosen: (Candidate & { theme: Theme })[] = [];
+  const usedIds = new Set<string>();
+
+  for (const { theme, items } of shuffle([...byTheme.values()])) {
+    if (chosen.length >= n) break;
+    const pick = weightedRandomPick(items);
+    chosen.push({ ...pick, theme });
+    usedIds.add(pick.id);
+  }
+
+  if (chosen.length < n) {
+    const remaining = candidates.filter((c) => !usedIds.has(c.id));
+    while (chosen.length < n && remaining.length) {
+      const pick = weightedRandomPick(remaining);
+      chosen.push({ ...pick, theme: classifyTheme(pick) });
+      usedIds.add(pick.id);
+      remaining.splice(remaining.findIndex((c) => c.id === pick.id), 1);
+    }
+  }
+
+  return chosen;
 }
 
 // ---------------------------------------------------------------
@@ -344,8 +447,9 @@ Deno.serve(async (req) => {
     }
 
     const stopCount = profile.unlocked_stop_count ?? 3;
-    const first = weightedRandomPick(candidates);
-    const remainingPool = candidates.filter((c) => c.id !== first.id);
+    const choices = pickContrastingChoices(candidates, 3);
+    const offeredIds = new Set(choices.map((c) => c.id));
+    const remainingPool = candidates.filter((c) => !offeredIds.has(c.id));
 
     const { data: route, error: routeErr } = await admin
       .from("routes")
@@ -353,7 +457,7 @@ Deno.serve(async (req) => {
         owner_party_id: partyId,
         twist_key: "real-auto",
         title: "Real Venues Adventure",
-        description: "Auto-picked from real, live venues near you — chance your luck to reroll.",
+        description: "A fork in the road at every stop — pick your path from real, live nearby venues.",
       })
       .select("id")
       .single();
@@ -362,11 +466,12 @@ Deno.serve(async (req) => {
     const stopRows = [
       {
         route_id: route.id,
-        venue_id: first.id,
+        venue_id: null,
         stop_order: 1,
-        name: first.name,
-        description: [first.category, first.address].filter(Boolean).join(" · "),
+        name: "Choose Your Path",
+        description: null,
         is_mystery: false,
+        offered_choices: choices,
         candidate_pool: remainingPool,
       },
       ...Array.from({ length: Math.max(stopCount - 1, 0) }, (_, i) => ({
@@ -377,13 +482,14 @@ Deno.serve(async (req) => {
         description: null,
         is_mystery: true,
         candidate_pool: null,
+        offered_choices: null,
       })),
     ];
 
     const { data: stops, error: stopsErr } = await admin
       .from("route_stops")
       .insert(stopRows)
-      .select("id, stop_order, name, is_mystery");
+      .select("id, stop_order, name, is_mystery, venue_id, offered_choices");
     if (stopsErr) return jsonResponse({ error: stopsErr.message }, 400);
 
     const { data: adventure, error: advErr } = await admin
@@ -397,7 +503,7 @@ Deno.serve(async (req) => {
   }
 
   // ---------------------------------------------------------------
-  // reroll — swaps the currently-revealed, not-yet-checked-in stop's venue
+  // reroll — regenerates the 3 offered (not yet chosen) choices for a stop
   // ---------------------------------------------------------------
   if (action === "reroll") {
     const routeStopId = typeof body.routeStopId === "string" ? body.routeStopId : null;
@@ -405,7 +511,7 @@ Deno.serve(async (req) => {
 
     const { data: stop, error: stopErr } = await admin
       .from("route_stops")
-      .select("id, route_id, venue_id, is_mystery, reroll_count, candidate_pool, routes!inner(owner_party_id)")
+      .select("id, route_id, venue_id, is_mystery, reroll_count, candidate_pool, offered_choices, routes!inner(owner_party_id)")
       .eq("id", routeStopId)
       .maybeSingle();
     if (stopErr || !stop) return jsonResponse({ error: "Stop not found." }, 404);
@@ -414,8 +520,10 @@ Deno.serve(async (req) => {
     if (!ownerPartyId || !(await isPartyMember(admin, ownerPartyId, userId))) {
       return jsonResponse({ error: "You're not a member of that party." }, 403);
     }
-    if (stop.is_mystery || !stop.venue_id) {
-      return jsonResponse({ error: "This stop hasn't been revealed yet." }, 400);
+    // Reroll only makes sense while choices are offered and nothing's been
+    // committed yet — once venue_id is set the fork has already been taken.
+    if (stop.is_mystery || stop.venue_id || !stop.offered_choices) {
+      return jsonResponse({ error: "This stop doesn't have choices to reroll right now." }, 400);
     }
 
     const { data: existingCheckIn } = await admin
@@ -424,7 +532,7 @@ Deno.serve(async (req) => {
       .eq("route_stop_id", routeStopId)
       .maybeSingle();
     if (existingCheckIn) {
-      return jsonResponse({ error: "You've already checked in here — can't reroll a completed stop." }, 400);
+      return jsonResponse({ error: "You've already checked in here." }, 400);
     }
 
     const pool = (stop.candidate_pool ?? []) as Candidate[];
@@ -457,20 +565,19 @@ Deno.serve(async (req) => {
       spent = EXTRA_ROLL_COST;
     }
 
-    const picked = weightedRandomPick(pool);
-    const newPool = pool.filter((c) => c.id !== picked.id);
+    const choices = pickContrastingChoices(pool, 3);
+    const offeredIds = new Set(choices.map((c) => c.id));
+    const newPool = pool.filter((c) => !offeredIds.has(c.id));
 
     const { data: updated, error: updateErr } = await admin
       .from("route_stops")
       .update({
-        venue_id: picked.id,
-        name: picked.name,
-        description: [picked.category, picked.address].filter(Boolean).join(" · "),
+        offered_choices: choices,
         reroll_count: rerollCount + 1,
         candidate_pool: newPool,
       })
       .eq("id", routeStopId)
-      .select("id, name, description, venue_id, reroll_count")
+      .select("id, name, description, venue_id, reroll_count, offered_choices")
       .single();
     if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
 
@@ -479,6 +586,56 @@ Deno.serve(async (req) => {
       spent,
       freeRollsRemaining: Math.max(FREE_REROLLS - (rerollCount + 1), 0),
     });
+  }
+
+  // ---------------------------------------------------------------
+  // choose — commits one of a stop's offered choices as the real venue
+  // ---------------------------------------------------------------
+  if (action === "choose") {
+    const routeStopId = typeof body.routeStopId === "string" ? body.routeStopId : null;
+    const venueId = typeof body.venueId === "string" ? body.venueId : null;
+    if (!routeStopId || !venueId) {
+      return jsonResponse({ error: "routeStopId and venueId are required" }, 400);
+    }
+
+    const { data: stop, error: stopErr } = await admin
+      .from("route_stops")
+      .select("id, venue_id, is_mystery, offered_choices, routes!inner(owner_party_id)")
+      .eq("id", routeStopId)
+      .maybeSingle();
+    if (stopErr || !stop) return jsonResponse({ error: "Stop not found." }, 404);
+
+    const ownerPartyId = (stop as unknown as { routes: { owner_party_id: string | null } }).routes?.owner_party_id;
+    if (!ownerPartyId || !(await isPartyMember(admin, ownerPartyId, userId))) {
+      return jsonResponse({ error: "You're not a member of that party." }, 403);
+    }
+    if (stop.is_mystery || stop.venue_id || !stop.offered_choices) {
+      return jsonResponse({ error: "This stop doesn't have choices to pick from right now." }, 400);
+    }
+
+    // Never trust venueId alone — it must be one of the choices this exact
+    // stop actually offered server-side, not just any venue id a tampered
+    // client might send.
+    const choices = (stop.offered_choices ?? []) as (Candidate & { theme: Theme })[];
+    const picked = choices.find((c) => c.id === venueId);
+    if (!picked) {
+      return jsonResponse({ error: "That wasn't one of the offered choices." }, 400);
+    }
+
+    const { data: updated, error: updateErr } = await admin
+      .from("route_stops")
+      .update({
+        venue_id: picked.id,
+        name: picked.name,
+        description: [picked.category, picked.address].filter(Boolean).join(" · "),
+        offered_choices: null,
+      })
+      .eq("id", routeStopId)
+      .select("id, name, description, venue_id")
+      .single();
+    if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+
+    return jsonResponse({ stop: updated });
   }
 
   // ---------------------------------------------------------------
@@ -534,25 +691,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No new nearby venues found for the next stop — try again shortly." }, 404);
     }
 
-    const picked = weightedRandomPick(fresh);
-    const remainingPool = fresh.filter((c) => c.id !== picked.id);
+    const choices = pickContrastingChoices(fresh, 3);
+    const offeredIds = new Set(choices.map((c) => c.id));
+    const remainingPool = fresh.filter((c) => !offeredIds.has(c.id));
 
     const { data: updated, error: updateErr } = await admin
       .from("route_stops")
       .update({
-        venue_id: picked.id,
-        name: picked.name,
-        description: [picked.category, picked.address].filter(Boolean).join(" · "),
         is_mystery: false,
+        offered_choices: choices,
         candidate_pool: remainingPool,
       })
       .eq("id", nextPlaceholder.id)
-      .select("id, stop_order, name, description, venue_id")
+      .select("id, stop_order, name, description, venue_id, offered_choices")
       .single();
     if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
 
     return jsonResponse({ stop: updated, done: false });
   }
 
-  return jsonResponse({ error: "action must be 'init', 'reroll', or 'advance'" }, 400);
+  return jsonResponse({ error: "action must be 'init', 'reroll', 'advance', or 'choose'" }, 400);
 });

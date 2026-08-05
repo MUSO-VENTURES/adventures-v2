@@ -500,6 +500,46 @@
   }
   .reroll-btn:disabled{ opacity:0.5; cursor:default; }
 
+  /* ---------- FORK IN THE ROAD: 3-CHOICE VENUE GRID ----------
+     Each card's --theme-color custom property comes straight from the
+     edge function's theme.color (real-venue-adventure/index.ts
+     THEME_BUCKETS) — contrasting colors per card are the whole point,
+     "cozy vs. adventurous vs. nightlife" should read as visually distinct
+     at a glance, not just in the copy. */
+  .itinerary-stop.fork-in-road{ align-items:flex-start; }
+  .fork-choice-grid{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px;
+  }
+  .fork-choice-card{
+    background:var(--card); border-radius:16px; padding:16px;
+    border-top:4px solid var(--theme-color, var(--coral));
+    display:flex; flex-direction:column; gap:5px;
+    box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.07);
+    transition:transform .15s;
+  }
+  .fork-choice-card:hover{ transform:translateY(-2px); }
+  .fork-theme-badge{
+    display:inline-flex; align-self:flex-start; align-items:center; gap:5px;
+    background:var(--theme-color, var(--coral)); color:#fff;
+    padding:4px 10px; border-radius:999px; font-size:0.7rem; font-weight:700;
+  }
+  .fork-choice-name{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; margin-top:4px; }
+  .fork-choice-meta{ font-size:0.8rem; opacity:0.75; }
+  .fork-choice-addr{ font-size:0.75rem; opacity:0.55; min-height:1.1em; }
+  .fork-choose-btn{
+    margin-top:8px; background:var(--theme-color, var(--coral)); color:#fff; border:none;
+    padding:10px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.8rem; cursor:pointer; transition:filter .15s;
+  }
+  .fork-choose-btn:hover{ filter:brightness(1.1); }
+  .fork-choose-btn:disabled{ opacity:0.5; cursor:default; }
+  .fork-reroll-btn{
+    background:transparent; border:2px solid rgba(var(--shadow-rgb),0.25); color:var(--ink);
+    padding:9px 22px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.82rem; cursor:pointer;
+  }
+  .fork-reroll-btn:disabled{ opacity:0.5; cursor:default; }
+
   .itinerary-list{ display:flex; flex-direction:column; gap:10px; }
   .itinerary-stop{
     display:flex; align-items:center; gap:14px; background:var(--cream); border-radius:14px;
@@ -546,6 +586,40 @@
   .photobooth-header{
     display:flex; align-items:center; justify-content:space-between;
     font-family:'Fredoka',sans-serif; font-weight:700; margin-bottom:14px; font-size:1.02rem;
+  }
+
+  /* ---------- START-ADVENTURE CEREMONY: countdown + staging reveal ---------- */
+  .countdown-number{
+    font-family:'Fredoka',sans-serif; font-weight:700; color:#fff;
+    font-size:5rem; text-shadow:0 4px 20px rgba(0,0,0,0.4);
+  }
+  .countdown-number.pulse{ animation:countdownPulse .65s ease-out; }
+  @keyframes countdownPulse{
+    0%{ transform:scale(0.4); opacity:0; }
+    30%{ transform:scale(1.15); opacity:1; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+
+  .staging-card{ text-align:center; max-width:380px; }
+  .staging-photo-wrap{
+    width:100%; aspect-ratio:4/3; border-radius:16px; overflow:hidden; margin-bottom:14px;
+    background:rgba(var(--shadow-rgb),0.08); display:flex; align-items:center; justify-content:center;
+  }
+  .staging-photo-wrap img{ width:100%; height:100%; object-fit:cover; display:none; }
+  .staging-theme-badge{
+    display:inline-flex; align-items:center; gap:5px; color:#fff;
+    padding:5px 12px; border-radius:999px; font-size:0.78rem; font-weight:700;
+  }
+
+  /* Fork-choice cards "deal in" staggered on every render — initial reveal
+     and every reroll settle both benefit from the same flourish. */
+  .fork-choice-card{ animation:forkCardDeal .4s ease-out backwards; }
+  .fork-choice-card:nth-child(1){ animation-delay:0ms; }
+  .fork-choice-card:nth-child(2){ animation-delay:120ms; }
+  .fork-choice-card:nth-child(3){ animation-delay:240ms; }
+  @keyframes forkCardDeal{
+    0%{ transform:translateY(14px) scale(0.94); opacity:0; }
+    100%{ transform:translateY(0) scale(1); opacity:1; }
   }
   .pb-close{ cursor:pointer; opacity:0.55; font-size:1.15rem; line-height:1; }
   .pb-close:hover{ opacity:1; }
@@ -884,6 +958,32 @@
   </div>
 </div>
 
+<div class="photobooth-overlay" id="adventure-ready-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center;">
+    <div style="font-size:3rem; margin-bottom:8px;">🎉</div>
+    <h2 style="font-family:'Fredoka',sans-serif; margin-bottom:10px;">You're All Set!</h2>
+    <p style="opacity:0.75; margin-bottom:24px;">Your preferences are saved. Ready to see where the night takes you?</p>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="beginAdventureCountdown()">🚀 Start Your MUSO Adventure</button>
+  </div>
+</div>
+
+<div class="photobooth-overlay" id="adventure-countdown-overlay" hidden>
+  <div class="countdown-number" id="adventure-countdown-number">3</div>
+</div>
+
+<div class="photobooth-overlay" id="adventure-staging-overlay" hidden>
+  <div class="photobooth-card staging-card">
+    <div class="staging-photo-wrap">
+      <img src="" alt="" id="staging-photo">
+    </div>
+    <div class="staging-theme-badge" id="staging-theme-badge"></div>
+    <h2 id="staging-name" style="font-family:'Fredoka',sans-serif; margin:10px 0 4px;"></h2>
+    <div id="staging-meta" style="opacity:0.75; margin-bottom:4px;"></div>
+    <div id="staging-addr" style="opacity:0.55; font-size:0.85rem; margin-bottom:20px;"></div>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="closeStagingOverlay()">Let's Go! 🧭</button>
+  </div>
+</div>
+
 <div class="photobooth-overlay" id="avatar-capture-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
@@ -1029,8 +1129,7 @@
 <div class="xp-toast" id="xp-toast"></div>
 
 <nav>
-  <a class="logo" href="/"><span class="dot"></span>MUSO Adventures</a>
-  <a class="back-link" href="/">&larr; <span class="back-full">Back to main site</span><span class="back-short">Back</span></a>
+  <span class="logo"><span class="dot"></span>MUSO Adventures</span>
 </nav>
 
 <div class="account-bar" id="account-bar">
@@ -1210,9 +1309,26 @@
 
   function xpForLevel(level) { return (level - 1) * 100; }
 
+  // Deliberately does NOT gate on the local `currentSession` closure
+  // variable — that's just a cached copy from the last onAuthStateChange
+  // event, and if a spurious/racy event ever nulls it out (a known
+  // supabase-js multi-tab quirk: refresh tokens rotate on each use, so two
+  // tabs refreshing near-simultaneously can invalidate each other), every
+  // authenticated action would fail immediately as "signed out" without
+  // ever giving Supabase's own auto-refresh a chance to recover. Always
+  // ask the client directly instead — getSession() transparently refreshes
+  // an expired-but-still-valid token, and only returns null if the player
+  // is actually signed out.
   async function getAccessToken() {
-    if (!supabaseClient || !currentSession) return null;
+    if (!supabaseClient) return null;
     const { data } = await supabaseClient.auth.getSession();
+    if (data?.session && !currentSession) {
+      // Local state had fallen out of sync with the real session — resync
+      // it so the rest of the UI (account bar, gated actions) stops acting
+      // signed-out too.
+      currentSession = data.session;
+      renderAccountBar();
+    }
     return data?.session?.access_token ?? null;
   }
 
@@ -1552,10 +1668,10 @@
     const realVenueCta = `
       <div class="real-venue-cta">
         <div>
-          <div class="rvc-title">🎲 Chance Your Luck — Real Venue Adventure</div>
-          <div class="rvc-desc">We auto-pick the closest real spot matching your preferences as your first stop. Not feeling it? Reroll for a new one (3 free rolls per stop).</div>
+          <div class="rvc-title">🍀 Fork in the Road — Real Venue Adventure</div>
+          <div class="rvc-desc">Every stop gives you 3 real, contrasting picks near you — cozy vs. bold vs. lively. Choose your own path, or reroll for 3 new options (3 free rolls per stop).</div>
         </div>
-        <button type="button" class="rvc-btn" onclick="startRealVenueAdventure()">Start a Real Adventure</button>
+        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown()">Start a Real Adventure</button>
       </div>
       <div class="curated-routes-divider">— or pick a curated route —</div>
     `;
@@ -1580,6 +1696,38 @@
   // system above stays fully independent of onboarding, per the approved
   // plan ("alongside curated routes, not replacing them").
   let onboardingIntent = null; // 'start_adventure' | null — read once by saveOnboardingPreferences()
+
+  // Canonical entry point for starting a real-venue adventure — called both
+  // by "🚀 Start Your MUSO Adventure" (adventure-ready-overlay, right after
+  // first-time onboarding) and directly by the route picker's CTA for
+  // returning players, so the countdown ceremony is consistent either way.
+  // Mirrors startRealVenueAdventure()'s own sign-in/onboarding guard so a
+  // player who hasn't onboarded yet gets redirected there BEFORE the
+  // countdown runs, not after.
+  window.beginAdventureCountdown = async function () {
+    if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
+    if (!currentProfile?.preferences?.onboardingCompletedAt) {
+      onboardingIntent = 'start_adventure';
+      window.openOnboarding(false);
+      return;
+    }
+
+    document.getElementById('adventure-ready-overlay').setAttribute('hidden', '');
+    document.getElementById('adventure-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const overlay = document.getElementById('adventure-countdown-overlay');
+    const numEl = document.getElementById('adventure-countdown-number');
+    overlay.removeAttribute('hidden');
+    for (const step of ['3', '2', '1', "Let's Go!"]) {
+      numEl.textContent = step;
+      numEl.classList.remove('pulse');
+      void numEl.offsetWidth; // restart the pulse animation on every tick
+      numEl.classList.add('pulse');
+      await new Promise((resolve) => setTimeout(resolve, 650));
+    }
+    overlay.setAttribute('hidden', '');
+    startRealVenueAdventure();
+  };
 
   window.startRealVenueAdventure = async function () {
     if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
@@ -1801,21 +1949,57 @@
           </div>
         `;
       }
+      else if (isCurrent && isRealVenue && !s.venue_id) {
+        // Fork in the road: is_mystery is already false (handled above) and
+        // venue_id is still null — 3 contrasting real venues offered,
+        // nothing committed yet. Renders as its own full-width block rather
+        // than the slim emoji+status row every other stop state uses.
+        const choices = Array.isArray(s.offered_choices) ? s.offered_choices : [];
+        const attrEsc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const cardsHtml = choices.map((c) => {
+          const theme = c.theme || { key: 'local', label: 'Local Pick', emoji: '📍', color: '#2a2438' };
+          const safeName = (c.name || '').replace(/'/g, "\\'");
+          const meta = [c.rating != null ? `⭐ ${c.rating}` : '', c.category || ''].filter(Boolean).join(' · ');
+          return `
+            <div class="fork-choice-card" style="--theme-color:${theme.color};" data-venue-id="${c.id}"
+                 data-image-url="${attrEsc(c.image_url)}" data-theme-emoji="${attrEsc(theme.emoji)}"
+                 data-theme-label="${attrEsc(theme.label)}" data-theme-color="${attrEsc(theme.color)}"
+                 data-rating="${attrEsc(c.rating)}" data-category="${attrEsc(c.category)}">
+              <div class="fork-theme-badge">${theme.emoji} ${theme.label}</div>
+              <div class="fork-choice-name">${c.name}</div>
+              <div class="fork-choice-meta">${meta}</div>
+              <div class="fork-choice-addr">${c.address || ''}</div>
+              <button type="button" class="fork-choose-btn" onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
+            </div>
+          `;
+        }).join('');
+        return `
+          <div class="itinerary-stop fork-in-road">
+            <div class="is-body" style="flex:1 1 100%;">
+              <div class="is-name" style="margin-bottom:10px;">${i + 1}. Choose Your Path</div>
+              <div class="fork-choice-grid" data-stop-id="${s.id}">${cardsHtml}</div>
+              <div style="text-align:center; margin-top:12px;">
+                <button type="button" class="fork-reroll-btn" data-stop-id="${s.id}" onclick="rerollStop('${s.id}')">🎲 New Choices</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
       else if (isCurrent) {
+        // Committed (real-venue: venue_id set; curated: always reaches
+        // here since curated stops don't have a fork-choice state) —
+        // ready to check in. Reroll no longer applies once committed —
+        // that choice was made back at the fork.
         const safeName = (s.name || 'this stop').replace(/'/g, "\\'");
         const hasPhoto = !!pendingPhotoCaptures[s.id];
         const photoControl = hasPhoto
           ? `<span class="photo-ready-badge" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Photo ready &check;</span>`
           : `<button type="button" class="photo-add-btn" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Add photo (+${CHECKIN_PHOTO_COINS} coins)</button>`;
-        const rerollControl = isRealVenue
-          ? `<button type="button" class="reroll-btn" data-stop-id="${s.id}" onclick="rerollStop('${s.id}')">🎰 Chance Your Luck</button>`
-          : '';
         const testControl = TEST_MODE
           ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')">🧪 Test check-in (skip photo)</span>`
           : '';
         status = `
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-            ${rerollControl}
             ${photoControl}
             <button type="button" class="checkin-btn" onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
             ${testControl}
@@ -2056,7 +2240,10 @@
     // Every stop up through the current one is "known" — stops after that
     // are still unrevealed is_mystery placeholders with nothing to pin yet.
     const knownStops = firstIncompleteIdx === -1 ? stops : stops.slice(0, firstIncompleteIdx + 1);
-    const revealedStops = knownStops.filter((s) => !s.is_mystery);
+    // Only COMMITTED stops (a fork choice actually made) get a pin — a stop
+    // still sitting at "3 choices offered, nothing picked yet" has no
+    // single destination to plot.
+    const revealedStops = knownStops.filter((s) => !s.is_mystery && s.venue_id);
     if (!revealedStops.length) { wrap.setAttribute('hidden', ''); return; }
 
     wrap.removeAttribute('hidden');
@@ -2100,9 +2287,10 @@
     }
 
     // The "directions to get there" leg — from wherever the player is right
-    // now to the active, not-yet-checked-in stop (if any).
+    // now to the active, committed stop (if any). Nothing to route to yet
+    // while a stop is still sitting at the fork (venue_id null).
     const currentStop = firstIncompleteIdx !== -1 ? stops[firstIncompleteIdx] : null;
-    if (currentStop && !currentStop.is_mystery) {
+    if (currentStop && currentStop.venue_id) {
       const here = { lat: currentLat, lng: currentLng };
       bounds.extend(here);
       const legKey = `here|${currentStop.id}`;
@@ -2124,9 +2312,13 @@
 
     const hintEl = document.getElementById('adventure-progress-hint');
     if (hintEl) {
-      hintEl.textContent = currentStop
-        ? `Stop ${knownStops.length} of ${stops.length} — head to ${currentStop.name}`
-        : "Adventure complete — here's your full route.";
+      if (!currentStop) {
+        hintEl.textContent = "Adventure complete — here's your full route.";
+      } else if (currentStop.venue_id) {
+        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length} — head to ${currentStop.name}`;
+      } else {
+        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length} — choose your path above`;
+      }
     }
   }
 
@@ -2282,10 +2474,17 @@
         await loadItinerary(activeAdventure.adventureId);
       }
 
-      // Show the "here's the path to your next stop" map — skipped when a
-      // badge celebration is about to take over the screen, so the two
-      // full-screen overlays never compete for the same moment.
-      if (!(progress.newBadges && progress.newBadges.length)) {
+      // Show the "here's the path to your next stop" map — curated mode
+      // only. Real-venue mode's next stop isn't a committed venue yet at
+      // this point (advance() above just offered 3 fork choices, nothing
+      // picked), so this popup would show a misleading "Next stop: Choose
+      // Your Path" pointing at a meaningless fallback position — real-venue
+      // mode already gets its own "what's next" treatment via the
+      // persistent progress map (renderProgressMap(), refreshed by the
+      // loadItinerary() call above) and the staging-reveal overlay once a
+      // choice is actually made. Also skipped when a badge celebration is
+      // about to take over the screen, so overlays never compete.
+      if (activeAdventure.mode !== 'real_venue' && !(progress.newBadges && progress.newBadges.length)) {
         const justVisitedIdx = activeAdventure.stops.findIndex((s) => s.id === routeStopId);
         const nextStop = activeAdventure.stops[justVisitedIdx + 1];
         if (nextStop) showNextVenueMap(activeAdventure.stops[justVisitedIdx], nextStop, justVisitedIdx);
@@ -2295,29 +2494,37 @@
     }
   };
 
-  // ---------- REAL-VENUE ADVENTURE: REROLL + RETRY ----------
+  // ---------- REAL-VENUE ADVENTURE: FORK CHOICES (choose + reroll) ----------
   // Cosmetic-only: reads the stop's already-fetched candidate_pool (RLS
-  // already lets any party member read route_stops) and flashes through it
-  // at 250ms/item as a "teaser" of the other options, while the real
+  // already lets any party member read route_stops) and shuffles all 3
+  // card slots through it at 250ms/tick as a "teaser," while the real
   // reroll POST happens in parallel. Never trusted for the actual result —
   // that always comes from the server response once both this and the
-  // network call finish. Returns a stop function; no-ops harmlessly if the
-  // pool can't be fetched (falls back to the plain "Rolling…" button state).
-  function startRerollCycle(routeStopId, nameEl, descEl) {
+  // network call finish (loadItinerary() at the end always re-syncs to the
+  // true state either way, so a failed/odd cycle can never leave stale
+  // text on screen). No-ops harmlessly if the pool can't be fetched.
+  function startForkRerollCycle(routeStopId, gridEl) {
     let timer = null;
     const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const cards = Array.from(gridEl.querySelectorAll('.fork-choice-card'));
     supabaseClient.from('route_stops').select('candidate_pool').eq('id', routeStopId).single()
       .then(({ data: row }) => {
         const pool = row && Array.isArray(row.candidate_pool) ? row.candidate_pool : [];
-        if (!pool.length || !nameEl.isConnected) return;
-        let i = 0;
-        const maxTicks = Math.min(pool.length * 2, 16); // safety cap (~4s) in case the network call hangs
+        if (!pool.length || !gridEl.isConnected) return;
+        let ticks = 0;
+        const maxTicks = Math.min(Math.ceil(pool.length / 3) * 2, 16); // safety cap (~4s)
         timer = setInterval(() => {
-          const c = pool[i % pool.length];
-          nameEl.textContent = c.name;
-          descEl.textContent = `⭐ ${c.rating ?? '?'} · ${c.category || ''}`;
-          i++;
-          if (i >= maxTicks) stop();
+          const shuffled = [...pool].sort(() => Math.random() - 0.5);
+          cards.forEach((card, idx) => {
+            const c = shuffled[idx % shuffled.length];
+            if (!c) return;
+            const nameEl = card.querySelector('.fork-choice-name');
+            const metaEl = card.querySelector('.fork-choice-meta');
+            if (nameEl) nameEl.textContent = c.name;
+            if (metaEl) metaEl.textContent = [c.rating != null ? `⭐ ${c.rating}` : '', c.category || ''].filter(Boolean).join(' · ');
+          });
+          ticks++;
+          if (ticks >= maxTicks) stop();
         }, 250);
       })
       .catch(() => {});
@@ -2326,15 +2533,11 @@
 
   window.rerollStop = async function (routeStopId) {
     if (!activeAdventure || !currentSession) return;
-    const btn = document.querySelector(`.reroll-btn[data-stop-id="${routeStopId}"]`);
-    if (btn) { btn.disabled = true; btn.textContent = '🎰 Rolling…'; }
-
-    const stopEl = btn ? btn.closest('.itinerary-stop') : null;
-    const nameEl = stopEl ? stopEl.querySelector('.is-name') : null;
-    const descEl = stopEl ? stopEl.querySelector('.is-desc') : null;
-    const originalName = nameEl ? nameEl.textContent : null;
-    const originalDesc = descEl ? descEl.textContent : null;
-    const stopCycle = (nameEl && descEl) ? startRerollCycle(routeStopId, nameEl, descEl) : () => {};
+    const grid = document.querySelector(`.fork-choice-grid[data-stop-id="${routeStopId}"]`);
+    const rerollBtn = document.querySelector(`.fork-reroll-btn[data-stop-id="${routeStopId}"]`);
+    if (rerollBtn) { rerollBtn.disabled = true; rerollBtn.textContent = '🎲 Shuffling…'; }
+    if (grid) grid.querySelectorAll('.fork-choose-btn').forEach((b) => { b.disabled = true; });
+    const stopCycle = grid ? startForkRerollCycle(routeStopId, grid) : () => {};
 
     try {
       const token = await getAccessToken();
@@ -2353,26 +2556,87 @@
       stopCycle();
 
       if (!res.ok) {
-        if (nameEl && originalName != null) nameEl.textContent = originalName;
-        if (descEl && originalDesc != null) descEl.textContent = originalDesc;
         alert(data.error || (res.status === 402 ? 'Not enough Adventure Coins for another roll.' : 'Could not reroll.'));
-        if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
+        await loadItinerary(activeAdventure.adventureId); // re-syncs the grid back to its true (unchanged) choices
         return;
       }
       if (data.spent) {
-        showToast(`🎰 New venue! −${data.spent} coins`);
+        showToast(`🎲 New choices! −${data.spent} coins`);
         await refreshProfileAndBadges();
         renderAccountBar();
       } else {
-        showToast(`🎰 New venue! (${data.freeRollsRemaining} free roll${data.freeRollsRemaining === 1 ? '' : 's'} left)`);
+        showToast(`🎲 New choices! (${data.freeRollsRemaining} free roll${data.freeRollsRemaining === 1 ? '' : 's'} left)`);
       }
       await loadItinerary(activeAdventure.adventureId);
     } catch (e) {
       stopCycle();
-      if (nameEl && originalName != null) nameEl.textContent = originalName;
-      if (descEl && originalDesc != null) descEl.textContent = originalDesc;
       alert('Could not reach the reroll service: ' + e.message);
-      if (btn) { btn.disabled = false; btn.textContent = '🎰 Chance Your Luck'; }
+      await loadItinerary(activeAdventure.adventureId);
+    }
+  };
+
+  // Full-screen "here's what you got" moment right after picking a fork
+  // card — pulls photo/theme/rating straight off the card's own data-*
+  // attributes (already rendered from the same offered_choices payload),
+  // no extra fetch needed. Dismissing it reveals the itinerary + persistent
+  // map (already refreshed by loadItinerary() by the time this shows).
+  function showStagingReveal(cardEl, stopData) {
+    const photoImg = document.querySelector('#adventure-staging-overlay .staging-photo-wrap img');
+    const imageUrl = cardEl?.dataset.imageUrl || '';
+    if (imageUrl) {
+      photoImg.src = imageUrl;
+      photoImg.style.display = 'block';
+      photoImg.onerror = () => { photoImg.style.display = 'none'; };
+    } else {
+      photoImg.style.display = 'none';
+    }
+
+    const themeEmoji = cardEl?.dataset.themeEmoji || '📍';
+    const themeLabel = cardEl?.dataset.themeLabel || 'Local Pick';
+    const themeColor = cardEl?.dataset.themeColor || '#e8503f';
+    const rating = cardEl?.dataset.rating || '';
+    const category = cardEl?.dataset.category || '';
+
+    const badgeEl = document.getElementById('staging-theme-badge');
+    badgeEl.textContent = `${themeEmoji} ${themeLabel}`;
+    badgeEl.style.background = themeColor;
+    document.getElementById('staging-name').textContent = stopData?.name || '';
+    document.getElementById('staging-meta').textContent = [rating ? `⭐ ${rating}` : '', category].filter(Boolean).join(' · ');
+    document.getElementById('staging-addr').textContent = stopData?.description || '';
+
+    document.getElementById('adventure-staging-overlay').removeAttribute('hidden');
+  }
+
+  window.closeStagingOverlay = function () {
+    document.getElementById('adventure-staging-overlay').setAttribute('hidden', '');
+    document.getElementById('adventure-progress-map-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  window.chooseStop = async function (routeStopId, venueId) {
+    if (!activeAdventure || !currentSession) return;
+    const grid = document.querySelector(`.fork-choice-grid[data-stop-id="${routeStopId}"]`);
+    if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = true; });
+    // Snapshot the chosen card's data before the upcoming loadItinerary()
+    // refresh replaces the DOM out from under it.
+    const chosenCard = grid ? grid.querySelector(`.fork-choice-card[data-venue-id="${venueId}"]`) : null;
+    try {
+      const token = await getAccessToken();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action: 'choose', routeStopId, venueId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Could not choose that venue.');
+        if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = false; });
+        return;
+      }
+      showStagingReveal(chosenCard, data.stop);
+      await loadItinerary(activeAdventure.adventureId);
+    } catch (e) {
+      alert('Could not reach the game service: ' + e.message);
+      if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = false; });
     }
   };
 
@@ -2730,13 +2994,15 @@
     closeOnboarding();
 
     // If this onboarding pass was triggered by "Start a Real Adventure"
-    // (not a plain "Edit My Preferences" from the profile sheet), continue
-    // straight into starting the adventure — the venues are revealed right
-    // after preferences are set, per the intended new-player flow.
+    // (not a plain "Edit My Preferences" from the profile sheet), don't
+    // silently jump into the search — that result renders in
+    // #adventure-body, further down the page than the just-closed
+    // full-screen overlay, and with nothing drawing the eye there it reads
+    // as "nothing happened." Show an explicit, exciting "ready" moment
+    // instead — the player decides when to launch.
     if (onboardingIntent === 'start_adventure') {
       onboardingIntent = null;
-      showToast('Preferences saved! Finding your first venue…');
-      startRealVenueAdventure();
+      document.getElementById('adventure-ready-overlay').removeAttribute('hidden');
     } else {
       showToast('Preferences saved!');
     }

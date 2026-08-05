@@ -98,10 +98,14 @@ Deno.serve(async (req) => {
   // (venues is readable by any authenticated user, same RLS policy the
   // unjoined query already relied on) — the itinerary progress map needs
   // real coordinates to plot the "you are here" / "next stop" pins and the
-  // path between them.
+  // path between them. venue_id/offered_choices (real-venue-adventure,
+  // 0019_stop_choice_offers.sql) let the client tell apart the three
+  // real-venue stop states — unrevealed (is_mystery=true), a fork in the
+  // road awaiting a pick (offered_choices set, venue_id still null), or
+  // committed (venue_id set) — without a second round-trip.
   const { data: stops, error: stopsErr } = await client
     .from("route_stops")
-    .select("id, stop_order, name, description, emoji, is_mystery, venues(lat, lng, address)")
+    .select("id, stop_order, name, description, emoji, is_mystery, venue_id, offered_choices, venues(lat, lng, address)")
     .eq("route_id", routeId)
     .order("stop_order", { ascending: true });
 
