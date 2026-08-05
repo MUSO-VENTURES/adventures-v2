@@ -101,7 +101,14 @@
   }
   .px-scroll{
     position:absolute; inset:0; z-index:2; overflow-x:auto; overflow-y:hidden;
-    -webkit-overflow-scrolling:touch;
+    /* No -webkit-overflow-scrolling:touch here on purpose — that property
+       puts this element into iOS Safari's momentum-scroll compositor
+       layer, which ignores/drops the continuous rAF-driven scrollLeft
+       writes below (autoStep()) until a real touch event forces a
+       re-sync. That's what made the auto-drift only ever move once you'd
+       manually touched the strip. Safari has applied momentum scrolling
+       to all overflow:auto elements by default since iOS 13, so this
+       isn't needed for touch-scroll feel anyway. */
   }
   .px-scroll::-webkit-scrollbar{ display:none; }
   .px-spacer{ height:1px; }

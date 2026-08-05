@@ -50,7 +50,12 @@
 
   .px-scroll{
     position:absolute; inset:0; overflow-x:auto; overflow-y:hidden;
-    -webkit-overflow-scrolling:touch;
+    /* No -webkit-overflow-scrolling:touch here on purpose — it puts this
+       element into iOS Safari's momentum-scroll compositor layer, which
+       ignores/drops continuous rAF-driven scrollLeft writes until a real
+       touch event forces a re-sync, freezing auto-drift until manually
+       touched. Safari has applied momentum scrolling to all overflow:auto
+       elements by default since iOS 13, so this isn't needed. */
   }
   .px-scroll::-webkit-scrollbar{ display:none; }
   .px-spacer{ height:1px; }
