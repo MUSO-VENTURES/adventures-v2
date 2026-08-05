@@ -988,7 +988,7 @@
   <div class="photobooth-card">
     <div class="photobooth-header">
       <span>📷 Choose Your Profile Photo</span>
-      <span class="pb-close" onclick="closeAvatarCapture()">&times;</span>
+      <span class="pb-close" onclick="skipAvatarCapture()">&times;</span>
     </div>
     <div id="avatar-capture-choice">
       <div class="pb-hint" style="margin-bottom:16px;">This photo shows up as your avatar throughout the game.</div>
@@ -997,6 +997,9 @@
         <button type="button" class="pb-btn primary" onclick="startAvatarCamera()">📸 Use Camera</button>
       </div>
       <input type="file" id="avatar-file-input" accept="image/*" hidden>
+      <div style="text-align:center; margin-top:14px;">
+        <span class="test-mode-link" onclick="skipAvatarCapture()">Skip for now →</span>
+      </div>
     </div>
     <div id="avatar-capture-camera" hidden>
       <div class="pb-stage">
@@ -2706,6 +2709,19 @@
     document.getElementById('avatar-capture-overlay').setAttribute('hidden', '');
   };
 
+  // A profile photo is a nice-to-have, not a hard requirement to play —
+  // closing out of avatar capture (via the X or this explicit link) used to
+  // just hide the overlay and leave onboardingInProgress dangling, with no
+  // path forward: the next "Start Adventure" tap sent the player right back
+  // into avatar capture, forever, if the camera/upload ever failed or they
+  // simply didn't want to grant camera access. Skipping now chains straight
+  // into the preferences step, same as a successful photo save, so a player
+  // keeps the placeholder avatar and moves on.
+  window.skipAvatarCapture = function () {
+    closeAvatarCapture();
+    if (onboardingInProgress) openOnboardingPreferencesStep();
+  };
+
   window.startAvatarCamera = async function () {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert("This browser doesn't support camera access. Try the \"Choose from Library\" option instead.");
@@ -2802,10 +2818,9 @@
     if (updateError) { alert('Uploaded, but could not save to your profile: ' + updateError.message); return; }
     if (currentProfile) currentProfile.avatar_url = avatarUrl;
     renderProfileSheetHeader();
-    closeAvatarCapture();
-    // First-time setup chains straight into preferences after the photo
-    // saves — see openOnboarding()/onboardingInProgress below.
-    if (onboardingInProgress) openOnboardingPreferencesStep();
+    // Same overlay-close + onboarding-chain as skipAvatarCapture() below —
+    // a successful save advances exactly like a skip does.
+    skipAvatarCapture();
   }
 
   // ---------- ONBOARDING: PREFERENCE SETUP ----------
