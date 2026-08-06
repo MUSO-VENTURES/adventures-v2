@@ -3185,6 +3185,21 @@
   let currentLat = DEFAULT_LAT;
   let currentLng = DEFAULT_LNG;
 
+  // Testing affordance, same precedent as ?test=1 above (TEST_MODE) — lets
+  // a tester force a specific location (e.g. to check what real venues
+  // Yelp actually has near somewhere they aren't physically standing)
+  // without spoofing device GPS. Skips the real geolocation lookup
+  // entirely when present, so its async callback can't silently overwrite
+  // the override once it resolves.
+  const locOverrideParams = new URLSearchParams(location.search);
+  const overrideLat = parseFloat(locOverrideParams.get('lat'));
+  const overrideLng = parseFloat(locOverrideParams.get('lng'));
+  const hasLocOverride = Number.isFinite(overrideLat) && Number.isFinite(overrideLng);
+  if (hasLocOverride) {
+    currentLat = overrideLat;
+    currentLng = overrideLng;
+  }
+
   function requestGeolocation(){
     if (!('geolocation' in navigator)) return;
     navigator.geolocation.getCurrentPosition(
@@ -3196,7 +3211,7 @@
       { timeout: 8000, maximumAge: 5 * 60 * 1000 },
     );
   }
-  requestGeolocation();
+  if (!hasLocOverride) requestGeolocation();
 
   // ---------- AGE GATE ----------
   function calculateAgeClient(birthDateStr){
