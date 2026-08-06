@@ -1738,6 +1738,14 @@
 
     const body = document.getElementById('adventure-body');
     body.innerHTML = '<div class="empty-state">🎲 Chancing your luck — finding your first real venue…</div>';
+    // beginAdventureCountdown() already scrolled to #adventure-section
+    // before the countdown played, but the full-screen countdown overlay
+    // sitting on top for ~2.6s gives plenty of time for scroll position to
+    // drift (address bar collapsing/expanding on mobile, a stray
+    // background touch-scroll) — re-anchor on the body specifically once
+    // this is the thing actually on screen, so the result is never left
+    // rendering below the fold with nothing drawing the eye to it.
+    body.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     try {
       // Same "don't trust the stale currentSession closure" re-fetch as
