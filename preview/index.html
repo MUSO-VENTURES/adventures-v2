@@ -1382,6 +1382,35 @@
     return partyId;
   }
 
+  // Same cross-context session drift as withRlsRetry() above, but for the
+  // edge functions' own 401 "session expired" response instead of a
+  // Postgres RLS rejection — every in-game action (choose/reroll/check-in/
+  // unlock/advance) hits this fetch pattern and was failing the exact same
+  // way startAdventure()/startRealVenueAdventure() did, just with no retry
+  // at all: a stale-but-locally-fresh-looking token would 401, and the
+  // caller's only option was to alert() and revert the UI to whatever it
+  // showed before — e.g. chooseStop() snapping back to the 3-choice grid
+  // instead of ever advancing. Forces a real refreshSession() and retries
+  // once on a 401 before handing the caller a real failure.
+  async function postEdgeFunction(name, body) {
+    async function attempt() {
+      const token = await getAccessToken();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    }
+    let result = await attempt();
+    if (result.res.status === 401) {
+      const { error } = await supabaseClient.auth.refreshSession();
+      if (!error) result = await attempt();
+    }
+    return result;
+  }
+
   // Includes birth_date/age_confirmed_at/disclaimer_accepted_at (added in
   // 0004_venue_search_and_age_gate.sql, previously unused on this page) so
   // a signed-in player who already completed the gate once never has to
@@ -1557,18 +1586,8 @@
       document.getElementById('signin-email')?.focus();
       return;
     }
-    const token = await getAccessToken();
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/unlock-feature`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({ feature }),
-      });
-      const data = await res.json();
+      const { res, data } = await postEdgeFunction('unlock-feature', { feature });
       if (!res.ok) { alert(data.error || 'Could not unlock that yet.'); return; }
       await refreshProfileAndBadges();
       renderAccountBar();
@@ -1728,13 +1747,7 @@
 
       const partyId = await withRlsRetry(() => ensurePartyId(userId));
 
-      const token = await getAccessToken();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-        body: JSON.stringify({ action: 'init', partyId, lat: currentLat, lng: currentLng }),
-      });
-      const data = await res.json();
+      const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'init', partyId, lat: currentLat, lng: currentLng });
       if (!res.ok) {
         body.innerHTML = `<div class="empty-state">Couldn't start a real-venue adventure: ${data.error || res.statusText}</div>`;
         return;
@@ -1819,10 +1832,23 @@
       return;
     }
 
-    const token = await getAccessToken();
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/route-detail?routeId=${adv.route_id}`, {
-      headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
+    // Called after every successful action (choose/reroll/check-in) to
+    // refresh state — a 401 here right after e.g. chooseStop() succeeded
+    // server-side used to just show an error and bail, leaving whatever
+    // was on screen before (the old 3-choice grid) in place, looking like
+    // the choice never took effect. Same forced-refresh-and-retry-once as
+    // postEdgeFunction() above.
+    let res = await fetch(`${SUPABASE_URL}/functions/v1/route-detail?routeId=${adv.route_id}`, {
+      headers: { 'Authorization': `Bearer ${await getAccessToken()}`, 'apikey': SUPABASE_ANON_KEY },
     });
+    if (res.status === 401) {
+      const { error } = await supabaseClient.auth.refreshSession();
+      if (!error) {
+        res = await fetch(`${SUPABASE_URL}/functions/v1/route-detail?routeId=${adv.route_id}`, {
+          headers: { 'Authorization': `Bearer ${await getAccessToken()}`, 'apikey': SUPABASE_ANON_KEY },
+        });
+      }
+    }
     const routeData = await res.json();
     if (!res.ok) {
       body.innerHTML = `<div class="empty-state">Couldn't load the itinerary: ${routeData.error || res.statusText}</div>`;
@@ -2333,7 +2359,6 @@
 
   window.checkInStop = async function (routeStopId) {
     if (!activeAdventure || !currentSession) return;
-    const token = await getAccessToken();
 
     // If the player captured a photo for this stop, upload it first so we
     // can pass its public URL along with the check-in — the checkin
@@ -2359,12 +2384,7 @@
     }
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/checkin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-        body: JSON.stringify({ adventureId: activeAdventure.adventureId, routeStopId, photoUrl }),
-      });
-      const data = await res.json();
+      const { res, data } = await postEdgeFunction('checkin', { adventureId: activeAdventure.adventureId, routeStopId, photoUrl });
       if (!res.ok) { alert(data.error || 'Could not check in.'); return; }
 
       if (pendingPhotoCaptures[routeStopId]) {
@@ -2415,11 +2435,7 @@
       // already succeeded either way.
       if (activeAdventure.mode === 'real_venue') {
         try {
-          await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-            body: JSON.stringify({ action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng }),
-          });
+          await postEdgeFunction('real-venue-adventure', { action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng });
         } catch (e) {}
         await loadItinerary(activeAdventure.adventureId);
       }
@@ -2490,19 +2506,13 @@
     const stopCycle = grid ? startForkRerollCycle(routeStopId, grid) : () => {};
 
     try {
-      const token = await getAccessToken();
       // Keep the cycling animation on screen for at least ~1.5s regardless
       // of how fast the network responds — Promise.all waits for whichever
       // finishes last, so a slow reroll just keeps it spinning longer.
-      const [res] = await Promise.all([
-        fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-          body: JSON.stringify({ action: 'reroll', routeStopId }),
-        }),
+      const [{ res, data }] = await Promise.all([
+        postEdgeFunction('real-venue-adventure', { action: 'reroll', routeStopId }),
         new Promise((resolve) => setTimeout(resolve, 1500)),
       ]);
-      const data = await res.json();
       stopCycle();
 
       if (!res.ok) {
@@ -2570,13 +2580,7 @@
     // refresh replaces the DOM out from under it.
     const chosenCard = grid ? grid.querySelector(`.fork-choice-card[data-venue-id="${venueId}"]`) : null;
     try {
-      const token = await getAccessToken();
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-        body: JSON.stringify({ action: 'choose', routeStopId, venueId }),
-      });
-      const data = await res.json();
+      const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'choose', routeStopId, venueId });
       if (!res.ok) {
         alert(data.error || 'Could not choose that venue.');
         if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = false; });
@@ -2593,12 +2597,7 @@
   window.retryAdvance = async function () {
     if (!activeAdventure || !currentSession) return;
     try {
-      const token = await getAccessToken();
-      await fetch(`${SUPABASE_URL}/functions/v1/real-venue-adventure`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY },
-        body: JSON.stringify({ action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng }),
-      });
+      await postEdgeFunction('real-venue-adventure', { action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng });
     } catch (e) {}
     await loadItinerary(activeAdventure.adventureId);
   };
