@@ -3450,13 +3450,24 @@
     let inView = false;
     let rafId = null;
 
+    // Tracked separately from pxScroll.scrollLeft on purpose — Safari
+    // rounds scrollLeft to a whole pixel on both read AND write, unlike
+    // Chrome/Firefox which keep sub-pixel precision. AUTO_SPEED is 0.35px
+    // per frame, so `pxScroll.scrollLeft = pxScroll.scrollLeft + 0.35`
+    // reads back the same rounded integer every frame in Safari and never
+    // actually advances — the strip just sits there, present but frozen.
+    // Accumulating in a plain JS float instead and only rounding at the
+    // final DOM write keeps the true position precise regardless of what
+    // the browser reports back.
+    let autoScrollPos = pxScroll.scrollLeft;
+
     function autoStep(){
       if (!autoPaused) {
         const max = pxScroll.scrollWidth - pxScroll.clientWidth;
-        let next = pxScroll.scrollLeft + AUTO_SPEED * autoDir;
-        if (next >= max) { next = max; autoDir = -1; }
-        else if (next <= 0) { next = 0; autoDir = 1; }
-        pxScroll.scrollLeft = next;
+        autoScrollPos += AUTO_SPEED * autoDir;
+        if (autoScrollPos >= max) { autoScrollPos = max; autoDir = -1; }
+        else if (autoScrollPos <= 0) { autoScrollPos = 0; autoDir = 1; }
+        pxScroll.scrollLeft = autoScrollPos;
       }
       rafId = inView ? requestAnimationFrame(autoStep) : null;
     }
