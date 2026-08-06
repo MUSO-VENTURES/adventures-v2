@@ -1693,28 +1693,38 @@
   // player who hasn't onboarded yet gets redirected there BEFORE the
   // countdown runs, not after.
   window.beginAdventureCountdown = async function () {
-    if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
-    if (!currentProfile?.preferences?.onboardingCompletedAt) {
-      onboardingIntent = 'start_adventure';
-      window.openOnboarding(false);
-      return;
-    }
+    // Wrapped in try/catch on purpose: this used to have no error handling
+    // at all, so any unexpected exception here (a missing element, a
+    // rejected promise) died as a silent unhandled rejection — the button
+    // visibly did nothing, with no error anywhere to diagnose from. Now it
+    // surfaces whatever actually went wrong instead of vanishing.
+    try {
+      if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
+      if (!currentProfile?.preferences?.onboardingCompletedAt) {
+        onboardingIntent = 'start_adventure';
+        window.openOnboarding(false);
+        return;
+      }
 
-    document.getElementById('adventure-ready-overlay').setAttribute('hidden', '');
-    document.getElementById('adventure-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('adventure-ready-overlay').setAttribute('hidden', '');
+      document.getElementById('adventure-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    const overlay = document.getElementById('adventure-countdown-overlay');
-    const numEl = document.getElementById('adventure-countdown-number');
-    overlay.removeAttribute('hidden');
-    for (const step of ['3', '2', '1', "Let's Go!"]) {
-      numEl.textContent = step;
-      numEl.classList.remove('pulse');
-      void numEl.offsetWidth; // restart the pulse animation on every tick
-      numEl.classList.add('pulse');
-      await new Promise((resolve) => setTimeout(resolve, 650));
+      const overlay = document.getElementById('adventure-countdown-overlay');
+      const numEl = document.getElementById('adventure-countdown-number');
+      overlay.removeAttribute('hidden');
+      for (const step of ['3', '2', '1', "Let's Go!"]) {
+        numEl.textContent = step;
+        numEl.classList.remove('pulse');
+        void numEl.offsetWidth; // restart the pulse animation on every tick
+        numEl.classList.add('pulse');
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+      overlay.setAttribute('hidden', '');
+      startRealVenueAdventure();
+    } catch (e) {
+      document.getElementById('adventure-countdown-overlay')?.setAttribute('hidden', '');
+      alert('Could not start the adventure: ' + e.message);
     }
-    overlay.setAttribute('hidden', '');
-    startRealVenueAdventure();
   };
 
   window.startRealVenueAdventure = async function () {
