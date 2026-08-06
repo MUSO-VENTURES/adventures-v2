@@ -1342,20 +1342,24 @@
   }
 
   // A session that passed getFreshSession()'s local expires_at check can
-  // still get rejected server-side as "new row violates row-level security
-  // policy" — e.g. the token was issued in a different browser context
-  // (tapping a magic link opens Gmail's own in-app browser, which has its
-  // own separate storage from whatever the player later plays in) and the
-  // two have drifted out of sync in a way plain client-side expiry math
-  // can't catch. Rather than surfacing that as a dead end, force one real
-  // refreshSession() and retry the call once before giving up — this is
-  // what "expired partway through" actually meant in practice.
+  // still get rejected server-side — e.g. the token was issued in a
+  // different browser context (tapping a magic link opens Gmail's own
+  // in-app browser, which has its own separate storage from whatever the
+  // player later plays in) and the two have drifted out of sync in a way
+  // plain client-side expiry math can't catch. That can surface as an
+  // explicit RLS violation on an INSERT ("new row violates row-level
+  // security policy"), but just as often it's a plain JWT/auth error on a
+  // SELECT with a completely different shape — deliberately not trying to
+  // pattern-match every possible error text here, since fn() is only ever
+  // one of the small set of token-sensitive calls below where a spurious
+  // extra retry is harmless. Force one real refreshSession() and retry
+  // once before giving up — this is what "expired partway through" (and
+  // its silent-revert sibling, a stale-token SELECT read back as "this
+  // adventure/party doesn't exist") actually meant in practice.
   async function withRlsRetry(fn) {
     try {
       return await fn();
     } catch (e) {
-      const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
-      if (!isRlsError) throw e;
       const { data, error } = await supabaseClient.auth.refreshSession();
       if (error || !data?.session) throw e;
       currentSession = data.session;
@@ -1367,7 +1371,14 @@
   // current player's party, creating one if this is their first adventure"
   // and had identical copies of this logic.
   async function ensurePartyId(userId) {
-    let { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
+    // Same discarded-error trap as loadItinerary()'s adventures lookup —
+    // a stale-token read failure here (error set, data null) looks
+    // identical to "genuinely no party yet" if the error is ignored,
+    // silently creating a brand new duplicate party instead of finding
+    // the player's existing one. Throwing lets withRlsRetry() (the only
+    // caller) refresh and retry this whole function properly.
+    const { data: memberRows, error: memberLookupErr } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
+    if (memberLookupErr) throw memberLookupErr;
     let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
     if (!partyId) {
       const { data: party, error: partyErr } = await supabaseClient
@@ -1843,7 +1854,28 @@
     const body = document.getElementById('adventure-body');
     body.innerHTML = '<div class="empty-state">Loading your itinerary…</div>';
 
-    const { data: adv } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle();
+    // Discarding `error` here and treating any failure the same as "this
+    // adventure doesn't exist" was the actual bug behind "start an
+    // adventure, countdown plays, then it just bounces back to the same
+    // picker screen with nothing on screen explaining why": a stale-token
+    // auth hiccup on this specific read (same underlying session drift as
+    // everywhere else) produces `data: null` with an `error` set, not a
+    // genuinely empty result — and this silently treated the two as
+    // identical, wiping the just-saved adventureId and reverting to
+    // renderRoutePicker() with zero feedback. Retry once on a real error
+    // before falling back to "not found", and only take the "not found"
+    // path when there's truly no error at all.
+    let { data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle();
+    if (advLookupErr) {
+      const { error: refreshErr } = await supabaseClient.auth.refreshSession();
+      if (!refreshErr) {
+        ({ data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle());
+      }
+    }
+    if (advLookupErr) {
+      body.innerHTML = `<div class="empty-state">Couldn't load your adventure: ${advLookupErr.message}</div>`;
+      return;
+    }
     if (!adv) {
       try { localStorage.removeItem(adventureStorageKey(currentSession.user.id)); } catch (e) {}
       await renderRoutePicker();
