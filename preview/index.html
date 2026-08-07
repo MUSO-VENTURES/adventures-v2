@@ -1223,6 +1223,31 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
+  // Restores a query string (e.g. ?test=1&lat=..&lng=..) that
+  // sendMagicLink() deliberately stripped off the magic-link redirect URL
+  // before sending — see the comment there. Runs first, before anything
+  // else reads location.search (TEST_MODE, the lat/lng override below),
+  // and merges rather than overwrites so it can't clobber whatever
+  // Supabase's own auth redirect put in the query string or hash (a PKCE
+  // ?code=... or an implicit-flow #access_token=... fragment).
+  (function restorePendingQuery(){
+    try {
+      const saved = sessionStorage.getItem('musoPendingQuery');
+      if (!saved) return;
+      sessionStorage.removeItem('musoPendingQuery');
+      const current = new URLSearchParams(location.search);
+      const toRestore = new URLSearchParams(saved);
+      let changed = false;
+      for (const [k, v] of toRestore) {
+        if (!current.has(k)) { current.set(k, v); changed = true; }
+      }
+      if (changed) {
+        const qs = current.toString();
+        history.replaceState({}, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+      }
+    } catch (e) {}
+  })();
+
   // ---------- CONFIG ----------
   // Fill in your project's anon key from Supabase > Project Settings > API,
   // and your Google Maps JavaScript API key (Google Cloud Console > APIs &
@@ -1548,9 +1573,22 @@
     const email = emailInput.value.trim();
     if (!email) return;
     msg.textContent = 'Sending link…';
+    // Redirect to the clean base URL, not window.location.href —
+    // Supabase's Redirect URLs allowlist can reject a redirect_to that
+    // doesn't exactly match a configured pattern, and a query string like
+    // ?test=1&lat=..&lng=.. tacked onto whatever URL the player happened
+    // to be on when they requested the link was silently breaking
+    // magic-link sign-in for exactly that case — it'd come back to a
+    // rejected/fallback redirect instead of an authenticated session,
+    // which just looks like "the sign-in link doesn't work." Stash the
+    // query string and restore it after landing back (see
+    // restorePendingQuery() at the top of this file) instead of losing it.
+    try {
+      if (location.search) sessionStorage.setItem('musoPendingQuery', location.search);
+    } catch (e) {}
     const { error } = await supabaseClient.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href },
+      options: { emailRedirectTo: location.origin + location.pathname },
     });
     if (!error) {
       msg.textContent = 'Check your email for a sign-in link.';
