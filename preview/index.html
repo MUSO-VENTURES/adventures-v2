@@ -3154,6 +3154,18 @@
 
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       currentSession = session;
+      // TOKEN_REFRESHED fires on every routine background/forced token
+      // refresh — nothing about the player's profile, gate state, or
+      // in-progress adventure actually changed, only the token did. Full
+      // re-rendering here used to race against whatever the player's own
+      // action was rendering into #adventure-body at that exact moment
+      // (start an adventure, countdown plays, then loadAdventureSection()
+      // — triggered by one of the many refreshSession() calls this
+      // session's fixes added — wipes it straight back to "Loading…" and
+      // the route picker, mid-flight). Just keeping currentSession current
+      // is enough; only a real sign-in/out/user-update needs the full
+      // reload below.
+      if (_event === 'TOKEN_REFRESHED') return;
       await refreshProfileAndBadges();
       renderAccountBar();
       await applyGateStateFromProfile();
