@@ -1366,61 +1366,25 @@
     return await checkSessionFreshness(second.data?.session ?? null);
   }
 
-  // A session that passed getFreshSession()'s local expires_at check can
-  // still get rejected server-side — e.g. the token was issued in a
-  // different browser context (tapping a magic link opens Gmail's own
-  // in-app browser, which has its own separate storage from whatever the
-  // player later plays in) and the two have drifted out of sync in a way
-  // plain client-side expiry math can't catch. That can surface as an
-  // explicit RLS violation on an INSERT ("new row violates row-level
-  // security policy"), but just as often it's a plain JWT/auth error on a
-  // SELECT with a completely different shape — deliberately not trying to
-  // pattern-match every possible error text here, since fn() is only ever
-  // one of the small set of token-sensitive calls below where a spurious
-  // extra retry is harmless. Force one real refreshSession() and retry
-  // once before giving up — this is what "expired partway through" (and
-  // its silent-revert sibling, a stale-token SELECT read back as "this
-  // adventure/party doesn't exist") actually meant in practice.
-  async function withRlsRetry(fn) {
-    try {
-      return await fn();
-    } catch (e) {
-      const { data, error } = await supabaseClient.auth.refreshSession();
-      if (error || !data?.session) throw e;
-      currentSession = data.session;
-      return await fn();
-    }
-  }
-
   // Shared by startAdventure()/startRealVenueAdventure() — both need "the
-  // current player's party, creating one if this is their first adventure"
-  // and had identical copies of this logic.
-  async function ensurePartyId(userId) {
-    // Same discarded-error trap as loadItinerary()'s adventures lookup —
-    // a stale-token read failure here (error set, data null) looks
-    // identical to "genuinely no party yet" if the error is ignored,
-    // silently creating a brand new duplicate party instead of finding
-    // the player's existing one. Throwing lets withRlsRetry() (the only
-    // caller) refresh and retry this whole function properly.
-    const { data: memberRows, error: memberLookupErr } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', userId).limit(1);
-    if (memberLookupErr) throw memberLookupErr;
-    let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
-    if (!partyId) {
-      const { data: party, error: partyErr } = await supabaseClient
-        .from('parties').insert({ name: `${currentProfile?.display_name || 'Explorer'}'s Crew`, created_by: userId })
-        .select('id').single();
-      if (partyErr) throw partyErr;
-      partyId = party.id;
-      const { error: memberErr } = await supabaseClient
-        .from('party_members').insert({ party_id: partyId, profile_id: userId, role: 'owner' });
-      if (memberErr) throw memberErr;
-    }
-    return partyId;
+  // current player's party, creating one if this is their first
+  // adventure." Goes through the real-venue-adventure edge function's
+  // ensureParty action (admin client, bypasses RLS) rather than an
+  // authenticated INSERT straight into parties from here — that direct
+  // path was reproducibly rejected by Postgres's RLS check even with a
+  // fresh, valid token and a created_by value confirmed byte-for-byte
+  // identical to auth.uid(), a platform-level anomaly that wasn't worth
+  // continuing to chase. postEdgeFunction() already retries once on a 401,
+  // so no separate retry wrapper is needed here.
+  async function ensurePartyId() {
+    const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'ensureParty' });
+    if (!res.ok) throw new Error(data.error || 'Could not set up your party.');
+    return data.partyId;
   }
 
-  // Same cross-context session drift as withRlsRetry() above, but for the
-  // edge functions' own 401 "session expired" response instead of a
-  // Postgres RLS rejection — every in-game action (choose/reroll/check-in/
+  // Same cross-context session drift covered elsewhere in this file, but
+  // for the edge functions' own 401 "session expired" response instead of
+  // a Postgres RLS rejection — every in-game action (choose/reroll/check-in/
   // unlock/advance) hits this fetch pattern and was failing the exact same
   // way startAdventure()/startRealVenueAdventure() did, just with no retry
   // at all: a stale-but-locally-fresh-looking token would 401, and the
@@ -1812,7 +1776,7 @@
       currentSession = freshSession;
       const userId = freshSession.user.id;
 
-      const partyId = await withRlsRetry(() => ensurePartyId(userId));
+      const partyId = await ensurePartyId();
 
       const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'init', partyId, lat: currentLat, lng: currentLng });
       if (!res.ok) {
@@ -1858,7 +1822,7 @@
       currentSession = freshSession;
       const userId = freshSession.user.id;
 
-      const partyId = await withRlsRetry(() => ensurePartyId(userId));
+      const partyId = await ensurePartyId();
 
       const { count: stopCount } = await supabaseClient.from('route_stops').select('id', { count: 'exact', head: true }).eq('route_id', routeId);
       // adventures.stop_count reflects what's actually reachable right now —

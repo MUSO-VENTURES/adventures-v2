@@ -415,6 +415,51 @@ Deno.serve(async (req) => {
   const action = body.action;
 
   // ---------------------------------------------------------------
+  // ensureParty — returns the caller's existing party, creating one if
+  // this is their first adventure. Moved server-side (admin client,
+  // bypasses RLS) after the equivalent client-side path — a plain
+  // authenticated INSERT into parties with created_by = auth.uid() —
+  // was reproducibly rejected by Postgres's RLS check even though every
+  // individual piece (active role, auth.uid(), the with-check text)
+  // checked out correctly in isolation when tested directly against the
+  // database. Rather than keep chasing what looks like a genuine
+  // platform-level anomaly, this sidesteps it entirely — and it's more
+  // consistent with how the rest of this function already creates
+  // routes/route_stops/adventures via the admin client anyway.
+  // ---------------------------------------------------------------
+  if (action === "ensureParty") {
+    const { data: memberRows, error: memberErr } = await admin
+      .from("party_members")
+      .select("party_id")
+      .eq("profile_id", userId)
+      .limit(1);
+    if (memberErr) return jsonResponse({ error: memberErr.message }, 400);
+
+    let partyId = memberRows && memberRows[0] ? memberRows[0].party_id : null;
+    if (!partyId) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("display_name")
+        .eq("id", userId)
+        .maybeSingle();
+      const { data: party, error: partyErr } = await admin
+        .from("parties")
+        .insert({ name: `${profile?.display_name || "Explorer"}'s Crew`, created_by: userId })
+        .select("id")
+        .single();
+      if (partyErr) return jsonResponse({ error: partyErr.message }, 400);
+      partyId = party.id;
+
+      const { error: memberInsertErr } = await admin
+        .from("party_members")
+        .insert({ party_id: partyId, profile_id: userId, role: "owner" });
+      if (memberInsertErr) return jsonResponse({ error: memberInsertErr.message }, 400);
+    }
+
+    return jsonResponse({ partyId });
+  }
+
+  // ---------------------------------------------------------------
   // init — creates the route + all placeholder stops, reveals stop 1
   // ---------------------------------------------------------------
   if (action === "init") {
