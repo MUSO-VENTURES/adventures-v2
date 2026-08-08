@@ -514,17 +514,47 @@
      "cozy vs. adventurous vs. nightlife" should read as visually distinct
      at a glance, not just in the copy. */
   .itinerary-stop.fork-in-road{ align-items:flex-start; }
-  .fork-choice-grid{
-    display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px;
+  /* Mood-first stacked deck: 3 cards start collapsed (icon + category only,
+     fanned like a hand of cards) so the player picks a mood before seeing
+     any venue — tapping one expands it into the full detail card while the
+     other two shrink into a small tab row tucked below, still tappable to
+     switch which one is expanded. Only one is ever expanded at a time. */
+  .fork-stack{ display:flex; flex-direction:column; gap:10px; width:100%; }
+  .fork-stack-deck{
+    display:flex; flex-direction:column; gap:0; position:relative; min-height:220px;
   }
-  .fork-choice-card{
-    background:var(--card); border-radius:16px; padding:16px;
+  .fork-stack-card{
+    background:var(--card); border-radius:16px;
     border-top:4px solid var(--theme-color, var(--coral));
-    display:flex; flex-direction:column; gap:5px;
     box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.07);
-    transition:transform .15s;
+    cursor:pointer; transition:transform .25s cubic-bezier(.2,.8,.2,1), margin .25s ease, opacity .2s ease;
   }
-  .fork-choice-card:hover{ transform:translateY(-2px); }
+  /* Collapsed: a fanned deck — each card offset/rotated a bit more than the
+     last, only the mood icon+label showing, absolutely stacked so tapping
+     any of them (even a partially-hidden one) still works. */
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card{
+    position:absolute; inset:0 8% auto 8%; height:64px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(1){ top:0; z-index:3; transform:rotate(-2deg); }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(2){ top:26px; z-index:2; transform:rotate(1.5deg); }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(3){ top:52px; z-index:1; transform:rotate(-1deg); }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:hover{ transform:translateY(-3px) rotate(0deg); }
+  .fork-stack-mood-icon{ font-size:1.4rem; }
+  .fork-stack-mood-label{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.9rem; }
+  /* Expanded: full detail card up top, full width, straightened. */
+  .fork-stack-deck.has-expanded{ display:flex; flex-direction:column; gap:10px; min-height:0; }
+  .fork-stack-card.expanded{
+    padding:16px; display:flex; flex-direction:column; gap:5px; cursor:default;
+    animation:forkCardDeal .3s ease-out;
+  }
+  .fork-stack-deck.has-expanded .fork-stack-card:not(.expanded){
+    height:52px; padding:0 16px; display:flex; flex-direction:row; align-items:center; gap:8px;
+    opacity:0.75;
+  }
+  .fork-stack-deck.has-expanded .fork-stack-card:not(.expanded):hover{ opacity:1; }
+  .fork-stack-tabs{ display:flex; gap:8px; }
+  .fork-stack-tabs .fork-stack-card{ flex:1; }
   .fork-theme-badge{
     display:inline-flex; align-self:flex-start; align-items:center; gap:5px;
     background:var(--theme-color, var(--coral)); color:#fff;
@@ -533,19 +563,24 @@
   .fork-choice-name{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; margin-top:4px; }
   .fork-choice-meta{ font-size:0.8rem; opacity:0.75; }
   .fork-choice-addr{ font-size:0.75rem; opacity:0.55; min-height:1.1em; }
+  .fork-choice-actions{ display:flex; gap:8px; margin-top:8px; }
   .fork-choose-btn{
-    margin-top:8px; background:var(--theme-color, var(--coral)); color:#fff; border:none;
+    flex:1; background:var(--theme-color, var(--coral)); color:#fff; border:none;
     padding:10px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
     font-size:0.8rem; cursor:pointer; transition:filter .15s;
   }
   .fork-choose-btn:hover{ filter:brightness(1.1); }
   .fork-choose-btn:disabled{ opacity:0.5; cursor:default; }
-  .fork-reroll-btn{
+  .fork-spin-btn{
     background:transparent; border:2px solid rgba(var(--shadow-rgb),0.25); color:var(--ink);
-    padding:9px 22px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
-    font-size:0.82rem; cursor:pointer;
+    padding:9px 16px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.8rem; cursor:pointer; white-space:nowrap;
   }
-  .fork-reroll-btn:disabled{ opacity:0.5; cursor:default; }
+  .fork-spin-btn:disabled{ opacity:0.5; cursor:default; }
+  .fork-spin-btn.spinning{ animation:forkSpinPulse .5s ease-in-out infinite; }
+  @keyframes forkSpinPulse{
+    0%,100%{ opacity:1; } 50%{ opacity:0.55; }
+  }
 
   .itinerary-list{ display:flex; flex-direction:column; gap:10px; }
   .itinerary-stop{
@@ -618,12 +653,13 @@
     padding:5px 12px; border-radius:999px; font-size:0.78rem; font-weight:700;
   }
 
-  /* Fork-choice cards "deal in" staggered on every render — initial reveal
-     and every reroll settle both benefit from the same flourish. */
-  .fork-choice-card{ animation:forkCardDeal .4s ease-out backwards; }
-  .fork-choice-card:nth-child(1){ animation-delay:0ms; }
-  .fork-choice-card:nth-child(2){ animation-delay:120ms; }
-  .fork-choice-card:nth-child(3){ animation-delay:240ms; }
+  /* Fork-choice cards "deal in" staggered on first render — the collapsed
+     fan on initial reveal, and the single expanded card whenever a mood
+     is picked, both benefit from the same flourish. */
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card{ animation:forkCardDeal .4s ease-out backwards; }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(1){ animation-delay:0ms; }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(2){ animation-delay:120ms; }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(3){ animation-delay:240ms; }
   @keyframes forkCardDeal{
     0%{ transform:translateY(14px) scale(0.94); opacity:0; }
     100%{ transform:translateY(0) scale(1); opacity:1; }
@@ -1299,6 +1335,7 @@
   let currentBadgeKeys = new Set(); // badge_key set for the signed-in player
   let activeAdventure = null;  // { adventureId, routeId, route, stops, doneIds } once an adventure is underway
   let celebrationQueue = [];   // badges waiting to be celebrated, one modal at a time
+  let expandedForkIndex = {};  // routeStopId -> which of the 3 offered choices is expanded (undefined = none yet, showing the collapsed mood deck)
 
   function xpForLevel(level) { return (level - 1) * 100; }
 
@@ -1982,34 +2019,67 @@
       else if (isCurrent && isRealVenue && !s.venue_id) {
         // Fork in the road: is_mystery is already false (handled above) and
         // venue_id is still null — 3 contrasting real venues offered,
-        // nothing committed yet. Renders as its own full-width block rather
-        // than the slim emoji+status row every other stop state uses.
+        // nothing committed yet. Starts as a collapsed mood-only deck (icon
+        // + category per card, fanned like a hand of cards) so the player
+        // picks a vibe before seeing any venue — tapping one expands it
+        // into the full detail card, moving the other two into a small tab
+        // row underneath so switching moods doesn't lose the other options.
+        // expandedForkIndex tracks which slot is expanded per stop, and
+        // survives re-renders (loadItinerary() rebuilds this whole list on
+        // every checkin/choose/spin).
         const choices = Array.isArray(s.offered_choices) ? s.offered_choices : [];
         const attrEsc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-        const cardsHtml = choices.map((c) => {
+        const expandedIdx = expandedForkIndex[s.id];
+        const hasExpanded = expandedIdx != null && choices[expandedIdx];
+
+        const cardAttrs = (c, theme) => `data-venue-id="${c.id}" data-image-url="${attrEsc(c.image_url)}" ` +
+          `data-theme-emoji="${attrEsc(theme.emoji)}" data-theme-label="${attrEsc(theme.label)}" ` +
+          `data-theme-color="${attrEsc(theme.color)}" data-rating="${attrEsc(c.rating)}" data-category="${attrEsc(c.category)}"`;
+
+        const expandedCardHtml = (c) => {
           const theme = c.theme || { key: 'local', label: 'Local Pick', emoji: '📍', color: '#2a2438' };
           const safeName = (c.name || '').replace(/'/g, "\\'");
           const meta = [c.rating != null ? `⭐ ${c.rating}` : '', c.category || ''].filter(Boolean).join(' · ');
           return `
-            <div class="fork-choice-card" style="--theme-color:${theme.color};" data-venue-id="${c.id}"
-                 data-image-url="${attrEsc(c.image_url)}" data-theme-emoji="${attrEsc(theme.emoji)}"
-                 data-theme-label="${attrEsc(theme.label)}" data-theme-color="${attrEsc(theme.color)}"
-                 data-rating="${attrEsc(c.rating)}" data-category="${attrEsc(c.category)}">
+            <div class="fork-stack-card expanded" style="--theme-color:${theme.color};" ${cardAttrs(c, theme)}>
               <div class="fork-theme-badge">${theme.emoji} ${theme.label}</div>
               <div class="fork-choice-name">${c.name}</div>
               <div class="fork-choice-meta">${meta}</div>
               <div class="fork-choice-addr">${c.address || ''}</div>
-              <button type="button" class="fork-choose-btn" onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
+              <div class="fork-choice-actions">
+                <button type="button" class="fork-choose-btn" onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
+                <button type="button" class="fork-spin-btn" data-stop-id="${s.id}" onclick="spinForkCard('${s.id}')">🎲 Spin</button>
+              </div>
             </div>
           `;
-        }).join('');
+        };
+
+        const tabCardHtml = (c, idx) => {
+          const theme = c.theme || { key: 'local', label: 'Local Pick', emoji: '📍', color: '#2a2438' };
+          return `
+            <div class="fork-stack-card" style="--theme-color:${theme.color};" ${cardAttrs(c, theme)}
+                 onclick="expandForkCard('${s.id}', ${idx})">
+              <span class="fork-stack-mood-icon">${theme.emoji}</span>
+              <span class="fork-stack-mood-label">${theme.label}</span>
+            </div>
+          `;
+        };
+
+        let deckHtml;
+        if (hasExpanded) {
+          const otherIdxs = choices.map((c, idx) => idx).filter((idx) => idx !== expandedIdx);
+          deckHtml = expandedCardHtml(choices[expandedIdx])
+            + `<div class="fork-stack-tabs">${otherIdxs.map((idx) => tabCardHtml(choices[idx], idx)).join('')}</div>`;
+        } else {
+          deckHtml = choices.map((c, idx) => tabCardHtml(c, idx)).join('');
+        }
+
         return `
           <div class="itinerary-stop fork-in-road">
             <div class="is-body" style="flex:1 1 100%;">
               <div class="is-name" style="margin-bottom:10px;">${i + 1}. Choose Your Path</div>
-              <div class="fork-choice-grid" data-stop-id="${s.id}">${cardsHtml}</div>
-              <div style="text-align:center; margin-top:12px;">
-                <button type="button" class="fork-reroll-btn" data-stop-id="${s.id}" onclick="rerollStop('${s.id}')">🎲 New Choices</button>
+              <div class="fork-stack" data-stop-id="${s.id}">
+                <div class="fork-stack-deck${hasExpanded ? ' has-expanded' : ''}">${deckHtml}</div>
               </div>
             </div>
           </div>
@@ -2512,64 +2582,69 @@
     }
   };
 
-  // ---------- REAL-VENUE ADVENTURE: FORK CHOICES (choose + reroll) ----------
-  // Cosmetic-only: reads the stop's already-fetched candidate_pool (RLS
-  // already lets any party member read route_stops) and shuffles all 3
-  // card slots through it at 250ms/tick as a "teaser," while the real
-  // reroll POST happens in parallel. Never trusted for the actual result —
-  // that always comes from the server response once both this and the
-  // network call finish (loadItinerary() at the end always re-syncs to the
-  // true state either way, so a failed/odd cycle can never leave stale
-  // text on screen). No-ops harmlessly if the pool can't be fetched.
-  function startForkRerollCycle(routeStopId, gridEl) {
-    let timer = null;
-    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
-    const cards = Array.from(gridEl.querySelectorAll('.fork-choice-card'));
-    supabaseClient.from('route_stops').select('candidate_pool').eq('id', routeStopId).single()
-      .then(({ data: row }) => {
-        const pool = row && Array.isArray(row.candidate_pool) ? row.candidate_pool : [];
-        if (!pool.length || !gridEl.isConnected) return;
-        let ticks = 0;
-        const maxTicks = Math.min(Math.ceil(pool.length / 3) * 2, 16); // safety cap (~4s)
-        timer = setInterval(() => {
-          const shuffled = [...pool].sort(() => Math.random() - 0.5);
-          cards.forEach((card, idx) => {
-            const c = shuffled[idx % shuffled.length];
-            if (!c) return;
-            const nameEl = card.querySelector('.fork-choice-name');
-            const metaEl = card.querySelector('.fork-choice-meta');
-            if (nameEl) nameEl.textContent = c.name;
-            if (metaEl) metaEl.textContent = [c.rating != null ? `⭐ ${c.rating}` : '', c.category || ''].filter(Boolean).join(' · ');
-          });
-          ticks++;
-          if (ticks >= maxTicks) stop();
-        }, 250);
-      })
-      .catch(() => {});
-    return stop;
+  // ---------- REAL-VENUE ADVENTURE: FORK CHOICES (expand + choose + spin) ----------
+  // Picking a mood card doesn't need a server round-trip — all 3 venues'
+  // full details are already sitting in offered_choices from the last
+  // itinerary load. Just record which slot is expanded and re-render.
+  window.expandForkCard = function (routeStopId, idx) {
+    expandedForkIndex[routeStopId] = idx;
+    renderItinerary();
+  };
+
+  // Drives the "cool randomizer" reveal on the expanded card during a
+  // spin: starts fast (40ms/tick, names barely readable) and eases into a
+  // gradual stop, landing after ~2.5s total. Cosmetic only — reads the
+  // stop's already-fetched candidate_pool (RLS already lets any party
+  // member read route_stops) purely for realistic-looking names/ratings to
+  // flash through; the real result always comes from the server response
+  // once spinForkCard()'s Promise.all resolves (loadItinerary() re-syncs
+  // to the true state regardless, so a failed/odd cycle can never leave
+  // stale text on screen).
+  async function runForkSpinAnimation(cardEl, pool) {
+    const delays = [40, 40, 45, 50, 55, 65, 75, 90, 105, 125, 150, 180, 220, 270, 330, 400]; // sums to 2240ms
+    const nameEl = cardEl?.querySelector('.fork-choice-name');
+    const metaEl = cardEl?.querySelector('.fork-choice-meta');
+    const addrEl = cardEl?.querySelector('.fork-choice-addr');
+    const badgeEl = cardEl?.querySelector('.fork-theme-badge');
+    for (const delay of delays) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (!cardEl || !cardEl.isConnected || !pool.length) continue;
+      const c = pool[Math.floor(Math.random() * pool.length)];
+      const theme = c.theme || { emoji: '📍', label: 'Local Pick' };
+      if (nameEl) nameEl.textContent = c.name;
+      if (metaEl) metaEl.textContent = [c.rating != null ? `⭐ ${c.rating}` : '', c.category || ''].filter(Boolean).join(' · ');
+      if (addrEl) addrEl.textContent = c.address || '';
+      if (badgeEl) badgeEl.textContent = `${theme.emoji || '📍'} ${theme.label || 'Local Pick'}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 260)); // brief landing pause — 2240 + 260 = ~2.5s total
   }
 
-  window.rerollStop = async function (routeStopId) {
+  window.spinForkCard = async function (routeStopId) {
     if (!activeAdventure || !currentSession) return;
-    const grid = document.querySelector(`.fork-choice-grid[data-stop-id="${routeStopId}"]`);
-    const rerollBtn = document.querySelector(`.fork-reroll-btn[data-stop-id="${routeStopId}"]`);
-    if (rerollBtn) { rerollBtn.disabled = true; rerollBtn.textContent = '🎲 Shuffling…'; }
-    if (grid) grid.querySelectorAll('.fork-choose-btn').forEach((b) => { b.disabled = true; });
-    const stopCycle = grid ? startForkRerollCycle(routeStopId, grid) : () => {};
+    const stack = document.querySelector(`.fork-stack[data-stop-id="${routeStopId}"]`);
+    const expandedCard = stack ? stack.querySelector('.fork-stack-card.expanded') : null;
+    const spinBtn = stack ? stack.querySelector('.fork-spin-btn') : null;
+    if (spinBtn) { spinBtn.disabled = true; spinBtn.classList.add('spinning'); spinBtn.textContent = '🎲 Spinning…'; }
+    expandedCard?.querySelector('.fork-choose-btn')?.setAttribute('disabled', '');
+
+    let pool = [];
+    try {
+      const { data: row } = await supabaseClient.from('route_stops').select('candidate_pool').eq('id', routeStopId).single();
+      pool = row && Array.isArray(row.candidate_pool) ? row.candidate_pool : [];
+    } catch (e) {}
 
     try {
-      // Keep the cycling animation on screen for at least ~1.5s regardless
-      // of how fast the network responds — Promise.all waits for whichever
-      // finishes last, so a slow reroll just keeps it spinning longer.
+      // Promise.all waits for whichever finishes last, so the ~2.5s
+      // animation is a floor, not a fixed delay — a slow reroll just keeps
+      // spinning until the real result is ready.
       const [{ res, data }] = await Promise.all([
         postEdgeFunction('real-venue-adventure', { action: 'reroll', routeStopId }),
-        new Promise((resolve) => setTimeout(resolve, 1500)),
+        runForkSpinAnimation(expandedCard, pool),
       ]);
-      stopCycle();
 
       if (!res.ok) {
-        alert(data.error || (res.status === 402 ? 'Not enough Adventure Coins for another roll.' : 'Could not reroll.'));
-        await loadItinerary(activeAdventure.adventureId); // re-syncs the grid back to its true (unchanged) choices
+        alert(data.error || (res.status === 402 ? 'Not enough Adventure Coins for another spin.' : 'Could not spin.'));
+        await loadItinerary(activeAdventure.adventureId); // re-syncs the card back to its true (unchanged) choice
         return;
       }
       if (data.spent) {
@@ -2581,8 +2656,7 @@
       }
       await loadItinerary(activeAdventure.adventureId);
     } catch (e) {
-      stopCycle();
-      alert('Could not reach the reroll service: ' + e.message);
+      alert('Could not reach the spin service: ' + e.message);
       await loadItinerary(activeAdventure.adventureId);
     }
   };
@@ -2626,23 +2700,24 @@
 
   window.chooseStop = async function (routeStopId, venueId) {
     if (!activeAdventure || !currentSession) return;
-    const grid = document.querySelector(`.fork-choice-grid[data-stop-id="${routeStopId}"]`);
-    if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = true; });
+    const stack = document.querySelector(`.fork-stack[data-stop-id="${routeStopId}"]`);
+    if (stack) stack.querySelectorAll('.fork-choose-btn, .fork-spin-btn').forEach((b) => { b.disabled = true; });
     // Snapshot the chosen card's data before the upcoming loadItinerary()
     // refresh replaces the DOM out from under it.
-    const chosenCard = grid ? grid.querySelector(`.fork-choice-card[data-venue-id="${venueId}"]`) : null;
+    const chosenCard = stack ? stack.querySelector(`.fork-stack-card[data-venue-id="${venueId}"]`) : null;
     try {
       const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'choose', routeStopId, venueId });
       if (!res.ok) {
         alert(data.error || 'Could not choose that venue.');
-        if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = false; });
+        if (stack) stack.querySelectorAll('.fork-choose-btn, .fork-spin-btn').forEach((b) => { b.disabled = false; });
         return;
       }
+      delete expandedForkIndex[routeStopId]; // this stop is committed now, done with the mood picker
       showStagingReveal(chosenCard, data.stop);
       await loadItinerary(activeAdventure.adventureId);
     } catch (e) {
       alert('Could not reach the game service: ' + e.message);
-      if (grid) grid.querySelectorAll('.fork-choose-btn, .fork-reroll-btn').forEach((b) => { b.disabled = false; });
+      if (stack) stack.querySelectorAll('.fork-choose-btn, .fork-spin-btn').forEach((b) => { b.disabled = false; });
     }
   };
 
