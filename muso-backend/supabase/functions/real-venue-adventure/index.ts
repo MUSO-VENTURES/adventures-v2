@@ -335,12 +335,32 @@ function pickContrastingChoices(candidates: Candidate[], n: number): (Candidate 
 
   const chosen: (Candidate & { theme: Theme })[] = [];
   const usedIds = new Set<string>();
+  const usedThemeKeys = new Set<string>();
 
   for (const { theme, items } of shuffle([...byTheme.values()])) {
     if (chosen.length >= n) break;
     const pick = weightedRandomPick(items);
     chosen.push({ ...pick, theme });
     usedIds.add(pick.id);
+    usedThemeKeys.add(theme.key);
+  }
+
+  // Backfill only from themes not already represented first — the old
+  // version backfilled from ANY remaining candidate regardless of theme,
+  // so a market with only 1 "cozy" spot but 5 "foodie" ones could end up
+  // offering the same theme twice. A repeated theme is now only allowed as
+  // an absolute last resort, when fewer than n distinct themes exist among
+  // ALL nearby candidates.
+  if (chosen.length < n) {
+    const remaining = candidates.filter((c) => !usedIds.has(c.id) && !usedThemeKeys.has(classifyTheme(c).key));
+    while (chosen.length < n && remaining.length) {
+      const pick = weightedRandomPick(remaining);
+      const theme = classifyTheme(pick);
+      chosen.push({ ...pick, theme });
+      usedIds.add(pick.id);
+      usedThemeKeys.add(theme.key);
+      remaining.splice(remaining.findIndex((c) => c.id === pick.id), 1);
+    }
   }
 
   if (chosen.length < n) {
