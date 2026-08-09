@@ -251,7 +251,15 @@ async function searchNearbyVenues(
   }
 
   try {
-    const { error: upsertErr } = await admin.rpc("upsert_yelp_venues", { rows: JSON.stringify(rows) });
+    // rows is passed as a plain array, NOT JSON.stringify(rows) — the SQL
+    // function's `rows jsonb` parameter expects a genuine JSONB array.
+    // Stringifying it here double-encodes it: PostgREST hands Postgres a
+    // JSON *string* whose contents happen to look like an array, which
+    // Postgres casts to a JSONB scalar (a string), not a JSONB array — so
+    // jsonb_array_elements(rows) inside the function failed on every call
+    // with "cannot extract elements from a scalar", silently caught below
+    // and surfacing to players as "No matching venues found nearby."
+    const { error: upsertErr } = await admin.rpc("upsert_yelp_venues", { rows });
     if (upsertErr) {
       console.error("upsert_yelp_venues RPC error:", JSON.stringify(upsertErr));
       return [];

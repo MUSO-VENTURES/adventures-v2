@@ -253,7 +253,12 @@ Deno.serve(async (req) => {
   try {
     const rows = venues.filter((v) => v.yelp_id && v.lat != null && v.lng != null);
     if (rows.length) {
-      await admin.rpc("upsert_yelp_venues", { rows: JSON.stringify(rows) });
+      // Plain array, not JSON.stringify(rows) — the SQL function's
+      // `rows jsonb` parameter needs a genuine JSONB array. Stringifying
+      // double-encodes it into a JSONB scalar, which fails inside the
+      // function's jsonb_array_elements(rows) call. See the matching fix
+      // (and full explanation) in real-venue-adventure/index.ts.
+      await admin.rpc("upsert_yelp_venues", { rows });
 
       const { data: existing } = await admin
         .from("venues")
