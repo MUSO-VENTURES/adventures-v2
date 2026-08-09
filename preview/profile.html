@@ -34,6 +34,12 @@
      as preview/index.html — keeps both pages presenting the same bottom
      navigation instead of only the game page having one. */
   body{ font-family:'Nunito', sans-serif; background:var(--cream); color:var(--ink); padding-bottom:86px; }
+  /* Embedded inside preview/index.html's profile-sheet (?embedded=1) — its
+     own top nav and bottom tabbar are redundant there (the sheet already
+     supplies both), so hide this page's copies and reclaim the space. */
+  :root[data-embedded] nav,
+  :root[data-embedded] .tabbar-wrap{ display:none; }
+  :root[data-embedded] body{ padding-bottom:0; }
   h1,h2,h3,.display{ font-family:'Fredoka', sans-serif; }
   a{color:inherit;}
 
@@ -216,6 +222,27 @@
     var isDay = true;
     document.documentElement.setAttribute('data-theme', isDay ? 'light' : 'dark');
   })();
+
+  // Set when opened inside preview/index.html's profile-sheet overlay
+  // (?embedded=1 — see openProfile() there) rather than visited directly
+  // as its own page. The sheet already supplies its own top-of-sheet
+  // hero avatar and the game page's bottom tabbar, so this page's own
+  // copies of both would just be doubled-up chrome — [data-embedded] CSS
+  // below hides them. Also synchronous/early so there's no flash of the
+  // nav before it hides, same reasoning as the theme detector above.
+  //
+  // Checks window.self !== window.top too, not just the query param —
+  // a magic-link email always opens as a real top-level page, and
+  // sendMagicLink() below reuses window.location.href (which would still
+  // carry ?embedded=1 from when the link was requested from inside the
+  // iframe) as the redirect target, so the param alone can't tell
+  // "actually embedded" apart from "a real tab that happens to still have
+  // this leftover param."
+  (function(){
+    if (window.self !== window.top && new URLSearchParams(location.search).get('embedded') === '1') {
+      document.documentElement.setAttribute('data-embedded', '1');
+    }
+  })();
 </script>
 </head>
 <body>
@@ -254,7 +281,7 @@
           <span class="radius-pill" id="radius-pill">25 mi</span>
         </div>
       </div>
-      <span class="signout-link" onclick="location.href='/preview/index.html?editPreferences=1';">Edit My Preferences</span>
+      <span class="signout-link" onclick="editPreferences()">Edit My Preferences</span>
       <span class="signout-link" onclick="signOut()">Sign out</span>
     </div>
 
@@ -365,9 +392,40 @@
     msg.textContent = error ? `Error: ${error.message}` : 'Check your email for a sign-in link.';
   };
 
+  // True when this page is loaded inside preview/index.html's profile-sheet
+  // iframe (?embedded=1, set by openProfile() there) rather than visited as
+  // its own standalone page.
+  function isEmbedded() {
+    return window.self !== window.top && new URLSearchParams(location.search).get('embedded') === '1';
+  }
+
   window.signOut = async function () {
     await supabaseClient.auth.signOut();
-    window.location.href = '/preview/';
+    // Supabase's auth state syncs across same-origin tabs/frames via
+    // localStorage automatically, so the parent page picks up the
+    // sign-out and re-renders itself on its own — no need to reload it
+    // here, and definitely don't navigate the iframe itself to /preview/,
+    // which would show the marketing page awkwardly inside the small
+    // sheet area instead of anything useful.
+    if (isEmbedded() && typeof parent.closeProfile === 'function') {
+      parent.closeProfile();
+    } else {
+      window.location.href = '/preview/';
+    }
+  };
+
+  // "Edit My Preferences" has no form of its own here — the onboarding
+  // overlay it needs lives on preview/index.html. When embedded, call the
+  // parent's copy directly instead of navigating (a plain redirect would
+  // navigate the iframe itself, showing the whole game page awkwardly
+  // inside the small sheet area rather than the parent's own overlay).
+  window.editPreferences = function () {
+    if (isEmbedded() && typeof parent.openOnboarding === 'function' && typeof parent.closeProfile === 'function') {
+      parent.closeProfile();
+      parent.openOnboarding(true);
+    } else {
+      location.href = '/preview/index.html?editPreferences=1';
+    }
   };
 
   async function fetchOrCreateProfile(userId, email) {
@@ -711,7 +769,17 @@
       .eq('badge_key', 'first_checkin')
       .maybeSingle();
     if (!firstCheckinBadge) {
-      window.location.href = '/preview/index.html?locked=profile';
+      // Same iframe-navigation problem as signOut()/editPreferences() above
+      // — redirecting the iframe itself would show the whole game page
+      // awkwardly inside the small sheet area. Just close the sheet and
+      // let the (already-visible) game page underneath speak for itself;
+      // skipping the "go check in" toast in this case is an acceptable
+      // simplification versus wiring up a cross-frame message for it.
+      if (isEmbedded() && typeof parent.closeProfile === 'function') {
+        parent.closeProfile();
+      } else {
+        window.location.href = '/preview/index.html?locked=profile';
+      }
       return;
     }
 

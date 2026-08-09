@@ -130,8 +130,14 @@
     display:flex; flex-direction:column;
   }
   #profile-sheet{
-    flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+    flex:1; min-height:0; display:flex; flex-direction:column;
     background:var(--cream); transition:background-color .35s ease;
+  }
+  /* The iframe scrolls internally (it's a full independent page), so the
+     sheet itself no longer needs to be a scroll container — just hosts the
+     hero avatar at a fixed size up top and lets the iframe fill the rest. */
+  .profile-sheet-iframe{
+    flex:1; min-height:0; width:100%; border:none; display:block;
   }
   .tabbar{
     background:var(--card-bg); border-top:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
@@ -166,7 +172,7 @@
   }
   .nav-avatar-close[hidden]{ display:none; }
   .profile-hero-avatar{
-    position:sticky; top:14px; z-index:20; margin:14px auto 0;
+    flex-shrink:0; z-index:20; margin:14px auto 0;
     width:108px; height:108px; border-radius:50%; overflow:hidden;
     border:3px solid var(--card-bg); box-shadow:0 10px 26px rgba(var(--shadow-rgb),0.35);
     background:var(--ink); display:block;
@@ -1228,15 +1234,16 @@
 <div class="tabbar-wrap" id="tabbar-wrap">
   <div class="profile-sheet" id="profile-sheet" hidden>
     <div class="profile-hero-avatar" id="profile-avatar-hero"><img src="" alt="" id="profile-hero-img"></div>
-    <div style="padding:10px 22px 0; text-align:center;">
-      <h2 style="font-size:1.2rem; color:var(--ink); font-family:'Fredoka',sans-serif;" id="profile-sheet-name">Player</h2>
-      <div style="opacity:0.6; font-size:0.85rem; margin-top:2px; color:var(--ink);" id="profile-sheet-level">Sign in to see your profile</div>
-    </div>
-    <div style="padding:22px; display:flex; flex-direction:column; gap:10px;" id="profile-sheet-actions">
-      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof openAvatarCapture==='function') openAvatarCapture();">📷 Change Photo</button>
-      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof openOnboarding==='function') openOnboarding(true);">⚙️ Edit My Preferences</button>
-      <button type="button" class="pb-btn secondary" style="width:100%;" onclick="if(typeof signOut==='function') signOut();">Sign Out</button>
-    </div>
+    <!-- The full profile page (trophy case, leaderboard, stats, badges,
+         avatar upload, preferences, sign-out) embedded here rather than
+         re-implemented — reuses profile.html completely unchanged, just
+         presented inside this sheet's existing FLIP-transform open/close
+         animation instead of a full page navigation. profile.html detects
+         embedding (?embedded=1) and hides its own top/bottom nav so there's
+         no doubled chrome. Src is set fresh on every open (see
+         openProfile()) rather than once, so it can never show stale state
+         from before the sheet was last closed. -->
+    <iframe id="profile-sheet-iframe" class="profile-sheet-iframe" title="Profile"></iframe>
   </div>
   <div class="tabbar">
     <div class="tab-item active" data-view="home" onclick="navScrollTo('home')">
@@ -1531,26 +1538,20 @@
     renderProfileSheetHeader();
   }
 
-  // Keeps the nav-dock avatar, the profile-sheet hero avatar, and the
-  // sheet's name/level text in sync with currentProfile — called after
-  // every sign-in/sign-out/check-in/avatar-or-preferences change via
-  // refreshProfileAndBadges(), so none of them ever go stale.
+  // Keeps the nav-dock avatar and the profile-sheet's hero avatar (the
+  // FLIP-transform animation's landing target — see openProfile() below)
+  // in sync with currentProfile. Name/level/stats/trophy case etc. all
+  // live inside the embedded profile.html iframe now, which renders its
+  // own copy of this same data independently — called after every
+  // sign-in/sign-out/check-in/avatar-or-preferences change via
+  // refreshProfileAndBadges(), so the two avatars never go stale.
   function renderProfileSheetHeader() {
     const navImg = document.getElementById('nav-avatar-img');
     const heroImg = document.getElementById('profile-hero-img');
-    const nameEl = document.getElementById('profile-sheet-name');
-    const levelEl = document.getElementById('profile-sheet-level');
     if (!navImg) return; // Phase 2 chrome not present (shouldn't happen, defensive)
     const avatarUrl = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
     navImg.src = avatarUrl;
     heroImg.src = avatarUrl;
-    if (currentProfile) {
-      nameEl.textContent = currentProfile.display_name || 'Player';
-      levelEl.textContent = `Level ${currentProfile.level} · 🪙 ${currentProfile.adventure_coins}`;
-    } else {
-      nameEl.textContent = 'Player';
-      levelEl.textContent = 'Sign in to see your profile';
-    }
   }
 
   let signinCooldownTimer = null;
@@ -3173,7 +3174,8 @@
   };
 
   window.goToProfileFromCelebration = function () {
-    window.location.href = '/preview/profile.html';
+    dismissCelebration();
+    openProfile();
   };
 
   function showToast(text) {
@@ -3713,6 +3715,7 @@
   const tabbarWrap = document.getElementById('tabbar-wrap');
   const tabbarEl = document.querySelector('.tabbar');
   const profileSheet = document.getElementById('profile-sheet');
+  const profileSheetIframe = document.getElementById('profile-sheet-iframe');
   const navAvatarBtn = document.getElementById('nav-avatar-btn');
   const navAvatarImg = document.getElementById('nav-avatar-img');
   const navAvatarClose = document.getElementById('nav-avatar-close');
@@ -3747,6 +3750,12 @@
     navAvatarImg.style.pointerEvents = 'none';
     navAvatarClose.hidden = false;
     profileSheet.hidden = false;
+    // Fresh load every open — the iframe otherwise keeps showing whatever
+    // it last rendered, which could be stale if e.g. an adventure
+    // completed since the sheet was last closed. ?embedded=1 tells
+    // profile.html to hide its own top/bottom nav (this sheet already
+    // provides both).
+    profileSheetIframe.src = '/preview/profile.html?embedded=1';
 
     const collapsedH = navCollapsedHeight();
     const expandedH = navExpandedHeight();
@@ -3815,7 +3824,7 @@
       navAvatarImg.style.pointerEvents = '';
       navAvatarClose.hidden = true;
       profileSheet.hidden = true;
-      profileSheet.scrollTop = 0;
+      profileSheetIframe.src = 'about:blank'; // don't keep it rendering/polling in the background while closed
       delete tabbarWrap.dataset.profileOpen;
       profileOpen = false;
       profileAnimating = false;
@@ -3829,13 +3838,8 @@
     const fallback = setTimeout(finish, 500);
   };
 
-  // Used to open the in-page profile-sheet (openProfile()/closeProfile()
-  // above) — now goes straight to the full profile page instead, so both
-  // pages present the same single "profile" destination rather than a
-  // lighter in-page sheet here and a separate fuller page reachable only
-  // via the sheet's own "My Profile" link.
   navAvatarBtn.addEventListener('click', () => {
-    window.location.href = '/preview/profile.html';
+    if (profileOpen) closeProfile(); else openProfile();
   });
   navAvatarClose.addEventListener('click', (e) => {
     e.stopPropagation();
