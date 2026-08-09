@@ -203,10 +203,23 @@ async function searchNearbyVenues(
       `https://api.yelp.com/v3/businesses/search?${yelpParams.toString()}`,
       { headers: { Authorization: `Bearer ${yelpKey}` } },
     );
-    if (!yelpRes.ok) return [];
+    if (!yelpRes.ok) {
+      // Was silently returning [] here — indistinguishable from a genuinely
+      // empty search, so a Yelp-side failure (rate limit, bad/expired key,
+      // etc.) showed players the exact same "No matching venues found
+      // nearby" message as an actual empty result. Logged so the real
+      // cause is visible in this function's Supabase dashboard logs.
+      const errBody = await yelpRes.text().catch(() => "");
+      console.error(`Yelp search failed: ${yelpRes.status} ${yelpRes.statusText} — ${errBody.slice(0, 500)}`);
+      return [];
+    }
     const yelpData = await yelpRes.json();
     businesses = Array.isArray(yelpData.businesses) ? yelpData.businesses : [];
-  } catch {
+    if (!businesses.length) {
+      console.log(`Yelp search returned 0 businesses: lat=${opts.lat} lng=${opts.lng} radiusMeters=${radiusMeters} categories=${opts.categories.join(",") || "(none)"} price=${yelpPrice ?? "(any)"}`);
+    }
+  } catch (e) {
+    console.error("Yelp search threw:", e);
     return [];
   }
 
