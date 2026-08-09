@@ -521,27 +521,28 @@
      switch which one is expanded. Only one is ever expanded at a time. */
   .fork-stack{ display:flex; flex-direction:column; gap:10px; width:100%; }
   .fork-stack-deck{
-    display:flex; flex-direction:column; gap:0; position:relative; min-height:220px;
+    display:flex; flex-direction:column; gap:0;
   }
   .fork-stack-card{
     background:var(--card); border-radius:16px;
     border-top:4px solid var(--theme-color, var(--coral));
     box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.07);
-    cursor:pointer; transition:transform .25s cubic-bezier(.2,.8,.2,1), margin .25s ease, opacity .2s ease;
+    cursor:pointer; transition:transform .2s ease, opacity .2s ease;
   }
-  /* Collapsed: a fanned deck — each card offset/rotated a bit more than the
-     last, only the mood icon+label showing, absolutely stacked so tapping
-     any of them (even a partially-hidden one) still works. */
+  /* Collapsed: an even, side-by-side row — equal billing for all 3 moods
+     rather than one card visually dominating — icon + label only, nothing
+     picked yet. */
+  .fork-stack-deck:not(.has-expanded){
+    display:flex; flex-direction:row; gap:10px;
+  }
   .fork-stack-deck:not(.has-expanded) .fork-stack-card{
-    position:absolute; inset:0 8% auto 8%; height:64px;
-    display:flex; align-items:center; justify-content:center; gap:8px;
+    flex:1; min-width:0; min-height:92px; padding:14px 8px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
+    text-align:center;
   }
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(1){ top:0; z-index:3; transform:rotate(-2deg); }
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(2){ top:26px; z-index:2; transform:rotate(1.5deg); }
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(3){ top:52px; z-index:1; transform:rotate(-1deg); }
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card:hover{ transform:translateY(-3px) rotate(0deg); }
-  .fork-stack-mood-icon{ font-size:1.4rem; }
-  .fork-stack-mood-label{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.9rem; }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:hover{ transform:translateY(-3px); }
+  .fork-stack-mood-icon{ font-size:1.7rem; line-height:1; }
+  .fork-stack-mood-label{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem; line-height:1.25; }
   /* Expanded: full detail card up top, full width, straightened. */
   .fork-stack-deck.has-expanded{ display:flex; flex-direction:column; gap:10px; min-height:0; }
   .fork-stack-card.expanded{
