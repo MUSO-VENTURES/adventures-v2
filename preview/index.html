@@ -2149,7 +2149,10 @@
         <div class="adventure-complete-banner">🏁 Adventure complete! Great work.</div>
         <div style="text-align:center; margin-bottom:16px;"><button type="button" class="start-adv-btn" onclick="clearActiveAdventure()">Start Another Adventure</button></div>
       ` : ''}
-      <div style="font-family:'Fredoka',sans-serif; font-weight:700; margin-bottom:10px;">${route.title}</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
+        <div style="font-family:'Fredoka',sans-serif; font-weight:700;">${route.title}</div>
+        ${!allDone ? `<span class="test-mode-link" onclick="leaveAdventure()">Leave Adventure</span>` : ''}
+      </div>
       <div class="itinerary-list">${rows}</div>
       ${tierLockHtml}
     `;
@@ -2225,6 +2228,28 @@
     activeAdventure = null;
     resetProgressMap();
     renderRoutePicker();
+  };
+
+  // Lets a player abandon an in-progress adventure (stale, boring, whatever
+  // the reason) and start a completely fresh one — without this there was
+  // no way out short of clearing site data, since loadAdventureSection()
+  // always resumes whatever's still marked in_progress, checking both this
+  // device's localStorage and (as a fallback, e.g. after switching devices
+  // or clearing storage) the party's adventures in the database directly.
+  // Marks the row 'abandoned' server-side (real-venue-adventure edge
+  // function — there's no client-side UPDATE policy on adventures at all)
+  // so neither of those lookups can resurrect it again.
+  window.leaveAdventure = async function () {
+    if (!activeAdventure || !currentSession) return;
+    if (!confirm("Leave this adventure? Your progress on it won't count, and you'll be able to start a brand new one right away.")) return;
+    try {
+      const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'leaveAdventure', adventureId: activeAdventure.adventureId });
+      if (!res.ok) { alert(data.error || 'Could not leave this adventure.'); return; }
+    } catch (e) {
+      alert('Could not reach the game service: ' + e.message);
+      return;
+    }
+    clearActiveAdventure();
   };
 
   // ---------- QR CHECK-IN STEP ----------

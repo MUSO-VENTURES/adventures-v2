@@ -480,6 +480,39 @@ Deno.serve(async (req) => {
   }
 
   // ---------------------------------------------------------------
+  // leaveAdventure — lets a player abandon their current in-progress
+  // adventure (curated or real-venue) so they can start a fresh one.
+  // Server-side (admin client) for the same reason ensureParty is: there's
+  // no UPDATE policy on adventures at all (only select/insert), so a
+  // direct client-side update would be rejected outright.
+  // ---------------------------------------------------------------
+  if (action === "leaveAdventure") {
+    const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
+    if (!adventureId) return jsonResponse({ error: "adventureId is required" }, 400);
+
+    const { data: adventure, error: advErr } = await admin
+      .from("adventures")
+      .select("id, party_id, status")
+      .eq("id", adventureId)
+      .maybeSingle();
+    if (advErr || !adventure) return jsonResponse({ error: "Adventure not found." }, 404);
+    if (!(await isPartyMember(admin, adventure.party_id, userId))) {
+      return jsonResponse({ error: "You're not a member of that party." }, 403);
+    }
+    if (adventure.status !== "in_progress") {
+      return jsonResponse({ error: "This adventure isn't in progress anymore." }, 400);
+    }
+
+    const { error: updateErr } = await admin
+      .from("adventures")
+      .update({ status: "abandoned" })
+      .eq("id", adventureId);
+    if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+
+    return jsonResponse({ ok: true });
+  }
+
+  // ---------------------------------------------------------------
   // init — creates the route + all placeholder stops, reveals stop 1
   // ---------------------------------------------------------------
   if (action === "init") {
