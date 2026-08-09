@@ -238,12 +238,19 @@ async function sendSms(to: string, body: string): Promise<void> {
 
 const CHECKIN_XP = 50;
 // Must match CHECKIN_PHOTO_COINS in preview/index.html. The client has
-// displayed "+20 coins" messaging for a check-in photo since the photo
+// displayed "+N coins" messaging for a check-in photo since the photo
 // booth shipped, but nothing here ever actually credited it — this was a
 // real gap, not intentional, found while wiring up per-adventure coin
 // attribution (0018_adventure_attribution.sql adds 'photo_bonus' to the
 // coin_transactions reason allow-list this now writes against).
-const CHECKIN_PHOTO_COINS = 20;
+const CHECKIN_PHOTO_COINS = 10;
+// One-time bonus for finishing every stop on an adventure — same
+// award-once spirit as the 'adventure_completed' badge just below, but a
+// coin credit isn't naturally idempotent like a badge row is, so this
+// only ever fires from the completion branch that itself only runs once
+// (adventures.status flips to 'completed' there). 'adventure_complete' is
+// in the coin_transactions reason allow-list via 0020_adventure_complete_coins.sql.
+const ADVENTURE_COMPLETE_COINS = 20;
 
 type Badge = { key: string; name: string; description: string; emoji: string };
 type Progress = {
@@ -344,7 +351,7 @@ Deno.serve(async (req) => {
   };
   // Best-effort — an odd coin-credit failure shouldn't fail the check-in
   // itself, it just means this particular photo bonus didn't land.
-  const coinsGained = photoUrl && !coinsResultRes?.error ? CHECKIN_PHOTO_COINS : 0;
+  let coinsGained = photoUrl && !coinsResultRes?.error ? CHECKIN_PHOTO_COINS : 0;
   const isFirstCheckin = (totalCheckins ?? 0) === 1;
 
   const badgeKeysToAward: string[] = [];
@@ -372,6 +379,16 @@ Deno.serve(async (req) => {
         .from("adventures")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", adventureId);
+
+      // One-time completion bonus — best-effort, same as the photo bonus
+      // above: an odd credit failure shouldn't fail the check-in itself.
+      const { error: completeCoinsErr } = await admin.rpc("credit_coins", {
+        p_profile_id: userId,
+        p_amount: ADVENTURE_COMPLETE_COINS,
+        p_reason: "adventure_complete",
+        p_adventure_id: adventureId,
+      });
+      if (!completeCoinsErr) coinsGained += ADVENTURE_COMPLETE_COINS;
     }
   }
 

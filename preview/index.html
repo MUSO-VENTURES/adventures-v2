@@ -2777,7 +2777,7 @@
   // playtesting friction is needing a webcam for the selfie every stop;
   // this skips just that, nothing else.
   const TEST_MODE = new URLSearchParams(location.search).get('test') === '1';
-  const CHECKIN_PHOTO_COINS = 20; // must match muso-backend/supabase/functions/checkin/index.ts
+  const CHECKIN_PHOTO_COINS = 10; // must match muso-backend/supabase/functions/checkin/index.ts
   let pendingPhotoCaptures = {};  // routeStopId -> { blob, previewUrl }
   let pbStream = null;
   let pbFacingMode = 'environment';
