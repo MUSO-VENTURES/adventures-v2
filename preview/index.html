@@ -128,6 +128,13 @@
   .tabbar-wrap{
     position:fixed; left:0; right:0; bottom:0; z-index:600;
     display:flex; flex-direction:column;
+    /* Opaque so the growing/shrinking box never exposes a transparent gap
+       during the height animation, plus will-change so Safari promotes it
+       to its own compositing layer instead of occasionally repainting a
+       stale frame of the page content underneath (visible as the
+       adventure cards "flashing" through during open/close). */
+    background:var(--cream);
+    will-change:height;
   }
   #profile-sheet{
     flex:1; min-height:0; display:flex; flex-direction:column;
