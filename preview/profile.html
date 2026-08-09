@@ -16,6 +16,8 @@
     --cream:#fff7ed;
     --ink:#2a2438;
     --card:#ffffff;
+    --card-bg:rgba(255,255,255,0.6);
+    --card-border:rgba(255,255,255,0.5);
     --shadow-rgb:42,36,56;
   }
   /* Binary day/night (see the shared detector script near the bottom of
@@ -24,10 +26,14 @@
      cascades dark mode through nearly the whole page. */
   :root[data-theme="dark"]{
     --cream:#0a0912; --ink:#f7f3ff; --card:#1b1730; --shadow-rgb:0,0,0;
+    --card-bg:rgba(255,255,255,0.07); --card-border:rgba(255,255,255,0.12);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth; font-size:106.25%;}
-  body{ font-family:'Nunito', sans-serif; background:var(--cream); color:var(--ink); }
+  /* Room at the bottom for the fixed tabbar (see .tabbar-wrap below), same
+     as preview/index.html — keeps both pages presenting the same bottom
+     navigation instead of only the game page having one. */
+  body{ font-family:'Nunito', sans-serif; background:var(--cream); color:var(--ink); padding-bottom:86px; }
   h1,h2,h3,.display{ font-family:'Fredoka', sans-serif; }
   a{color:inherit;}
 
@@ -165,6 +171,38 @@
     font-size:0.72rem; font-weight:700; font-family:'Fredoka',sans-serif;
   }
   .trophy-item .photo-grid{ grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px; }
+
+  /* ---------- BOTTOM NAV ---------- */
+  /* Same fixed bottom tabbar as preview/index.html, so the game page and
+     the profile page present one consistent navigation instead of only
+     the game page having it. No profile-sheet here — this page already
+     IS the profile destination, so the avatar-disc tab just marks itself
+     active rather than opening/linking anywhere. */
+  .tabbar-wrap{ position:fixed; left:0; right:0; bottom:0; z-index:600; }
+  .tabbar{
+    background:var(--card-bg); border-top:1px solid var(--card-border); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    padding:10px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
+    display:flex; align-items:flex-end; justify-content:space-between;
+    box-shadow:0 -10px 26px rgba(var(--shadow-rgb),0.18);
+    position:relative; width:100%; transition:background-color .35s ease;
+  }
+  .tab-item{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:8px 10px; border-radius:14px; color:var(--ink); opacity:0.42;
+    font-size:0.66rem; font-weight:700; flex:1; cursor:pointer; transition:color .35s ease;
+    text-decoration:none;
+  }
+  .tab-item svg{ width:21px; height:21px; }
+  .tab-item.active{ color:var(--coral); opacity:1; }
+  .tab-item.raised{ margin-top:-30px; padding:0 0 8px; flex:0 0 54px; gap:6px; opacity:1; }
+  .tab-item.raised span{ font-size:0.66rem; font-weight:700; opacity:0.55; transition:opacity .35s ease, color .35s ease; }
+  .tab-item.raised.active span{ opacity:1; color:var(--coral); }
+  .nav-avatar-disc{
+    width:54px; height:54px; border-radius:50%; overflow:hidden;
+    background:var(--ink); border:3px solid var(--card-bg);
+    box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4);
+  }
+  .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
 </style>
 <script>
   // Binary day/night, driven by the viewer's own device clock (always
@@ -216,6 +254,7 @@
           <span class="radius-pill" id="radius-pill">25 mi</span>
         </div>
       </div>
+      <span class="signout-link" onclick="location.href='/preview/index.html?editPreferences=1';">Edit My Preferences</span>
       <span class="signout-link" onclick="signOut()">Sign out</span>
     </div>
 
@@ -371,6 +410,9 @@
     document.getElementById('stat-radius').textContent = `${profile.unlocked_radius_miles ?? 25} mi`;
     document.getElementById('stat-search').textContent = profile.venues_search_unlocked || level >= UNLOCK_LEVEL ? 'Unlocked' : 'Locked';
     document.getElementById('stat-stops').textContent = `${profile.unlocked_stop_count ?? 3}/5`;
+
+    const navAvatarImg = document.getElementById('nav-avatar-img');
+    if (navAvatarImg) navAvatarImg.src = profile.avatar_url || '';
   }
 
   function fillEditForm() {
@@ -686,5 +728,32 @@
 
   init();
 </script>
+
+<div class="tabbar-wrap" id="tabbar-wrap">
+  <div class="tabbar">
+    <a class="tab-item" href="/preview/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </a>
+    <a class="tab-item" href="/preview/#adventure-section">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
+      <span>Explore</span>
+    </a>
+    <div class="tab-item raised active" id="nav-avatar-btn">
+      <div class="nav-avatar-disc">
+        <img src="" alt="Profile" id="nav-avatar-img">
+      </div>
+      <span>Profile</span>
+    </div>
+    <a class="tab-item" href="/preview/#adventure-section">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
+      <span>Adventure</span>
+    </a>
+    <a class="tab-item" href="/shop/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <span>Shop</span>
+    </a>
+  </div>
+</div>
 </body>
 </html>

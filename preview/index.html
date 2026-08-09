@@ -3302,6 +3302,15 @@
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, '', cleanUrl);
     }
+
+    // "Edit My Preferences" on profile.html (which doesn't have its own
+    // copy of the onboarding form) links back here with this flag rather
+    // than duplicating that whole overlay on a second page.
+    if (new URLSearchParams(window.location.search).get('editPreferences') === '1' && currentSession) {
+      window.openOnboarding(true);
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    }
   }
 
   const DEFAULT_LAT = 37.6819; // Livermore, CA — fallback when geolocation is denied/unavailable
@@ -3820,8 +3829,13 @@
     const fallback = setTimeout(finish, 500);
   };
 
+  // Used to open the in-page profile-sheet (openProfile()/closeProfile()
+  // above) — now goes straight to the full profile page instead, so both
+  // pages present the same single "profile" destination rather than a
+  // lighter in-page sheet here and a separate fuller page reachable only
+  // via the sheet's own "My Profile" link.
   navAvatarBtn.addEventListener('click', () => {
-    if (profileOpen) closeProfile(); else openProfile();
+    window.location.href = '/preview/profile.html';
   });
   navAvatarClose.addEventListener('click', (e) => {
     e.stopPropagation();
