@@ -171,13 +171,6 @@
     background:var(--ink); color:var(--cream); font-size:1.5rem; line-height:1;
   }
   .nav-avatar-close[hidden]{ display:none; }
-  .profile-hero-avatar{
-    flex-shrink:0; z-index:20; margin:14px auto 0;
-    width:108px; height:108px; border-radius:50%; overflow:hidden;
-    border:3px solid var(--card-bg); box-shadow:0 10px 26px rgba(var(--shadow-rgb),0.35);
-    background:var(--ink); display:block;
-  }
-  .profile-hero-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
   /* Leave room at the bottom of the page for the fixed tabbar so it never
      overlaps the existing footer/last card. */
   body{ padding-bottom:86px; }
@@ -1233,16 +1226,17 @@
 
 <div class="tabbar-wrap" id="tabbar-wrap">
   <div class="profile-sheet" id="profile-sheet" hidden>
-    <div class="profile-hero-avatar" id="profile-avatar-hero"><img src="" alt="" id="profile-hero-img"></div>
     <!-- The full profile page (trophy case, leaderboard, stats, badges,
          avatar upload, preferences, sign-out) embedded here rather than
          re-implemented — reuses profile.html completely unchanged, just
-         presented inside this sheet's existing FLIP-transform open/close
-         animation instead of a full page navigation. profile.html detects
-         embedding (?embedded=1) and hides its own top/bottom nav so there's
-         no doubled chrome. Src is set fresh on every open (see
-         openProfile()) rather than once, so it can never show stale state
-         from before the sheet was last closed. -->
+         presented inside this sheet's expand/collapse animation instead of
+         a full page navigation. profile.html detects embedding
+         (?embedded=1) and hides its own top/bottom nav so there's no
+         doubled chrome — it already shows its own avatar in the profile
+         card, so this sheet doesn't need a second one of its own. Src is
+         set fresh on every open (see openProfile()) rather than once, so
+         it can never show stale state from before the sheet was last
+         closed. -->
     <iframe id="profile-sheet-iframe" class="profile-sheet-iframe" title="Profile"></iframe>
   </div>
   <div class="tabbar">
@@ -1538,20 +1532,15 @@
     renderProfileSheetHeader();
   }
 
-  // Keeps the nav-dock avatar and the profile-sheet's hero avatar (the
-  // FLIP-transform animation's landing target — see openProfile() below)
-  // in sync with currentProfile. Name/level/stats/trophy case etc. all
-  // live inside the embedded profile.html iframe now, which renders its
-  // own copy of this same data independently — called after every
-  // sign-in/sign-out/check-in/avatar-or-preferences change via
-  // refreshProfileAndBadges(), so the two avatars never go stale.
+  // Keeps the nav-dock avatar in sync with currentProfile. Name/level/
+  // stats/trophy case/avatar etc. all live inside the embedded
+  // profile.html iframe now, which renders its own copy of this same data
+  // independently — called after every sign-in/sign-out/check-in/avatar-
+  // or-preferences change via refreshProfileAndBadges().
   function renderProfileSheetHeader() {
     const navImg = document.getElementById('nav-avatar-img');
-    const heroImg = document.getElementById('profile-hero-img');
     if (!navImg) return; // Phase 2 chrome not present (shouldn't happen, defensive)
-    const avatarUrl = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
-    navImg.src = avatarUrl;
-    heroImg.src = avatarUrl;
+    navImg.src = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
   }
 
   let signinCooldownTimer = null;
@@ -3719,17 +3708,16 @@
   const navAvatarBtn = document.getElementById('nav-avatar-btn');
   const navAvatarImg = document.getElementById('nav-avatar-img');
   const navAvatarClose = document.getElementById('nav-avatar-close');
-  const heroAvatar = document.getElementById('profile-avatar-hero');
   let profileOpen = false;
   let profileAnimating = false;
 
-  // Same "the nav bar itself expands into a sheet" FLIP-transform technique
-  // as home-concept.html — see that file's comments for the full mechanics.
-  // Adapted for a real scrolling page instead of a fixed-height phone mock:
+  // The nav bar itself expands into a sheet, animating just its height —
+  // used to also FLIP-morph a duplicate "hero" avatar from the nav dock up
+  // into the sheet, but that duplicate avatar (redundant with the one
+  // profile.html's own embedded content already shows) looked broken
+  // mid-transition, so it's gone; this is now a plain expand/collapse.
   // navExpandedHeight() measures against the actual viewport and leaves
-  // the sticky top <nav> visible, and there's no single "home view" element
-  // to fade — the sheet's own opaque background is enough to cover the
-  // page underneath it.
+  // the sticky top <nav> visible.
   function navCollapsedHeight(){
     return tabbarEl.getBoundingClientRect().height;
   }
@@ -3744,7 +3732,6 @@
     document.querySelectorAll('.tab-item').forEach((t) => t.classList.remove('active'));
     navAvatarBtn.classList.add('active');
 
-    const fromRect = navAvatarImg.getBoundingClientRect();
     navAvatarImg.style.transition = 'none';
     navAvatarImg.style.opacity = '0';
     navAvatarImg.style.pointerEvents = 'none';
@@ -3760,25 +3747,14 @@
     const collapsedH = navCollapsedHeight();
     const expandedH = navExpandedHeight();
     tabbarWrap.style.transition = 'none';
-    tabbarWrap.style.height = expandedH + 'px';
-    const toRect = heroAvatar.getBoundingClientRect();
     tabbarWrap.style.height = collapsedH + 'px';
+    tabbarWrap.getBoundingClientRect(); // force reflow before animating
 
-    const dx = fromRect.left + fromRect.width / 2 - (toRect.left + toRect.width / 2);
-    const dy = fromRect.top + fromRect.height / 2 - (toRect.top + toRect.height / 2);
-    const scale = fromRect.width / toRect.width;
-    heroAvatar.style.transition = 'none';
-    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    heroAvatar.getBoundingClientRect();
-
-    tabbarWrap.style.transition = 'height .45s cubic-bezier(.22,.85,.32,1)';
-    heroAvatar.style.transition = 'transform .45s cubic-bezier(.22,.85,.32,1)';
+    tabbarWrap.style.transition = 'height .4s cubic-bezier(.22,.85,.32,1)';
     tabbarWrap.style.height = expandedH + 'px';
-    heroAvatar.style.transform = 'translate(0,0) scale(1)';
 
     const finish = () => {
       tabbarWrap.style.transition = '';
-      heroAvatar.style.transition = '';
       tabbarWrap.dataset.profileOpen = '1';
       profileOpen = true;
       profileAnimating = false;
@@ -3789,7 +3765,7 @@
       clearTimeout(fallback);
       finish();
     }, { once: true });
-    const fallback = setTimeout(finish, 550);
+    const fallback = setTimeout(finish, 500);
   }
 
   window.closeProfile = function (){
@@ -3798,27 +3774,13 @@
     document.querySelectorAll('.tab-item').forEach((t) => t.classList.remove('active'));
     document.querySelector('.tab-item[data-view="home"]')?.classList.add('active');
 
-    const fromRect = heroAvatar.getBoundingClientRect();
-    const toRect = navAvatarImg.getBoundingClientRect();
-    const dx = toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2);
-    const dy = toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2);
-    const scale = toRect.width / fromRect.width;
     const collapsedH = navCollapsedHeight();
-
-    heroAvatar.style.transition = 'none';
-    heroAvatar.style.transform = 'translate(0,0) scale(1)';
-    heroAvatar.getBoundingClientRect();
-
-    tabbarWrap.style.transition = 'height .4s cubic-bezier(.4,0,.2,1)';
-    heroAvatar.style.transition = 'transform .4s cubic-bezier(.4,0,.2,1)';
+    tabbarWrap.style.transition = 'height .35s cubic-bezier(.4,0,.2,1)';
     tabbarWrap.style.height = collapsedH + 'px';
-    heroAvatar.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
 
     const finish = () => {
       tabbarWrap.style.transition = '';
       tabbarWrap.style.height = '';
-      heroAvatar.style.transition = '';
-      heroAvatar.style.transform = '';
       navAvatarImg.style.transition = 'opacity .3s ease';
       navAvatarImg.style.opacity = '1';
       navAvatarImg.style.pointerEvents = '';
@@ -3835,7 +3797,7 @@
       clearTimeout(fallback);
       finish();
     }, { once: true });
-    const fallback = setTimeout(finish, 500);
+    const fallback = setTimeout(finish, 450);
   };
 
   navAvatarBtn.addEventListener('click', () => {
