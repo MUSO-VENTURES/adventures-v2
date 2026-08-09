@@ -245,20 +245,35 @@ async function searchNearbyVenues(
     };
   }).filter((r) => r.yelp_id && r.lat != null && r.lng != null);
 
-  if (!rows.length) return [];
-
-  try {
-    await admin.rpc("upsert_yelp_venues", { rows: JSON.stringify(rows) });
-  } catch {
+  if (!rows.length) {
+    console.log(`Yelp returned ${businesses.length} businesses but 0 survived the yelp_id/lat/lng filter`);
     return [];
   }
 
-  const { data: candidates } = await admin.rpc("nearby_candidate_venues", {
+  try {
+    const { error: upsertErr } = await admin.rpc("upsert_yelp_venues", { rows: JSON.stringify(rows) });
+    if (upsertErr) {
+      console.error("upsert_yelp_venues RPC error:", JSON.stringify(upsertErr));
+      return [];
+    }
+  } catch (e) {
+    console.error("upsert_yelp_venues threw:", e);
+    return [];
+  }
+
+  const { data: candidates, error: nearbyErr } = await admin.rpc("nearby_candidate_venues", {
     p_lat: opts.lat,
     p_lng: opts.lng,
     p_radius_miles: opts.radiusMiles,
     p_yelp_ids: rows.map((r) => r.yelp_id),
   });
+  if (nearbyErr) {
+    console.error("nearby_candidate_venues RPC error:", JSON.stringify(nearbyErr));
+    return [];
+  }
+  if (!candidates?.length) {
+    console.log(`nearby_candidate_venues returned 0 rows for ${rows.length} upserted yelp_ids, radius=${opts.radiusMiles}mi, lat=${opts.lat}, lng=${opts.lng}`);
+  }
 
   return (candidates ?? []) as Candidate[];
 }
