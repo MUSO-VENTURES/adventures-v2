@@ -300,9 +300,11 @@
   // local time already — no geolocation needed). Runs synchronously
   // before paint so there's no flash of the wrong theme. Same 6am/8pm
   // boundary used across every MUSO Adventures page.
+  // Temporarily forced to always-daylight per request — swap the line
+  // below back to `var isDay = h >= 6 && h < 20;` to re-enable.
   (function(){
     var h = new Date().getHours();
-    var isDay = h >= 6 && h < 20;
+    var isDay = true;
     document.documentElement.setAttribute('data-theme', isDay ? 'light' : 'dark');
   })();
 </script>
