@@ -137,9 +137,17 @@
     will-change:height;
   }
   #profile-sheet{
-    flex:1; min-height:0; display:flex; flex-direction:column;
+    flex:1; min-height:0; flex-direction:column;
     background:var(--cream); transition:background-color .35s ease;
   }
+  /* display:flex only applies while NOT [hidden] — otherwise this rule
+     (an author style) overrides the browser's built-in [hidden]{display:none}
+     regardless of selector specificity, so the sheet never actually left
+     layout when closed. With tabbar-wrap's height reset to auto on close,
+     that left a leftover non-zero box that used to be invisible (tabbar-wrap
+     had no background) but became a visible masking block once tabbar-wrap
+     got an opaque background to fix the open/close flash. */
+  #profile-sheet:not([hidden]){ display:flex; }
   /* The iframe scrolls internally (it's a full independent page), so the
      sheet itself no longer needs to be a scroll container — just hosts the
      hero avatar at a fixed size up top and lets the iframe fill the rest. */
