@@ -312,10 +312,21 @@ async function searchNearbyVenues(
 // always-take-the-#1 pick. Weight favors featured (premium/sponsor)
 // partner_tier 3x, multiplied by the venue's own Yelp rating (0-5 stars,
 // defaulting unrated venues to a neutral 3 so they're deprioritized but
-// never literally unreachable).
+// never literally unreachable), multiplied by a proximity factor so the
+// route feels like one organic loop instead of bouncing around the full
+// search radius — distance_miles is always measured from wherever the
+// player currently is (each advance() call re-anchors on their live
+// position), so favoring nearby candidates here keeps each next stop
+// close to the one they just left. This is a soft bias, not a hard cutoff
+// — a great, more-distant venue can still win, especially in a sparse
+// theme bucket where it's the only option.
+function proximityWeight(distanceMiles: number): number {
+  return 1 / (1 + distanceMiles / 5); // ~50% weight at 5mi, ~25% at 15mi, ~14% at 30mi
+}
+
 function weightedRandomPick(candidates: Candidate[]): Candidate {
   const isFeatured = (c: Candidate) => c.partner_tier === "premium" || c.partner_tier === "sponsor";
-  const weights = candidates.map((c) => (isFeatured(c) ? 3 : 1) * (c.rating ?? 3));
+  const weights = candidates.map((c) => (isFeatured(c) ? 3 : 1) * (c.rating ?? 3) * proximityWeight(c.distance_miles ?? 0));
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
   for (let i = 0; i < candidates.length; i++) {
