@@ -330,23 +330,40 @@ type Theme = { key: string; label: string; emoji: string; color: string };
 const THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "cozy", label: "Cozy & Chill", emoji: "🍷", color: "#5b4b8a",
-    keywords: ["wine", "lounge", "cafe", "coffee", "tea", "bookstore", "spa"],
+    keywords: ["wine", "lounge", "cafe", "coffee", "tea room", "tea house", "bookstore", "spa", "bed & breakfast"],
   },
   {
     key: "adventurous", label: "Bold & Active", emoji: "🎯", color: "#e8503f",
-    keywords: ["axe", "escape", "arcade", "bowling", "minigolf", "gokart", "climbing", "hiking", "park", "adventure"],
+    keywords: [
+      "axe", "escape", "arcade", "bowling", "mini golf", "minigolf", "go kart", "gokart",
+      "climbing", "hiking", "park", "adventure", "laser tag", "trampoline", "paintball",
+      "skating", "batting cage", "amusement", "zip line", "surf", "kayak", "ropes course",
+    ],
   },
   {
     key: "social", label: "Social & Lively", emoji: "🎤", color: "#0b6e68",
-    keywords: ["karaoke", "bar", "nightlife", "club", "pub", "brewery", "cocktail"],
+    keywords: [
+      "karaoke", "bar", "nightlife", "club", "pub", "brewery", "brewpub", "cocktail",
+      "beer", "distillery", "dive bar", "sports bar", "speakeasy", "dance",
+    ],
   },
   {
     key: "artsy", label: "Artsy & Unique", emoji: "🎨", color: "#f2994a",
-    keywords: ["museum", "gallery", "theater", "theatre", "art", "music", "comedy"],
+    keywords: [
+      "museum", "gallery", "theater", "theatre", "art", "music", "comedy", "cinema",
+      "movie", "planetarium", "aquarium", "zoo", "botanical", "pottery", "studio",
+    ],
   },
   {
     key: "foodie", label: "Foodie Find", emoji: "🍜", color: "#0ea5a0",
-    keywords: ["restaurant", "food", "noodle", "pizza", "bbq", "dessert", "bakery", "diner"],
+    keywords: [
+      "restaurant", "food", "noodle", "pizza", "bbq", "barbecue", "dessert", "bakery",
+      "diner", "breakfast", "brunch", "sandwich", "deli", "burger", "taco", "mexican",
+      "italian", "chinese", "japanese", "sushi", "thai", "indian", "vietnamese", "korean",
+      "mediterranean", "greek", "american", "steakhouse", "seafood", "vegan", "vegetarian",
+      "buffet", "grill", "kitchen", "eatery", "bistro", "tapas", "ramen", "dim sum",
+      "chicken", "salad", "creamery", "ice cream", "donut", "cupcake", "juice", "smoothie",
+    ],
   },
 ];
 const GENERAL_THEME: Theme = { key: "local", label: "Local Pick", emoji: "📍", color: "#2a2438" };
