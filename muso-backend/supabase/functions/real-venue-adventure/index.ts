@@ -293,12 +293,18 @@ async function searchNearbyVenues(
   }
 
   const allCandidates = (candidates ?? []) as Candidate[];
-  const highRated = allCandidates.filter((c) => c.rating != null && c.rating >= MIN_YELP_RATING);
-  if (highRated.length < allCandidates.length) {
-    console.log(`Filtered out ${allCandidates.length - highRated.length} of ${allCandidates.length} candidates below the ${MIN_YELP_RATING}-star minimum`);
+  // "Preferably good photos, but not limited to good photos" — there's no
+  // reliable signal for photo *quality* from the Yelp search response
+  // (just the one representative image_url), so the bar is "has a real
+  // photo at all," not an aesthetic judgment call.
+  const withPhotoAndRating = allCandidates.filter(
+    (c) => c.rating != null && c.rating >= MIN_YELP_RATING && !!c.image_url,
+  );
+  if (withPhotoAndRating.length < allCandidates.length) {
+    console.log(`Filtered out ${allCandidates.length - withPhotoAndRating.length} of ${allCandidates.length} candidates (below ${MIN_YELP_RATING} stars or missing a photo)`);
   }
 
-  return highRated;
+  return withPhotoAndRating;
 }
 
 // The within-theme pick used by pickContrastingChoices() below — "a random
