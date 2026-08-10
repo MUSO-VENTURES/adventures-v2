@@ -484,6 +484,11 @@ function pickContrastingChoices(
     if (!byTheme.has(theme.key)) byTheme.set(theme.key, { theme, items: [] });
     byTheme.get(theme.key)!.items.push(c);
   }
+  // Temporary diagnostic — shows exactly which themes the pool actually
+  // has to draw from, so a duplicate-theme complaint can be told apart
+  // from "the pool genuinely only has 2 distinct themes worth of
+  // candidates" vs. an actual classification bug. Remove once confirmed.
+  console.log(`pickContrastingChoices pool: ${candidates.length} candidates across ${byTheme.size} themes — ${[...byTheme.entries()].map(([k, v]) => `${k}=${v.items.length}`).join(", ")}`);
 
   const chosen: (Candidate & { theme: Theme })[] = [];
   const usedIds = new Set<string>();
