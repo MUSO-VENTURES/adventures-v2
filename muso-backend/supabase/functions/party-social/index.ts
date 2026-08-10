@@ -2,15 +2,19 @@
 // Body: { action: 'createInvite', partyId: string }
 //     | { action: 'claimInvite', inviteCode: string }
 //     | { action: 'partyRoster', partyId: string }
+//     | { action: 'getMyPersonalCode' }
 // Requires Authorization: Bearer <user JWT> (Supabase Auth).
 //
 // Backs the social party features: real QR-code invites (0027_social_party_
-// invites.sql's party_invites table), joining a party by claiming one, and
-// the roster panel (active members + pending invites) that renders from
-// partyRoster. All mutations go through the admin (service-role) client —
-// party_invites has no client insert/update RLS policy on purpose, since
-// claiming an invite pays out a real coin bonus to the inviter and that
-// logic must not be triggerable by a direct client write.
+// invites.sql's party_invites table), a permanent per-player code
+// (0028_personal_invite_codes.sql's profiles.personal_invite_code) for
+// "add me anytime" rather than "join my adventure right now," joining a
+// party by claiming either kind, and the roster panel (active members +
+// pending invites) that renders from partyRoster. All party_invites
+// mutations go through the admin (service-role) client — that table has
+// no client insert/update RLS policy on purpose, since claiming an invite
+// pays out a real coin bonus to the inviter and that logic must not be
+// triggerable by a direct client write.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -199,41 +203,97 @@ Deno.serve(async (req) => {
   }
 
   if (action === "claimInvite") {
-    const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim().toUpperCase() : null;
-    if (!inviteCode) return jsonResponse({ error: "inviteCode is required" }, 400);
+    const rawCode = typeof body.inviteCode === "string" ? body.inviteCode.trim().toUpperCase() : null;
+    if (!rawCode) return jsonResponse({ error: "inviteCode is required" }, 400);
 
-    const { data: invite, error: inviteErr } = await admin
+    // Two kinds of code share the same format: a one-time
+    // party_invites.invite_code (tied to one specific party at the moment
+    // it was created, shows a "pending" slot in the roster until claimed)
+    // and a permanent profiles.personal_invite_code (0028_personal_invite_
+    // codes.sql — always resolves to whichever party its owner is
+    // currently active in, since it's reused indefinitely rather than
+    // minted per-invite). Try the one-time kind first since it's the more
+    // specific, intentional invite when both happen to exist.
+    const { data: invite } = await admin
       .from("party_invites")
       .select("id, party_id, created_by, party_size_at_creation, status")
-      .eq("invite_code", inviteCode)
+      .eq("invite_code", rawCode)
       .maybeSingle();
-    if (inviteErr) return jsonResponse({ error: inviteErr.message }, 400);
-    if (!invite) return jsonResponse({ error: "That invite code wasn't found." }, 404);
 
-    const alreadyMember = await isPartyMember(admin, invite.party_id, userId);
+    let partyId: string;
+    let inviterId: string;
+    let referralPartySize: number;
+    let inviteRowId: string | null = null;
 
-    if (invite.status !== "pending" && !alreadyMember) {
-      return jsonResponse({ error: "That invite has already been used." }, 409);
+    if (invite) {
+      if (invite.status !== "pending" && !(await isPartyMember(admin, invite.party_id, userId))) {
+        return jsonResponse({ error: "That invite has already been used." }, 409);
+      }
+      partyId = invite.party_id;
+      inviterId = invite.created_by;
+      referralPartySize = invite.party_size_at_creation ?? 1;
+      inviteRowId = invite.id;
+    } else {
+      const { data: owner } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("personal_invite_code", rawCode)
+        .maybeSingle();
+      if (!owner) return jsonResponse({ error: "That invite code wasn't found." }, 404);
+
+      const { data: memberRows } = await admin
+        .from("party_members")
+        .select("party_id")
+        .eq("profile_id", owner.id);
+      const partyIds = (memberRows ?? []).map((r) => r.party_id);
+      let activePartyId: string | null = null;
+      if (partyIds.length) {
+        const { data: advRows } = await admin
+          .from("adventures")
+          .select("party_id")
+          .in("party_id", partyIds)
+          .eq("status", "in_progress")
+          .order("started_at", { ascending: false })
+          .limit(1);
+        activePartyId = advRows?.[0]?.party_id ?? null;
+      }
+      if (!activePartyId) {
+        return jsonResponse(
+          { error: "That player isn't in an active adventure right now. Ask them to start one first." },
+          409,
+        );
+      }
+      const { count: currentPartySize } = await admin
+        .from("party_members")
+        .select("profile_id", { count: "exact", head: true })
+        .eq("party_id", activePartyId);
+      partyId = activePartyId;
+      inviterId = owner.id;
+      referralPartySize = currentPartySize ?? 1;
     }
+
+    const alreadyMember = await isPartyMember(admin, partyId, userId);
 
     if (!alreadyMember) {
       const { error: joinErr } = await admin
         .from("party_members")
-        .insert({ party_id: invite.party_id, profile_id: userId, role: "member" });
+        .insert({ party_id: partyId, profile_id: userId, role: "member" });
       if (joinErr) return jsonResponse({ error: joinErr.message }, 400);
 
-      await admin
-        .from("party_invites")
-        .update({ status: "claimed", claimed_by: userId, claimed_at: new Date().toISOString() })
-        .eq("id", invite.id);
+      if (inviteRowId) {
+        await admin
+          .from("party_invites")
+          .update({ status: "claimed", claimed_by: userId, claimed_at: new Date().toISOString() })
+          .eq("id", inviteRowId);
+      }
 
       // Referral bonus to the inviter — best-effort, same spirit as every
       // other coin credit in this codebase: a failure here shouldn't
       // unwind the join that already succeeded.
-      if (invite.created_by !== userId) {
-        const bonus = REFERRAL_BASE_COINS * Math.max(invite.party_size_at_creation ?? 1, 1);
+      if (inviterId !== userId) {
+        const bonus = REFERRAL_BASE_COINS * Math.max(referralPartySize, 1);
         const { error: bonusErr } = await admin.rpc("credit_coins", {
-          p_profile_id: invite.created_by,
+          p_profile_id: inviterId,
           p_amount: bonus,
           p_reason: "referral_bonus",
           p_adventure_id: null,
@@ -242,8 +302,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    const roster = await buildRoster(admin, invite.party_id);
-    return jsonResponse({ partyId: invite.party_id, ...roster });
+    const roster = await buildRoster(admin, partyId);
+    return jsonResponse({ partyId, ...roster });
   }
 
   if (action === "partyRoster") {
@@ -257,5 +317,42 @@ Deno.serve(async (req) => {
     return jsonResponse({ partyId, ...roster });
   }
 
-  return jsonResponse({ error: "action must be 'createInvite', 'claimInvite', or 'partyRoster'" }, 400);
+  if (action === "getMyPersonalCode") {
+    const { data: profile, error: profileErr } = await admin
+      .from("profiles")
+      .select("personal_invite_code")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileErr) return jsonResponse({ error: profileErr.message }, 400);
+
+    let code = profile?.personal_invite_code ?? null;
+    if (!code) {
+      // Lazily generated the first time it's needed — called once right
+      // after sign-in from preview/index.html, and callable again anytime
+      // as a failsafe (e.g. an account created before this existed). The
+      // .is(...,null) guard means a rare concurrent double-call can't both
+      // "win" with different codes — only one update actually applies, and
+      // both requests re-read whatever ends up there afterward.
+      const candidate = randomInviteCode();
+      await admin
+        .from("profiles")
+        .update({ personal_invite_code: candidate })
+        .eq("id", userId)
+        .is("personal_invite_code", null);
+      const { data: refetched } = await admin
+        .from("profiles")
+        .select("personal_invite_code")
+        .eq("id", userId)
+        .maybeSingle();
+      code = refetched?.personal_invite_code ?? null;
+      if (!code) return jsonResponse({ error: "Could not generate a code right now. Try again." }, 500);
+    }
+
+    return jsonResponse({
+      inviteCode: code,
+      joinUrl: `https://musoadventures.com/preview/index.html?join=${code}`,
+    });
+  }
+
+  return jsonResponse({ error: "action must be 'createInvite', 'claimInvite', 'partyRoster', or 'getMyPersonalCode'" }, 400);
 });
