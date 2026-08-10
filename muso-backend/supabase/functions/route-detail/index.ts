@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
   // committed (venue_id set) — without a second round-trip.
   const { data: stops, error: stopsErr } = await client
     .from("route_stops")
-    .select("id, stop_order, name, description, emoji, is_mystery, venue_id, offered_choices, venues(lat, lng, address)")
+    .select("id, stop_order, name, description, emoji, is_mystery, venue_id, offered_choices, venues(lat, lng, address, muso_rating, muso_rating_count)")
     .eq("route_id", routeId)
     .order("stop_order", { ascending: true });
 
@@ -132,9 +132,13 @@ Deno.serve(async (req) => {
   const visibleStops = (stops ?? []).filter((s) => (s.stop_order as number) <= unlockedStopCount);
 
   const itinerary = visibleStops.map((s: Record<string, unknown>) => {
-    const venue = s.venues as { lat: number | null; lng: number | null; address: string | null } | null;
+    const venue = s.venues as { lat: number | null; lng: number | null; address: string | null; muso_rating: number | null; muso_rating_count: number | null } | null;
     const { venues: _venues, ...rest } = s;
-    const withCoords = { ...rest, lat: venue?.lat ?? null, lng: venue?.lng ?? null, address: venue?.address ?? null };
+    const withCoords = {
+      ...rest,
+      lat: venue?.lat ?? null, lng: venue?.lng ?? null, address: venue?.address ?? null,
+      musoRating: venue?.muso_rating ?? null, musoRatingCount: venue?.muso_rating_count ?? 0,
+    };
     return withCoords.is_mystery
       ? { ...withCoords, name: "Unknown Location", description: "We pick. You don't find out until you arrive." }
       : withCoords;

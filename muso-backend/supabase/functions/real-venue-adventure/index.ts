@@ -172,6 +172,8 @@ type Candidate = {
   image_url: string | null;
   partner_tier: string;
   distance_miles: number;
+  muso_rating: number | null;
+  muso_rating_count: number | null;
 };
 
 // Runs a live Yelp search, upserts results into `venues` (via the existing

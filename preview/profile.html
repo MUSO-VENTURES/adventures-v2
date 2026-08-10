@@ -177,6 +177,11 @@
     font-size:0.72rem; font-weight:700; font-family:'Fredoka',sans-serif;
   }
   .trophy-item .photo-grid{ grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px; }
+  .trophy-review-list{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+  .trophy-review-item{ background:var(--card, #fff); border-radius:12px; padding:10px 12px; }
+  .trophy-review-header{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; font-size:0.82rem; font-weight:700; font-family:'Fredoka',sans-serif; }
+  .trophy-review-rating{ opacity:0.75; white-space:nowrap; }
+  .trophy-review-text{ font-size:0.78rem; opacity:0.75; margin-top:4px; line-height:1.4; }
 
   /* ---------- BOTTOM NAV ---------- */
   /* Same fixed bottom tabbar as preview/index.html, so the game page and
@@ -703,13 +708,17 @@
     // renderBadges() elsewhere on this page — just filtered by adventure_id
     // (added in 0018_adventure_attribution.sql) instead of/alongside
     // profile_id, then grouped client-side by adventure.
-    const [{ data: photoRows }, { data: badgeRows }, { data: coinRows }] = await Promise.all([
+    const [{ data: photoRows }, { data: badgeRows }, { data: coinRows }, { data: reviewRows }] = await Promise.all([
       supabaseClient.from('check_ins').select('adventure_id, photo_url, checked_in_at, route_stops(name)')
         .in('adventure_id', adventureIds).not('photo_url', 'is', null).order('checked_in_at', { ascending: true }),
       supabaseClient.from('profile_badges').select('adventure_id, badge_key, badges(name, emoji)')
         .eq('profile_id', session.user.id).in('adventure_id', adventureIds),
       supabaseClient.from('coin_transactions').select('adventure_id, amount')
         .eq('profile_id', session.user.id).in('adventure_id', adventureIds),
+      // Not filtered to check-ins with a photo — the rate-this-stop prompt
+      // doesn't require one, so a review can exist on a photo-less check-in.
+      supabaseClient.from('check_ins').select('adventure_id, route_stops(name), venue_reviews(rating, review_text)')
+        .eq('checked_in_by', session.user.id).in('adventure_id', adventureIds),
     ]);
 
     const photosByAdventure = {};
@@ -718,11 +727,21 @@
     (badgeRows || []).forEach((b) => { (badgesByAdventure[b.adventure_id] ||= []).push(b); });
     const coinsByAdventure = {};
     (coinRows || []).forEach((c) => { coinsByAdventure[c.adventure_id] = (coinsByAdventure[c.adventure_id] || 0) + c.amount; });
+    const reviewsByAdventure = {};
+    (reviewRows || []).forEach((r) => {
+      // venue_reviews is a one-to-one child of check_ins (unique check_in_id)
+      // — PostgREST embeds it as a single object when present, but handle
+      // an array shape too rather than assume a specific client version.
+      const review = Array.isArray(r.venue_reviews) ? r.venue_reviews[0] : r.venue_reviews;
+      if (!review) return;
+      (reviewsByAdventure[r.adventure_id] ||= []).push({ stopName: (r.route_stops && r.route_stops.name) || 'Stop', ...review });
+    });
 
     el.innerHTML = `<div class="trophy-list">${adventures.map((a) => {
       const photos = photosByAdventure[a.id] || [];
       const badges = badgesByAdventure[a.id] || [];
       const coins = coinsByAdventure[a.id] || 0;
+      const reviews = reviewsByAdventure[a.id] || [];
       const title = (a.routes && a.routes.title) || 'Adventure';
       const date = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
       const photoGridHtml = photos.length
@@ -736,6 +755,15 @@
       const badgeRowHtml = badges.length
         ? `<div class="trophy-badge-row">${badges.map((b) => `<span class="trophy-badge-chip">${(b.badges && b.badges.emoji) || '🏅'} ${(b.badges && b.badges.name) || b.badge_key}</span>`).join('')}</div>`
         : '';
+      const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const reviewsHtml = reviews.length
+        ? `<div class="trophy-review-list">${reviews.map((r) => `
+            <div class="trophy-review-item">
+              <div class="trophy-review-header"><span>${esc(r.stopName)}</span><span class="trophy-review-rating">🎯 ${r.rating}/10</span></div>
+              ${r.review_text ? `<div class="trophy-review-text">${esc(r.review_text)}</div>` : ''}
+            </div>
+          `).join('')}</div>`
+        : '';
       return `
         <div class="trophy-item">
           <div class="trophy-item-header">
@@ -745,6 +773,7 @@
           <div class="trophy-item-stats">🪙 ${coins >= 0 ? '+' : ''}${coins} coins earned</div>
           ${badgeRowHtml}
           ${photoGridHtml}
+          ${reviewsHtml}
         </div>
       `;
     }).join('')}</div>`;
