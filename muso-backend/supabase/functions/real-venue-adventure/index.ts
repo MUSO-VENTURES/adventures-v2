@@ -447,6 +447,7 @@ const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   },
 ];
 const WINE_GENERAL_THEME: Theme = { key: "winery", label: "Winery", emoji: "🍷", color: "#2a2438" };
+const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Nearby Pick", emoji: "📍", color: "#5b5b5b" };
 
 function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: string[] })[] = THEME_BUCKETS): Theme {
   const cat = `${candidate.category ?? ""} ${candidate.name ?? ""}`.toLowerCase();
@@ -456,7 +457,16 @@ function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: strin
       return theme;
     }
   }
-  return buckets === WINE_THEME_BUCKETS ? WINE_GENERAL_THEME : GENERAL_THEME;
+  if (buckets !== WINE_THEME_BUCKETS) return GENERAL_THEME;
+  // `category` is Yelp's own first-listed category for a business, which
+  // often isn't the same category our search actually matched it on — a
+  // diner or park found via the companion-category search can easily not
+  // contain any of the food/entertainment/sightseeing keywords above, and
+  // was previously mislabeled "Winery" by a single shared fallback (the
+  // only fallback that existed). Only call it a winery if its own
+  // category/name text actually says so; anything else companion-shaped
+  // gets its own honest "nearby pick" label instead.
+  return /winery|winer(y|ies)|vineyard|wine/.test(cat) ? WINE_GENERAL_THEME : WINE_NEARBY_FALLBACK;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -484,12 +494,6 @@ function pickContrastingChoices(
     if (!byTheme.has(theme.key)) byTheme.set(theme.key, { theme, items: [] });
     byTheme.get(theme.key)!.items.push(c);
   }
-  // Temporary diagnostic — shows exactly which themes the pool actually
-  // has to draw from, so a duplicate-theme complaint can be told apart
-  // from "the pool genuinely only has 2 distinct themes worth of
-  // candidates" vs. an actual classification bug. Remove once confirmed.
-  console.log(`pickContrastingChoices pool: ${candidates.length} candidates across ${byTheme.size} themes — ${[...byTheme.entries()].map(([k, v]) => `${k}=${v.items.length}`).join(", ")}`);
-
   const chosen: (Candidate & { theme: Theme })[] = [];
   const usedIds = new Set<string>();
   const usedThemeKeys = new Set<string>();
