@@ -180,6 +180,12 @@
     box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4); transition:background-color .35s ease;
   }
   .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
+  /* Global rank ring — a colored outline keyed off a player's level tier,
+     applied to every avatar in the app (nav dock, roster panel, profile
+     page). Outline rather than another box-shadow layer so it never
+     fights the element's own border/shadow styling — it just sits outside
+     it. --rank-color is set per-instance via applyRankRing() in JS. */
+  .rank-ring{ outline:3px solid var(--rank-color, transparent); outline-offset:2px; border-radius:50%; }
   .nav-avatar-close{
     position:absolute; inset:0; border:none; padding:0; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
@@ -791,6 +797,71 @@
     color:#fff; font-size:0.8rem; font-weight:600; pointer-events:none;
   }
 
+  /* ---------- PARTY ROSTER + LIVE FEED ----------
+     Sibling of #adventure-body, same reasoning as .progress-map-wrap
+     above — renderItinerary()'s innerHTML replace never touches it, so
+     the roster/feed persist across every reroll/checkin/advance re-render
+     instead of flickering out and back in. */
+  .party-roster-wrap{
+    margin-top:16px; background:var(--card); border-radius:16px; padding:16px 18px;
+    box-shadow:0 4px 16px rgba(var(--shadow-rgb),0.06);
+  }
+  .party-roster-wrap[hidden]{ display:none; }
+  .party-roster-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .party-roster-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.95rem; }
+  .party-invite-btn{
+    background:var(--coral); color:#fff; border:none; padding:7px 14px; border-radius:999px;
+    font-weight:700; font-size:0.78rem; cursor:pointer; font-family:'Fredoka',sans-serif;
+  }
+  .party-roster-list{ display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; }
+  .party-member{ display:flex; flex-direction:column; align-items:center; gap:4px; width:64px; }
+  .party-member-avatar{
+    position:relative; width:44px; height:44px; border-radius:50%; overflow:hidden;
+    background:var(--ink);
+  }
+  .party-member-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .party-member-name{ font-size:0.68rem; font-weight:700; text-align:center; line-height:1.2; max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .party-member-meta{ font-size:0.62rem; opacity:0.6; }
+  .party-member-pending .party-member-avatar{
+    background:rgba(var(--shadow-rgb),0.08); display:flex; align-items:center; justify-content:center;
+    font-size:1.3rem; opacity:0.5; border:2px dashed rgba(var(--shadow-rgb),0.25);
+  }
+  .party-member-pending .party-member-name{ opacity:0.55; }
+  .party-feed{ border-top:1px solid rgba(var(--shadow-rgb),0.08); padding-top:10px; max-height:160px; overflow-y:auto; }
+  .party-feed-empty{ font-size:0.78rem; opacity:0.5; text-align:center; padding:6px 0; }
+  .party-feed-item{
+    font-size:0.78rem; padding:5px 0; display:flex; align-items:center; gap:6px;
+    animation:party-feed-in .3s ease-out;
+  }
+  @keyframes party-feed-in{ from{ opacity:0; transform:translateY(-4px); } to{ opacity:1; transform:translateY(0); } }
+
+  /* ---------- INVITE MODAL ---------- */
+  .party-invite-overlay{
+    position:fixed; inset:0; z-index:900; background:rgba(0,0,0,0.55);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .party-invite-overlay[hidden]{ display:none; }
+  .party-invite-card{
+    background:var(--card); border-radius:20px; padding:24px 22px; max-width:360px; width:100%;
+    position:relative; text-align:center;
+  }
+  .party-invite-card h3{ font-family:'Fredoka',sans-serif; margin:0 0 14px; }
+  .party-invite-close{
+    position:absolute; top:12px; right:12px; background:rgba(var(--shadow-rgb),0.08); border:none;
+    width:28px; height:28px; border-radius:50%; font-size:1.1rem; cursor:pointer; color:var(--ink);
+  }
+  .party-invite-tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .party-invite-tab{
+    flex:1; background:rgba(var(--shadow-rgb),0.06); border:none; padding:9px; border-radius:999px;
+    font-weight:700; font-size:0.8rem; cursor:pointer; font-family:'Fredoka',sans-serif; color:var(--ink);
+  }
+  .party-invite-tab.active{ background:var(--coral); color:#fff; }
+  .party-invite-panel[hidden]{ display:none; }
+  #invite-qr-canvas-wrap{ display:flex; justify-content:center; margin-bottom:12px; }
+  #invite-qr-canvas-wrap canvas{ border-radius:12px; }
+  .party-invite-hint{ font-size:0.8rem; opacity:0.7; }
+  #invite-scan-video{ width:100%; border-radius:12px; margin-bottom:10px; background:#000; max-height:280px; object-fit:cover; }
+
   /* ---------- ONBOARDING: PREFERENCE SETUP ----------
      Ported from index.html's "Quick Setup"/"Full Discovery" component
      (same field set, same selectPill/toggleChip behavior) with colors
@@ -1298,8 +1369,36 @@
       <div id="adventure-progress-map"></div>
       <div class="progress-map-hint" id="adventure-progress-hint"></div>
     </div>
+    <div class="party-roster-wrap" id="party-roster-wrap" hidden>
+      <div class="party-roster-header">
+        <span class="party-roster-title">🎉 Who's Playing</span>
+        <button type="button" class="party-invite-btn" onclick="openInviteModal()">+ Invite</button>
+      </div>
+      <div class="party-roster-list" id="party-roster-list"></div>
+      <div class="party-feed" id="party-feed"></div>
+    </div>
   </div>
 </section>
+
+<div class="party-invite-overlay" id="party-invite-overlay" hidden>
+  <div class="party-invite-card">
+    <button type="button" class="party-invite-close" onclick="closeInviteModal()" aria-label="Close">&times;</button>
+    <h3>Invite someone to join</h3>
+    <div class="party-invite-tabs">
+      <button type="button" class="party-invite-tab active" id="invite-tab-show" onclick="switchInviteTab('show')">Show my QR</button>
+      <button type="button" class="party-invite-tab" id="invite-tab-scan" onclick="switchInviteTab('scan')">Scan a QR</button>
+    </div>
+    <div class="party-invite-panel" id="invite-panel-show">
+      <div id="invite-qr-canvas-wrap"></div>
+      <div class="party-invite-hint" id="invite-code-hint">Generating your invite code…</div>
+    </div>
+    <div class="party-invite-panel" id="invite-panel-scan" hidden>
+      <video id="invite-scan-video" playsinline autoplay muted></video>
+      <canvas id="invite-scan-canvas" hidden></canvas>
+      <div class="party-invite-hint" id="invite-scan-hint">Point your camera at their QR code</div>
+    </div>
+  </div>
+</div>
 
 <footer>
   <p>This is a live preview of real, third-party venue data. MUSO Adventures does not own or operate these venues. This page is a concept preview, not the finished product.</p>
@@ -1348,6 +1447,13 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Real QR generation (invite "Show my QR") and camera-based decoding
+     ("Scan a QR") — replaces the old fully decorative check-in QR
+     animation. Both are small, well-established libraries loaded the same
+     way Chart.js was added for the admin dashboard: one script tag, no
+     build step. -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
   // Restores a query string (e.g. ?test=1&lat=..&lng=..) that
   // sendMagicLink() deliberately stripped off the magic-link redirect URL
@@ -1656,6 +1762,269 @@
     return data.partyId;
   }
 
+  // ---------- PARTY ROSTER, LIVE FEED, INVITES ----------
+  // partyRosterCache lets the realtime feed (which only gets a raw
+  // check_ins row from Postgres, not a joined display_name) resolve
+  // "who" without a network round trip for every single event — it's
+  // refreshed by loadPartyRoster(), which every realtime event also
+  // triggers, so it's never more than one event behind.
+  let partyRosterCache = { members: [], pendingInvites: [] };
+  let partyRealtimeChannel = null;
+  let partyRealtimeAdventureId = null;
+
+  async function postPartySocial(action, extra) {
+    return postEdgeFunction('party-social', { action, ...(extra || {}) });
+  }
+
+  function stopNameById(routeStopId) {
+    const stop = (activeAdventure?.stops || []).find((s) => s.id === routeStopId);
+    return stop?.name || 'a stop';
+  }
+
+  function memberNameById(profileId) {
+    const m = partyRosterCache.members.find((x) => x.profileId === profileId);
+    return m?.displayName || 'Someone';
+  }
+
+  function renderPartyRoster(roster) {
+    partyRosterCache = roster;
+    const wrap = document.getElementById('party-roster-wrap');
+    const list = document.getElementById('party-roster-list');
+    if (!wrap || !list) return;
+    wrap.removeAttribute('hidden');
+
+    const memberHtml = roster.members.map((m) => {
+      const esc = String(m.displayName || 'Explorer').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const img = m.avatarUrl
+        ? `<img src="${String(m.avatarUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" alt="">`
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">${esc.charAt(0).toUpperCase()}</div>`;
+      return `
+        <div class="party-member">
+          <div class="party-member-avatar" data-level="${m.level}">${img}</div>
+          <div class="party-member-name">${esc}</div>
+          <div class="party-member-meta">Lv ${m.level} · 🏅${m.badgeCount}</div>
+        </div>
+      `;
+    }).join('');
+
+    const pendingHtml = roster.pendingInvites.map(() => `
+      <div class="party-member party-member-pending">
+        <div class="party-member-avatar">⏳</div>
+        <div class="party-member-name">Invited</div>
+        <div class="party-member-meta">Waiting…</div>
+      </div>
+    `).join('');
+
+    list.innerHTML = memberHtml + pendingHtml;
+    // Rank rings are applied after the HTML lands (rather than inlined
+    // into the template above) so a single shared helper stays the one
+    // source of truth for the tier→color mapping.
+    list.querySelectorAll('.party-member-avatar[data-level]').forEach((el) => {
+      applyRankRing(el, el.dataset.level);
+    });
+  }
+
+  async function loadPartyRoster() {
+    if (!activeAdventure?.partyId) return;
+    const { res, data } = await postPartySocial('partyRoster', { partyId: activeAdventure.partyId });
+    if (res.ok) renderPartyRoster(data);
+  }
+
+  function addPartyFeedItem(html) {
+    const feed = document.getElementById('party-feed');
+    if (!feed) return;
+    feed.querySelector('.party-feed-empty')?.remove();
+    const item = document.createElement('div');
+    item.className = 'party-feed-item';
+    item.innerHTML = html;
+    feed.prepend(item);
+    // Keep the feed from growing unbounded across a long adventure.
+    while (feed.children.length > 30) feed.removeChild(feed.lastChild);
+  }
+
+  // One Realtime channel per active adventure — subscribes to check-ins
+  // for real-time "so-and-so just checked in" feed entries, and to
+  // party_members/party_invites for live roster updates when someone
+  // joins. This is the one genuinely new technical pattern in this app;
+  // everything else so far has been plain request/response.
+  function ensurePartyRealtime(partyId, adventureId) {
+    if (!partyId || !adventureId) return;
+    if (partyRealtimeChannel && partyRealtimeAdventureId === adventureId) return; // already subscribed
+    teardownPartyRealtime();
+    partyRealtimeAdventureId = adventureId;
+
+    partyRealtimeChannel = supabaseClient
+      .channel(`party-${partyId}-${adventureId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'check_ins', filter: `adventure_id=eq.${adventureId}` }, (payload) => {
+        const row = payload.new;
+        const who = memberNameById(row.checked_in_by);
+        const where = stopNameById(row.route_stop_id);
+        const photoNote = row.photo_url ? ' 📸' : '';
+        addPartyFeedItem(`<strong>${who}</strong>&nbsp;checked in at ${where}${photoNote}`);
+        loadPartyRoster();
+        // A teammate's check-in can reveal the next stop (advance()) or
+        // complete the adventure — the itinerary needs to reflect that
+        // even for a member who didn't tap anything themselves.
+        if (activeAdventure?.adventureId === adventureId) loadItinerary(adventureId);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'party_members', filter: `party_id=eq.${partyId}` }, () => {
+        loadPartyRoster();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'party_invites', filter: `party_id=eq.${partyId}` }, () => {
+        loadPartyRoster();
+      })
+      .subscribe();
+  }
+
+  function teardownPartyRealtime() {
+    if (partyRealtimeChannel) {
+      supabaseClient.removeChannel(partyRealtimeChannel);
+      partyRealtimeChannel = null;
+    }
+    partyRealtimeAdventureId = null;
+    partyRosterCache = { members: [], pendingInvites: [] };
+    const feed = document.getElementById('party-feed');
+    if (feed) feed.innerHTML = '<div class="party-feed-empty">No activity yet</div>';
+    document.getElementById('party-roster-wrap')?.setAttribute('hidden', '');
+  }
+
+  // ---------- INVITE MODAL: SHOW MY QR / SCAN A QR ----------
+  // No activeAdventure requirement here on purpose — "Show my QR" needs
+  // one (there's no party to invite people into otherwise), but "Scan a
+  // QR" is exactly how a brand new player joins someone else's adventure
+  // in the first place, before they have one of their own. When opened
+  // without an adventure, the "Show my QR" tab is hidden and this jumps
+  // straight to scanning.
+  window.openInviteModal = function () {
+    document.getElementById('party-invite-overlay').removeAttribute('hidden');
+    const showTabBtn = document.getElementById('invite-tab-show');
+    if (activeAdventure?.partyId) {
+      showTabBtn.style.display = '';
+      switchInviteTab('show');
+    } else {
+      showTabBtn.style.display = 'none';
+      switchInviteTab('scan');
+    }
+  };
+
+  window.closeInviteModal = function () {
+    document.getElementById('party-invite-overlay').setAttribute('hidden', '');
+    stopQrScan();
+  };
+
+  window.switchInviteTab = function (tab) {
+    const showTab = document.getElementById('invite-tab-show');
+    const scanTab = document.getElementById('invite-tab-scan');
+    const showPanel = document.getElementById('invite-panel-show');
+    const scanPanel = document.getElementById('invite-panel-scan');
+    if (tab === 'show') {
+      showTab.classList.add('active'); scanTab.classList.remove('active');
+      showPanel.removeAttribute('hidden'); scanPanel.setAttribute('hidden', '');
+      stopQrScan();
+      generateInviteQr();
+    } else {
+      scanTab.classList.add('active'); showTab.classList.remove('active');
+      scanPanel.removeAttribute('hidden'); showPanel.setAttribute('hidden', '');
+      startQrScan();
+    }
+  };
+
+  async function generateInviteQr() {
+    const hint = document.getElementById('invite-code-hint');
+    const wrap = document.getElementById('invite-qr-canvas-wrap');
+    hint.textContent = 'Generating your invite code…';
+    wrap.innerHTML = '';
+    try {
+      const { res, data } = await postPartySocial('createInvite', { partyId: activeAdventure.partyId });
+      if (!res.ok) { hint.textContent = data.error || 'Could not create an invite right now.'; return; }
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      await QRCode.toCanvas(canvas, data.joinUrl, { width: 220, margin: 1, color: { dark: '#2a2438', light: '#ffffff' } });
+      hint.textContent = 'Have them scan this with their camera, or share the link directly.';
+    } catch (e) {
+      hint.textContent = 'Could not generate a QR code: ' + (e?.message || e);
+    }
+  }
+
+  // Scanning: rear/environment camera by default (pointing it at someone
+  // else's screen), unlike the front-camera default used for avatar
+  // selfies elsewhere in this file. Frames are pulled to a hidden canvas
+  // and decoded with jsQR — there's no getUserMedia "give me decoded QR
+  // codes" API, every in-browser scanner works this way.
+  let qrScanStream = null;
+  let qrScanRafId = null;
+
+  async function startQrScan() {
+    const hint = document.getElementById('invite-scan-hint');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      hint.textContent = "This browser doesn't support camera access.";
+      return;
+    }
+    const video = document.getElementById('invite-scan-video');
+    try {
+      qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      video.srcObject = qrScanStream;
+      await video.play();
+      hint.textContent = 'Point your camera at their QR code';
+      qrScanTick();
+    } catch (e) {
+      hint.textContent = "Couldn't access your camera: " + e.message;
+    }
+  }
+
+  function stopQrScan() {
+    if (qrScanRafId) { cancelAnimationFrame(qrScanRafId); qrScanRafId = null; }
+    if (qrScanStream) { qrScanStream.getTracks().forEach((t) => t.stop()); qrScanStream = null; }
+  }
+
+  function qrScanTick() {
+    const video = document.getElementById('invite-scan-video');
+    const canvas = document.getElementById('invite-scan-canvas');
+    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      qrScanRafId = requestAnimationFrame(qrScanTick);
+      return;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code && code.data) {
+      stopQrScan();
+      handleScannedInvite(code.data);
+    } else {
+      qrScanRafId = requestAnimationFrame(qrScanTick);
+    }
+  }
+
+  // Accepts either a full https://…?join=CODE URL (what the QR actually
+  // encodes) or someone typing/pasting a bare code, so scanning and the
+  // ?join= link fallback both funnel through the same claim path.
+  async function handleScannedInvite(scannedText) {
+    const hint = document.getElementById('invite-scan-hint');
+    let code = scannedText;
+    try {
+      const url = new URL(scannedText);
+      code = url.searchParams.get('join') || scannedText;
+    } catch (e) { /* not a URL — treat the scanned text as a bare code */ }
+
+    hint.textContent = 'Joining…';
+    try {
+      const { res, data } = await postPartySocial('claimInvite', { inviteCode: code });
+      if (!res.ok) { hint.textContent = data.error || "That code didn't work."; return; }
+      closeInviteModal();
+      showToast("🎉 You're in! Welcome to the party.");
+      // Whether or not the scanner already had an adventure of their own
+      // open, loadAdventureSection() resolves it correctly: its existing
+      // resume-fallback looks up an in-progress adventure for any party
+      // this user belongs to, which claimInvite just made this one.
+      await loadAdventureSection();
+    } catch (e) {
+      hint.textContent = 'Could not reach the game service: ' + e.message;
+    }
+  }
+
   // Same cross-context session drift covered elsewhere in this file, but
   // for the edge functions' own 401 "session expired" response instead of
   // a Postgres RLS rejection — every in-game action (choose/reroll/check-in/
@@ -1765,10 +2134,28 @@
   // profile.html iframe now, which renders its own copy of this same data
   // independently — called after every sign-in/sign-out/check-in/avatar-
   // or-preferences change via refreshProfileAndBadges().
+  // Four tiers over profiles.level (level = floor(xp/100)+1, see
+  // 0007_gamification.sql) — tunable, not tied to any particular XP
+  // curve. Shared by every avatar in the app: nav dock, roster panel,
+  // profile page.
+  function rankRingColor(level) {
+    const lvl = Number(level) || 1;
+    if (lvl <= 4) return '#cd7f32';  // Bronze
+    if (lvl <= 9) return '#b0b0b8';  // Silver
+    if (lvl <= 19) return '#e8b923'; // Gold
+    return '#7dd3e0';                // Platinum
+  }
+  function applyRankRing(el, level) {
+    if (!el) return;
+    el.style.setProperty('--rank-color', rankRingColor(level));
+    el.classList.add('rank-ring');
+  }
+
   function renderProfileSheetHeader() {
     const navImg = document.getElementById('nav-avatar-img');
     if (!navImg) return; // Phase 2 chrome not present (shouldn't happen, defensive)
     navImg.src = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
+    applyRankRing(document.querySelector('.nav-avatar-disc'), currentProfile?.level);
   }
 
   let signinCooldownTimer = null;
@@ -1844,6 +2231,7 @@
     currentProfile = null;
     currentBadgeKeys = new Set();
     activeAdventure = null;
+    teardownPartyRealtime();
     renderAccountBar();
     loadAdventureSection();
   };
@@ -1884,6 +2272,7 @@
       sub.textContent = 'Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.';
       body.innerHTML = '';
       activeAdventure = null;
+      teardownPartyRealtime();
       return;
     }
     sub.textContent = 'Check in at real stops as you go. Each one earns XP, and your first check-in unlocks your profile.';
@@ -1953,6 +2342,9 @@
           </div>
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
+      </div>
+      <div style="text-align:center; margin:14px 0;">
+        <button type="button" class="party-invite-btn" onclick="openInviteModal()">📷 Join a Party: Scan an Invite</button>
       </div>
       <div class="curated-routes-divider">or pick a curated route</div>
     `;
@@ -2178,11 +2570,11 @@
     // renderRoutePicker() with zero feedback. Retry once on a real error
     // before falling back to "not found", and only take the "not found"
     // path when there's truly no error at all.
-    let { data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle();
+    let { data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, party_id, status, mode').eq('id', adventureId).maybeSingle();
     if (advLookupErr) {
       const { error: refreshErr } = await supabaseClient.auth.refreshSession();
       if (!refreshErr) {
-        ({ data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, status, mode').eq('id', adventureId).maybeSingle());
+        ({ data: adv, error: advLookupErr } = await supabaseClient.from('adventures').select('id, route_id, party_id, status, mode').eq('id', adventureId).maybeSingle());
       }
     }
     if (advLookupErr) {
@@ -2237,6 +2629,7 @@
     activeAdventure = {
       adventureId,
       routeId: adv.route_id,
+      partyId: adv.party_id,
       mode: adv.mode || 'curated',
       route: routeData.route,
       stops: routeData.stops,
@@ -2247,6 +2640,8 @@
       ...carryForward,
     };
     renderItinerary();
+    ensurePartyRealtime(adv.party_id, adventureId);
+    loadPartyRoster();
   }
 
   function renderItinerary() {
@@ -2527,6 +2922,7 @@
     try { localStorage.removeItem(adventureStorageKey(currentSession.user.id)); } catch (e) {}
     activeAdventure = null;
     resetProgressMap();
+    teardownPartyRealtime();
     renderRoutePicker();
   };
 
@@ -3028,10 +3424,21 @@
       // venues nearby), the stop just stays "Unknown Location" and the
       // player can retry from the itinerary view — the check-in itself has
       // already succeeded either way.
-      if (activeAdventure.mode === 'real_venue') {
+      //
+      // isFirstCheckinForStop matters now that check-ins are per person —
+      // without this guard, a second/third party member checking into a
+      // stop teammates already completed would call advance() again and
+      // reveal the stop *after* the one that's actually next, since
+      // advance() always operates on "whatever placeholder comes first."
+      if (activeAdventure.mode === 'real_venue' && progress.isFirstCheckinForStop) {
         try {
           await postEdgeFunction('real-venue-adventure', { action: 'advance', adventureId: activeAdventure.adventureId, lat: currentLat, lng: currentLng });
         } catch (e) {}
+        await loadItinerary(activeAdventure.adventureId);
+      } else if (activeAdventure.mode === 'real_venue') {
+        // Not the first check-in at this stop — the itinerary/roster still
+        // need to reflect *this* person's own check-in, just without
+        // re-triggering advance().
         await loadItinerary(activeAdventure.adventureId);
       }
 
@@ -3763,6 +4170,35 @@
       window.openOnboarding(true);
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, '', cleanUrl);
+    }
+
+    // Invite link fallback (?join=CODE) — the same URL a scanned QR opens.
+    // Covers sharing the link via text/AirDrop instead of an in-app scan,
+    // and scanning with the phone's *native* camera app (which just opens
+    // the link, no in-app scanner involved). If they weren't signed in
+    // yet, this param survives the magic-link redirect via
+    // restorePendingQuery() at the top of this file and gets claimed here
+    // once they land back signed in.
+    const joinCode = new URLSearchParams(window.location.search).get('join');
+    if (joinCode && currentSession) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+      try {
+        const { res, data } = await postPartySocial('claimInvite', { inviteCode: joinCode });
+        if (res.ok) {
+          showToast("🎉 You're in! Welcome to the party.");
+          // loadAdventureSection()'s existing resume logic already falls
+          // back to "does any party I'm a member of have an in-progress
+          // adventure" when there's nothing in localStorage — claimInvite
+          // just added this party membership, so that fallback picks up
+          // the party's adventure automatically, no adventureId needed here.
+          loadAdventureSection();
+        } else {
+          showToast(data.error || "That invite link didn't work.");
+        }
+      } catch (e) {
+        showToast('Could not reach the game service: ' + e.message);
+      }
     }
   }
 

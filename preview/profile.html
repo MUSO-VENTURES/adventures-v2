@@ -214,6 +214,10 @@
     box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4);
   }
   .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
+  /* Global rank ring — see preview/index.html's copy of this rule for the
+     full rationale. Kept in sync manually (no shared stylesheet between
+     these two pages). */
+  .rank-ring{ outline:3px solid var(--rank-color, transparent); outline-offset:2px; border-radius:50%; }
 </style>
 <script>
   // Binary day/night, driven by the viewer's own device clock (always
@@ -444,6 +448,21 @@
 
   function initialLetter(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
 
+  // Kept in sync manually with preview/index.html's copy — see that
+  // file's version for the tier rationale.
+  function rankRingColor(level) {
+    const lvl = Number(level) || 1;
+    if (lvl <= 4) return '#cd7f32';
+    if (lvl <= 9) return '#b0b0b8';
+    if (lvl <= 19) return '#e8b923';
+    return '#7dd3e0';
+  }
+  function applyRankRing(el, level) {
+    if (!el) return;
+    el.style.setProperty('--rank-color', rankRingColor(level));
+    el.classList.add('rank-ring');
+  }
+
   function renderHeader() {
     const avatarEl = document.getElementById('avatar-el');
     if (profile.avatar_url) {
@@ -453,6 +472,7 @@
       avatarEl.style.background = profile.avatar_color || '#e8503f';
       avatarEl.textContent = initialLetter(profile.display_name);
     }
+    applyRankRing(avatarEl, profile.level);
     document.getElementById('display-name-el').textContent = profile.display_name || 'Explorer';
     document.getElementById('member-since-el').textContent = profile.created_at
       ? `Exploring since ${new Date(profile.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
@@ -476,6 +496,7 @@
 
     const navAvatarImg = document.getElementById('nav-avatar-img');
     if (navAvatarImg) navAvatarImg.src = profile.avatar_url || '';
+    applyRankRing(document.querySelector('.nav-avatar-disc'), profile.level);
   }
 
   function fillEditForm() {
