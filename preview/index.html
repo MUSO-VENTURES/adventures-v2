@@ -600,6 +600,11 @@
   }
   .fork-choose-btn:hover{ filter:brightness(1.1); }
   .fork-choose-btn:disabled{ opacity:0.5; cursor:default; }
+  .checkin-btn:disabled{ opacity:0.5; cursor:default; }
+  .venue-hours-note{
+    font-size:0.76rem; font-weight:700; color:var(--coral);
+    background:rgba(232,80,63,0.1); padding:4px 9px; border-radius:8px; align-self:flex-start;
+  }
   .fork-spin-btn{
     background:transparent; border:2px solid rgba(var(--shadow-rgb),0.25); color:var(--ink);
     padding:9px 16px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -1440,6 +1445,82 @@
     return count > 0 ? `🎯 ${rating}/10 (${count})` : '';
   }
 
+  // Mirrors isOpenOrClosingSoon() in real-venue-adventure/index.ts — same
+  // logic, run client-side against the player's own device clock so the
+  // "still looking at this screen when it tips over" case (see
+  // refreshVenueGating() below) doesn't need a server round-trip. Unknown
+  // hours (no data, or JSON.parse failure) fall back to "assume open" —
+  // same best-effort spirit as the backend version.
+  function isOpenOrClosingSoon(hoursRaw) {
+    const CLOSING_SOON_BUFFER_MINUTES = 30;
+    const VENUE_TIMEZONE = 'America/Los_Angeles';
+    let hours = hoursRaw;
+    if (typeof hours === 'string') {
+      try { hours = hours ? JSON.parse(hours) : null; } catch (e) { hours = null; }
+    }
+    if (!hours || !hours.length) return { open: true, closingSoon: false };
+    const regular = hours.find((h) => h.hour_type === 'REGULAR') || hours[0];
+    if (!regular.is_open_now) return { open: false, closingSoon: false };
+
+    const nowPacific = new Date(new Date().toLocaleString('en-US', { timeZone: VENUE_TIMEZONE }));
+    const weekday = (nowPacific.getDay() + 6) % 7; // JS: 0=Sunday..6=Saturday -> Yelp: 0=Monday..6=Sunday
+    const minutesNow = nowPacific.getHours() * 60 + nowPacific.getMinutes();
+
+    const todaysBlocks = (regular.open || []).filter((o) => o.day === weekday);
+    for (const block of todaysBlocks) {
+      if (block.is_overnight) continue;
+      const endMinutes = parseInt(block.end.slice(0, 2), 10) * 60 + parseInt(block.end.slice(2), 10);
+      if (minutesNow <= endMinutes && endMinutes - minutesNow <= CLOSING_SOON_BUFFER_MINUTES) {
+        return { open: true, closingSoon: true };
+      }
+    }
+    return { open: true, closingSoon: false };
+  }
+
+  // Live recheck (not just at render time) — a fork choice or committed
+  // stop can tip from "open" to "closing soon" while a player is just
+  // sitting on the screen. Scans whatever's currently in the DOM rather
+  // than re-rendering, so it doesn't disturb scroll position, expanded
+  // card state, etc.
+  function refreshVenueGating() {
+    document.querySelectorAll('.fork-stack-card[data-hours]').forEach((card) => {
+      const btn = card.querySelector('.fork-choose-btn');
+      if (!btn) return;
+      const gate = isOpenOrClosingSoon(card.dataset.hours);
+      const blocked = !gate.open || gate.closingSoon;
+      btn.disabled = blocked;
+      let note = card.querySelector('.venue-hours-note');
+      if (blocked && !note) {
+        note = document.createElement('div');
+        note.className = 'venue-hours-note';
+        card.querySelector('.fork-choice-actions')?.insertAdjacentElement('beforebegin', note);
+      }
+      if (note) {
+        if (blocked) { note.textContent = !gate.open ? '🚫 Currently closed' : '⏰ Closing soon'; note.style.display = ''; }
+        else note.style.display = 'none';
+      }
+    });
+
+    document.querySelectorAll('.checkin-btn').forEach((btn) => {
+      const wrap = btn.closest('[data-hours]');
+      if (!wrap) return;
+      const gate = isOpenOrClosingSoon(wrap.dataset.hours);
+      const blocked = !gate.open || gate.closingSoon;
+      btn.disabled = blocked;
+      let note = wrap.querySelector('.venue-hours-note');
+      if (blocked && !note) {
+        note = document.createElement('div');
+        note.className = 'venue-hours-note';
+        btn.insertAdjacentElement('beforebegin', note);
+      }
+      if (note) {
+        if (blocked) { note.textContent = !gate.open ? '🚫 This venue is currently closed' : '⏰ Closing soon'; note.style.display = ''; }
+        else note.style.display = 'none';
+      }
+    });
+  }
+  setInterval(refreshVenueGating, 60000);
+
   // ---------- Rate-this-stop prompt ----------
   let reviewCheckInId = null;
   let reviewSelectedRating = 0;
@@ -2224,7 +2305,7 @@
         const cardAttrs = (c, theme) => `data-venue-id="${c.id}" data-image-url="${attrEsc(c.image_url)}" ` +
           `data-theme-emoji="${attrEsc(theme.emoji)}" data-theme-label="${attrEsc(theme.label)}" ` +
           `data-theme-color="${attrEsc(theme.color)}" data-rating="${attrEsc(c.rating)}" data-category="${attrEsc(c.category)}" ` +
-          `data-muso-badge="${attrEsc(musoBadgeText(c))}"`;
+          `data-muso-badge="${attrEsc(musoBadgeText(c))}" data-hours="${attrEsc(c.hours ? JSON.stringify(c.hours) : '')}"`;
 
         const expandedCardHtml = (c) => {
           const theme = c.theme || { key: 'local', label: 'Local Pick', emoji: '📍', color: '#2a2438' };
@@ -2233,6 +2314,17 @@
           const photoHtml = c.image_url
             ? `<div class="fork-choice-photo-wrap"><img src="${attrEsc(c.image_url)}" alt="" onerror="this.parentElement.style.display='none';"></div>`
             : '';
+          // Backend already never offers a closed/closing-soon venue, but
+          // time can pass while a player sits on this screen — this initial
+          // render check plus the periodic refreshVenueGating() recheck
+          // (below) catches the "still on this screen when it tips over"
+          // case live, no reload needed.
+          const gate = isOpenOrClosingSoon(c.hours);
+          const shouldBlock = !gate.open || gate.closingSoon;
+          const disabledAttr = shouldBlock ? 'disabled' : '';
+          const noteHtml = shouldBlock
+            ? `<div class="venue-hours-note">${!gate.open ? '🚫 Currently closed' : '⏰ Closing soon'}</div>`
+            : '';
           return `
             <div class="fork-stack-card expanded" style="--theme-color:${theme.color};" ${cardAttrs(c, theme)}>
               ${photoHtml}
@@ -2240,8 +2332,9 @@
               <div class="fork-choice-name">${c.name}</div>
               <div class="fork-choice-meta">${meta}</div>
               <div class="fork-choice-addr">${c.address || ''}</div>
+              ${noteHtml}
               <div class="fork-choice-actions">
-                <button type="button" class="fork-choose-btn" onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
+                <button type="button" class="fork-choose-btn" ${disabledAttr} onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
                 <button type="button" class="fork-spin-btn" data-stop-id="${s.id}" onclick="spinForkCard('${s.id}')">🎲 Spin</button>
               </div>
             </div>
@@ -2292,10 +2385,21 @@
         const testControl = TEST_MODE
           ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')">🧪 Test check-in (skip photo)</span>`
           : '';
+        // Hours gating only applies to real-venue/Wine Country stops —
+        // curated venues have no hours data at all (s.hours is always
+        // null for them), so isOpenOrClosingSoon(null) naturally resolves
+        // to "open" and never blocks them, but isRealVenue is checked
+        // explicitly too so the intent stays clear if that ever changes.
+        const checkinGate = isRealVenue ? isOpenOrClosingSoon(s.hours) : { open: true, closingSoon: false };
+        const checkinBlocked = !checkinGate.open || checkinGate.closingSoon;
+        const checkinNoteHtml = checkinBlocked
+          ? `<div class="venue-hours-note">${!checkinGate.open ? '🚫 This venue is currently closed' : '⏰ Closing soon'}</div>`
+          : '';
         status = `
-          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;" data-hours="${(s.hours ? JSON.stringify(s.hours) : '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
             ${photoControl}
-            <button type="button" class="checkin-btn" onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
+            ${checkinNoteHtml}
+            <button type="button" class="checkin-btn" ${checkinBlocked ? 'disabled' : ''} onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
             ${testControl}
           </div>
         `;
