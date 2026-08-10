@@ -448,6 +448,14 @@ const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const WINE_GENERAL_THEME: Theme = { key: "winery", label: "Winery", emoji: "🍷", color: "#2a2438" };
 const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Local Gem", emoji: "💎", color: "#5b5b5b" };
+// Whenever an actual winery makes it into the offered choices, it should
+// always be card 1, not wherever pickContrastingChoices()'s randomized
+// bucket order happened to land it — this is the "Wine Country" adventure,
+// after all. Used by pickOpenChoices() below to reorder its final result;
+// the companion buckets (morning_fuel/food/entertainment/sightseeing)
+// still fill the early-day gap before any winery is open, they just never
+// outrank one once it is.
+const WINERY_THEME_KEYS = new Set(["boutique", "estate", "tasting_bar", "winery"]);
 
 // A sparse market can genuinely only have 2 distinct themes worth of open,
 // rated candidates — in that case pickContrastingChoices()'s last-resort
@@ -720,7 +728,17 @@ async function pickOpenChoices(
   // earlier attempt already placed into `result`. Diversifying per-attempt
   // meant two same-theme picks landing in different attempts still showed
   // the identical label, which is exactly the bug this was meant to fix.
-  return diversifyLabels(result);
+  const diversified = diversifyLabels(result);
+  if (buckets !== WINE_THEME_BUCKETS) return diversified;
+
+  // Wine Country only: bubble any open winery up to card 1. Array.sort is
+  // stable, so this only ever moves winery-themed entries forward as a
+  // block — it never reshuffles the relative order among the rest.
+  return [...diversified].sort((a, b) => {
+    const aFirst = WINERY_THEME_KEYS.has(a.theme.key) ? 0 : 1;
+    const bFirst = WINERY_THEME_KEYS.has(b.theme.key) ? 0 : 1;
+    return aFirst - bFirst;
+  });
 }
 
 // Records that these venues were offered as fork choices — the
