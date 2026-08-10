@@ -236,17 +236,26 @@ Deno.serve(async (req) => {
     } else {
       const { data: owner } = await admin
         .from("profiles")
-        .select("id")
+        .select("id, display_name")
         .eq("personal_invite_code", rawCode)
         .maybeSingle();
       if (!owner) return jsonResponse({ error: "That invite code wasn't found." }, 404);
 
+      // A personal code should work at ANY point, not only mid-adventure —
+      // "gather your group first, then start together" is exactly the
+      // scenario this exists for. Prefer the owner's party with a
+      // currently in-progress adventure if there is one (so a mid-
+      // adventure scan still drops the scanner straight into it, same as
+      // before); otherwise fall back to any existing party of theirs; and
+      // if they don't have one at all yet, create one now — mirroring
+      // real-venue-adventure/index.ts's ensureParty action, since this is
+      // effectively the same "first party, lazily created" bootstrap.
       const { data: memberRows } = await admin
         .from("party_members")
         .select("party_id")
         .eq("profile_id", owner.id);
       const partyIds = (memberRows ?? []).map((r) => r.party_id);
-      let activePartyId: string | null = null;
+      let resolvedPartyId: string | null = null;
       if (partyIds.length) {
         const { data: advRows } = await admin
           .from("adventures")
@@ -255,19 +264,27 @@ Deno.serve(async (req) => {
           .eq("status", "in_progress")
           .order("started_at", { ascending: false })
           .limit(1);
-        activePartyId = advRows?.[0]?.party_id ?? null;
+        resolvedPartyId = advRows?.[0]?.party_id ?? partyIds[0];
       }
-      if (!activePartyId) {
-        return jsonResponse(
-          { error: "That player isn't in an active adventure right now. Ask them to start one first." },
-          409,
-        );
+      if (!resolvedPartyId) {
+        const { data: newParty, error: newPartyErr } = await admin
+          .from("parties")
+          .insert({ name: `${owner.display_name || "Explorer"}'s Crew`, created_by: owner.id })
+          .select("id")
+          .single();
+        if (newPartyErr) return jsonResponse({ error: newPartyErr.message }, 400);
+        resolvedPartyId = newParty.id;
+        const { error: ownerJoinErr } = await admin
+          .from("party_members")
+          .insert({ party_id: resolvedPartyId, profile_id: owner.id, role: "owner" });
+        if (ownerJoinErr) return jsonResponse({ error: ownerJoinErr.message }, 400);
       }
+
       const { count: currentPartySize } = await admin
         .from("party_members")
         .select("profile_id", { count: "exact", head: true })
-        .eq("party_id", activePartyId);
-      partyId = activePartyId;
+        .eq("party_id", resolvedPartyId);
+      partyId = resolvedPartyId;
       inviterId = owner.id;
       referralPartySize = currentPartySize ?? 1;
     }
