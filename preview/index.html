@@ -514,6 +514,13 @@
   .real-venue-cta .rvc-btn:hover{ transform:scale(1.03); }
   .real-venue-cta.wine-cta{ background:linear-gradient(135deg, #5b4b8a, #7a3b69); }
   .real-venue-cta.wine-cta .rvc-btn{ color:#5b4b8a; }
+  .rvc-stopcount{ display:flex; gap:6px; margin-top:8px; }
+  .rvc-sc-pill{
+    background:rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.5); color:#fff;
+    padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
+  }
+  .rvc-sc-pill.active{ background:#fff; color:var(--coral); border-color:#fff; }
+  .wine-cta .rvc-sc-pill.active{ color:#5b4b8a; }
   .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
 
   .reroll-btn{
@@ -778,6 +785,14 @@
     background:linear-gradient(transparent, rgba(var(--shadow-rgb),0.75));
     color:#fff; font-size:0.8rem; font-weight:600; pointer-events:none;
   }
+  /* Strips Google's own InfoWindow chrome (default padding + its built-in
+     close ×) around the persistent name-tag bubbles built in
+     buildTagContent() — that content already supplies its own compact
+     padding and its own collapse control, so Google's defaults just added
+     unwanted empty space at the top and a redundant close button. */
+  .gm-style-iw-d{ overflow:visible !important; padding:0 !important; }
+  .gm-style-iw-c{ padding:0 !important; }
+  .gm-style-iw-c .gm-ui-hover-effect{ display:none !important; }
 
   /* ---------- ONBOARDING: PREFERENCE SETUP ----------
      Ported from index.html's "Quick Setup"/"Full Discovery" component
@@ -1846,6 +1861,10 @@
         <div>
           <div class="rvc-title">🍀 Fork in the Road — Real Venue Adventure</div>
           <div class="rvc-desc">Every stop gives you 3 real, contrasting picks near you — cozy vs. bold vs. lively. Choose your own path, or reroll for 3 new options (3 free rolls per stop).</div>
+          <div class="rvc-stopcount">
+            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('default', 3, this)">3 stops</button>
+            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('default', 2, this)">2 stops</button>
+          </div>
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown()">Start a Real Adventure</button>
       </div>
@@ -1853,6 +1872,10 @@
         <div>
           <div class="rvc-title">🍷 Wine Country Adventure</div>
           <div class="rvc-desc">Every stop is a real, nearby winery or tasting room — boutique vs. estate vs. tasting-room bar. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.</div>
+          <div class="rvc-stopcount">
+            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('wine_country', 3, this)">3 stops</button>
+            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('wine_country', 2, this)">2 stops</button>
+          </div>
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
       </div>
@@ -1879,6 +1902,18 @@
   // system above stays fully independent of onboarding, per the approved
   // plan ("alongside curated routes, not replacing them").
   let onboardingIntent = null; // 'start_adventure' | null — read once by saveOnboardingPreferences()
+
+  // Per-CTA stop-count choice from the route picker's pill toggles — keyed
+  // by venueTheme ('default' for the general Fork in the Road card,
+  // 'wine_country' for the wine one). Defaults to 3; the backend still
+  // enforces a floor of 2 and a ceiling of the player's unlocked_stop_count
+  // regardless of what's sent here.
+  let stopCountChoices = { default: 3, wine_country: 3 };
+  window.setStopCountChoice = function (key, n, btnEl) {
+    stopCountChoices[key] = n;
+    btnEl.parentElement.querySelectorAll('.rvc-sc-pill').forEach((el) => el.classList.remove('active'));
+    btnEl.classList.add('active');
+  };
 
   // Canonical entry point for starting a real-venue adventure — called both
   // by "🚀 Start Your MUSO Adventure" (adventure-ready-overlay, right after
@@ -1968,6 +2003,7 @@
 
       const initBody = { action: 'init', partyId, lat: currentLat, lng: currentLng };
       if (isWineCountry) initBody.venueTheme = 'wine_country';
+      initBody.stopCount = stopCountChoices[venueTheme || 'default'] || 3;
       const { res, data } = await postEdgeFunction('real-venue-adventure', initBody);
       if (!res.ok) {
         body.innerHTML = `<div class="empty-state">Couldn't start ${isWineCountry ? 'a wine country' : 'a real-venue'} adventure: ${data.error || res.statusText}</div>`;
@@ -2500,6 +2536,35 @@
   let progressMapInfoWindows = new Map(); // stop.id -> google.maps.InfoWindow (persistent name tag)
   let progressMapRenderers = [];      // one DirectionsRenderer per leg drawn
   let progressMapLegsDrawn = new Set(); // leg keys already requested, so a re-render never double-fetches the same leg
+  let progressMapCollapsedTags = new Set(); // stop.id -> user tapped the tag's X to collapse it to just the name
+
+  // Builds the persistent name-tag bubble's content — expanded (photo +
+  // name, with a small × to collapse) or collapsed (name only, tap to
+  // re-expand). Kept as one function so toggleMapTag() below can rebuild
+  // either variant without needing to re-derive it from stop data.
+  function buildTagContent(stopId, name, imageUrl, collapsed) {
+    const escName = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    if (collapsed) {
+      return `<div onclick="toggleMapTag('${stopId}')" style="font:700 12px/1.3 -apple-system,sans-serif; padding:5px 9px; white-space:nowrap; cursor:pointer;">${escName}</div>`;
+    }
+    const photoHtml = imageUrl
+      ? `<img src="${String(imageUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" style="width:100%; height:120px; object-fit:cover; display:block;" onerror="this.remove();">`
+      : '';
+    return `<div style="font-family:-apple-system,sans-serif; width:160px; position:relative;">
+      <button onclick="toggleMapTag('${stopId}')" aria-label="Collapse" style="position:absolute; top:4px; right:4px; z-index:1; width:20px; height:20px; border-radius:50%; border:none; background:rgba(0,0,0,0.55); color:#fff; font-size:13px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">&times;</button>
+      ${photoHtml}
+      <div style="font:700 12px/1.3 -apple-system,sans-serif; padding:6px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escName}</div>
+    </div>`;
+  }
+
+  window.toggleMapTag = function (stopId) {
+    const tag = progressMapInfoWindows.get(stopId);
+    const s = (activeAdventure?.stops || []).find((st) => st.id === stopId);
+    if (!tag || !s) return;
+    const nowCollapsed = !progressMapCollapsedTags.has(stopId);
+    if (nowCollapsed) progressMapCollapsedTags.add(stopId); else progressMapCollapsedTags.delete(stopId);
+    tag.setContent(buildTagContent(stopId, s.name, s.imageUrl, nowCollapsed));
+  };
 
   // Plain colored circle + numbered label — the pin itself stays simple;
   // the venue's photo lives in the persistent name-tag bubble instead (see
@@ -2520,6 +2585,7 @@
     progressMapRenderers.forEach((r) => r.setMap(null));
     progressMapRenderers = [];
     progressMapLegsDrawn = new Set();
+    progressMapCollapsedTags = new Set();
     const wrap = document.getElementById('adventure-progress-map-wrap');
     if (wrap) wrap.setAttribute('hidden', '');
   }
@@ -2575,13 +2641,11 @@
         // the pin itself) or `title` (hover-only, useless on touch). The
         // venue's photo lives here too (thumbnail above the name), same
         // photo+name pairing as the larger fork-choice cards, rather than
-        // baked into the pin icon itself.
-        const escName = s.name.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-        const photoHtml = s.imageUrl
-          ? `<img src="${String(s.imageUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; display:block; margin-bottom:4px;" onerror="this.remove();">`
-          : '';
+        // baked into the pin icon itself. Starts expanded; toggleMapTag()
+        // (bound to the × / tap-to-reopen) swaps it to a compact
+        // name-only pill and back.
         const nameTag = new google.maps.InfoWindow({
-          content: `<div style="font-family:-apple-system,sans-serif; width:140px; padding:2px;">${photoHtml}<div style="font:700 12px/1.3 -apple-system,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escName}</div></div>`,
+          content: buildTagContent(s.id, s.name, s.imageUrl, progressMapCollapsedTags.has(s.id)),
           disableAutoPan: true,
           pixelOffset: new google.maps.Size(0, 4),
         });

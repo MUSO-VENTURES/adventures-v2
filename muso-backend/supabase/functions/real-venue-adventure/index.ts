@@ -667,7 +667,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No matching venues found nearby — try widening your search radius in preferences." }, 404);
     }
 
-    const stopCount = profile.unlocked_stop_count ?? 3;
+    // Every adventure defaults to 3 stops — a party can drop to 2 for a
+    // shorter outing, but never below that, and never above whatever their
+    // profile's unlock tier allows (unlocked_stop_count is the same "how
+    // many stops can this player generate/see" ceiling route-detail uses
+    // for curated routes).
+    const unlockedCap = profile.unlocked_stop_count ?? 3;
+    const requestedStopCount = Number(body.stopCount);
+    const stopCount = Number.isInteger(requestedStopCount)
+      ? Math.min(Math.max(requestedStopCount, 2), unlockedCap)
+      : unlockedCap;
     const choices = pickContrastingChoices(candidates, 3, buckets);
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = candidates.filter((c) => !offeredIds.has(c.id));
