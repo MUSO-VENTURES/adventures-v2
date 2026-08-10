@@ -447,7 +447,42 @@ const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   },
 ];
 const WINE_GENERAL_THEME: Theme = { key: "winery", label: "Winery", emoji: "🍷", color: "#2a2438" };
-const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Nearby Pick", emoji: "📍", color: "#5b5b5b" };
+const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Local Gem", emoji: "💎", color: "#5b5b5b" };
+
+// A sparse market can genuinely only have 2 distinct themes worth of open,
+// rated candidates — in that case pickContrastingChoices()'s last-resort
+// backfill has to repeat one, which used to mean two cards showing the
+// exact same label ("Nearby Pick" twice). Rather than that read as
+// broken/boring, diversifyLabels() below swaps in a different display
+// name from the same theme's pool for each repeat — same underlying
+// theme.key (still used for chosen_theme_key/analytics), different
+// on-card wording, so all 3 choices always look distinct even when the
+// real category variety isn't there.
+const THEME_LABEL_ALTERNATES: Record<string, string[]> = {
+  nearby: ["Hidden Find", "Off the Beaten Path", "Worth the Detour", "Local Favorite", "Curious Stop"],
+  winery: ["Wine Stop", "Pour & Explore", "Vino Find", "Tasting Spot"],
+  morning_fuel: ["Coffee Break", "Caffeine Stop", "Sweet Start"],
+  food: ["Bite to Eat", "Local Eats", "Quick Bite"],
+};
+
+function diversifyLabels<T extends { theme: Theme }>(chosen: T[]): T[] {
+  const usedLabels = new Set<string>();
+  const nextAltIndex: Record<string, number> = {};
+  return chosen.map((c) => {
+    let label = c.theme.label;
+    if (usedLabels.has(label)) {
+      const pool = THEME_LABEL_ALTERNATES[c.theme.key] ?? [];
+      let idx = nextAltIndex[c.theme.key] ?? 0;
+      while (idx < pool.length && usedLabels.has(pool[idx])) idx++;
+      if (idx < pool.length) {
+        label = pool[idx];
+        nextAltIndex[c.theme.key] = idx + 1;
+      }
+    }
+    usedLabels.add(label);
+    return { ...c, theme: { ...c.theme, label } };
+  });
+}
 
 function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: string[] })[] = THEME_BUCKETS): Theme {
   const cat = `${candidate.category ?? ""} ${candidate.name ?? ""}`.toLowerCase();
@@ -534,7 +569,7 @@ function pickContrastingChoices(
     }
   }
 
-  return chosen;
+  return diversifyLabels(chosen);
 }
 
 // ---------------------------------------------------------------
