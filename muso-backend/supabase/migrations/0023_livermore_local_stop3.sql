@@ -3,6 +3,19 @@
 -- below the new 3-stop minimum for every adventure. Address/coordinates
 -- confirmed via OpenStreetMap: 152 S Livermore Ave, Livermore, CA 94550.
 --
+-- Peet's goes FIRST (stop 1) — it closes at 6pm, well before the axe-
+-- throwing/cocktail-lounge stops, so the route should hit it early rather
+-- than risk arriving after close. The two existing stops shift down to
+-- make room (unique(route_id, stop_order) means the shift has to happen
+-- in this order — highest first — so no two rows ever briefly collide on
+-- the same stop_order mid-migration).
+
+update route_stops set stop_order = 3
+where route_id = 'c26ae6ce-814e-41bc-b0b2-5e12576cd991' and stop_order = 2;
+
+update route_stops set stop_order = 2
+where route_id = 'c26ae6ce-814e-41bc-b0b2-5e12576cd991' and stop_order = 1;
+--
 -- partner_tier is set to 'premium' here on purpose — upsert_yelp_venues()
 -- (0007_gamification.sql) explicitly excludes partner_tier from its
 -- on-conflict update, specifically so a manually-set business relationship
@@ -37,9 +50,9 @@ insert into route_stops (route_id, venue_id, stop_order, name, description, emoj
 select
   'c26ae6ce-814e-41bc-b0b2-5e12576cd991',
   new_venue.id,
-  3,
+  1,
   'Peet''s Coffee',
-  'Wind down with a coffee at this Livermore favorite.',
+  'Kick off the day with a coffee at this Livermore favorite.',
   '☕',
   false
 from new_venue;
