@@ -621,6 +621,29 @@ const CLOSING_SOON_BUFFER_MINUTES = 30;
 // expands outside California.
 const VENUE_TIMEZONE = "America/Los_Angeles";
 
+// "Morning Fuel"/"Morning Bite" etc. shouldn't still say "Morning" at 4pm
+// — this swaps the leading time-of-day word for whichever one is
+// currently correct, in the same Pacific time zone/source used for the
+// open-hours check above. Applied as a label rewrite (applyTimeOfDayLabels
+// below) rather than baked into the bucket/alternate definitions, so
+// there's exactly one place that knows what "morning" means.
+function currentTimeOfDayWord(): string {
+  const nowPacific = new Date(new Date().toLocaleString("en-US", { timeZone: VENUE_TIMEZONE }));
+  const hour = nowPacific.getHours();
+  if (hour < 12) return "Morning";
+  if (hour < 17) return "Afternoon";
+  return "Evening";
+}
+
+function applyTimeOfDayLabels<T extends { theme: Theme }>(items: T[]): T[] {
+  const word = currentTimeOfDayWord();
+  return items.map((c) => {
+    if (!/^Morning\b/.test(c.theme.label)) return c;
+    const label = c.theme.label.replace(/^Morning\b/, word);
+    return { ...c, theme: { ...c.theme, label } };
+  });
+}
+
 // Fetches (or reuses a cached, <24h-old) Yelp Business Details record for
 // one candidate's hours. Only the Business Details endpoint returns hours
 // — the Search endpoint used above doesn't — so this is a second,
@@ -721,14 +744,19 @@ async function pickOpenChoices(
     }
   }
 
-  // diversifyLabels() belongs here, on the final merged result, not inside
+  // diversifyLabels() first, THEN applyTimeOfDayLabels() — order matters:
+  // diversifying can pull an alternate straight from
+  // THEME_VARIANT_ALTERNATES's static "Morning Bite"-style text, so the
+  // time-of-day swap has to run last, on whatever label actually ends up
+  // on screen (primary or alternate), not before diversifying picks one.
+  // diversifyLabels() belongs on the final merged result, not inside
   // pickContrastingChoices() itself — a closed pick from attempt 1 gets
   // silently dropped and re-requested on attempt 2, and each attempt calls
   // pickContrastingChoices() independently with no memory of labels an
   // earlier attempt already placed into `result`. Diversifying per-attempt
   // meant two same-theme picks landing in different attempts still showed
   // the identical label, which is exactly the bug this was meant to fix.
-  const diversified = diversifyLabels(result);
+  const diversified = applyTimeOfDayLabels(diversifyLabels(result));
   if (buckets !== WINE_THEME_BUCKETS) return diversified;
 
   // Wine Country only: bubble any open winery up to card 1. Array.sort is
