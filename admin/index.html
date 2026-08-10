@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>MUSO Adventures — Admin Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------- Palette (dataviz skill's validated default categorical set —
+     internal tool, no need to match the player-facing brand exactly, and
+     these eight hues are pre-validated colorblind-safe in this fixed order,
+     both light and dark). ---------- */
+  :root{
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f9f9f7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --gridline: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+    --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+    --coral: #e8503f; --ink: #2a2438;
+    --card-radius: 16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #0d0d0d;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --gridline: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1: #1a1a19; --surface-2: #0d0d0d;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --gridline: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--surface-2); color:var(--text-primary);
+    font-family:'Inter',-apple-system,sans-serif; padding-bottom:60px;
+  }
+  h1,h2,.brand{ font-family:'Fredoka',sans-serif; font-weight:700; }
+  header{
+    padding:20px 6vw; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); background:var(--surface-1);
+  }
+  header .brand{ font-size:1.15rem; color:var(--coral); }
+  header .subtitle{ font-size:0.8rem; color:var(--text-muted); margin-top:2px; }
+  #signout-btn{
+    background:none; border:1px solid var(--border); color:var(--text-secondary);
+    padding:7px 14px; border-radius:999px; font-size:0.8rem; cursor:pointer; font-weight:600;
+  }
+
+  .center-wrap{ max-width:420px; margin:80px auto; padding:0 20px; text-align:center; }
+  .center-wrap input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--surface-1); color:var(--text-primary); font-size:0.95rem; margin:14px 0;
+  }
+  .center-wrap button{
+    background:var(--coral); color:#fff; border:none; padding:12px 24px; border-radius:999px;
+    font-weight:700; font-family:'Fredoka',sans-serif; cursor:pointer; font-size:0.9rem;
+  }
+  .center-wrap button:disabled{ opacity:0.5; cursor:default; }
+  .muted-note{ color:var(--text-muted); font-size:0.85rem; margin-top:10px; }
+
+  main{ max-width:1200px; margin:0 auto; padding:28px 6vw; display:none; }
+  main.visible{ display:block; }
+  section{ margin-bottom:36px; }
+  section h2{ font-size:1.1rem; margin:0 0 14px; }
+
+  .tile-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:14px; }
+  .stat-tile{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:var(--card-radius);
+    padding:18px 20px;
+  }
+  .stat-tile .stat-label{ font-size:0.78rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.02em; }
+  .stat-tile .stat-value{ font-size:1.9rem; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; }
+  .stat-tile .stat-sub{ font-size:0.8rem; color:var(--text-secondary); margin-top:4px; }
+
+  .chart-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(360px,1fr)); gap:16px; }
+  .chart-card{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:var(--card-radius);
+    padding:18px 20px;
+  }
+  .chart-card h3{ font-size:0.85rem; font-weight:700; margin:0 0 12px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.02em; }
+  .chart-card canvas{ max-height:260px; }
+  .empty-note{ color:var(--text-muted); font-size:0.85rem; padding:20px 0; text-align:center; }
+
+  table{ width:100%; border-collapse:collapse; font-size:0.85rem; }
+  th, td{ text-align:left; padding:9px 12px; border-bottom:1px solid var(--gridline); }
+  th{ color:var(--text-muted); font-weight:600; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.02em; }
+  td{ font-variant-numeric:tabular-nums; }
+  tr:last-child td{ border-bottom:none; }
+
+  #not-authorized{ display:none; text-align:center; margin:100px auto; color:var(--text-muted); }
+  #not-authorized.visible{ display:block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">MUSO Adventures</div>
+    <div class="subtitle">Admin Dashboard</div>
+  </div>
+  <button type="button" id="signout-btn" style="display:none;" onclick="signOut()">Sign out</button>
+</header>
+
+<div class="center-wrap" id="signin-wrap">
+  <h1 style="font-size:1.3rem;">Admin sign-in</h1>
+  <p class="muted-note">This page is restricted to MUSO Adventures admins.</p>
+  <input type="email" id="signin-email" placeholder="you@example.com" autocomplete="email">
+  <button type="button" id="signin-btn" onclick="sendMagicLink()">Send magic link</button>
+  <div class="muted-note" id="signin-status"></div>
+</div>
+
+<div id="not-authorized">
+  <h1 style="font-size:1.3rem;">Not authorized</h1>
+  <p class="muted-note">Your account doesn't have dashboard access.</p>
+</div>
+
+<main id="dashboard">
+  <section>
+    <h2>Overview</h2>
+    <div class="tile-row" id="overview-tiles"></div>
+  </section>
+
+  <section>
+    <h2>Demographics</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Age</h3><canvas id="chart-age"></canvas></div>
+      <div class="chart-card"><h3>Top regions (by check-ins)</h3><canvas id="chart-region"></canvas></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gameplay</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Categories chosen</h3><canvas id="chart-categories"></canvas></div>
+      <div class="chart-card"><h3>Adventure mode</h3><canvas id="chart-modes"></canvas></div>
+      <div class="chart-card"><h3>Time of day (check-ins, Pacific)</h3><canvas id="chart-hours"></canvas></div>
+      <div class="chart-card">
+        <h3>Reroll / Spin usage</h3>
+        <div class="tile-row" style="grid-template-columns:1fr 1fr;">
+          <div class="stat-tile"><div class="stat-label">Total rerolls</div><div class="stat-value" id="stat-total-rerolls">—</div></div>
+          <div class="stat-tile"><div class="stat-label">Avg per stop</div><div class="stat-value" id="stat-avg-rerolls">—</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Rankings — Top Players</h2>
+    <div class="chart-card">
+      <table>
+        <thead><tr><th>Player</th><th>Level</th><th>XP</th></tr></thead>
+        <tbody id="rankings-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Venue Performance <span style="font-weight:400; color:var(--text-muted); font-size:0.8rem;">— impressions/conversions, the foundation for future partner ROI reporting</span></h2>
+    <div class="chart-card">
+      <table>
+        <thead><tr><th>Venue</th><th>Offered</th><th>Chosen</th><th>Conversion</th><th>MUSO Rating</th></tr></thead>
+        <tbody id="venues-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Monetization</h2>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Coin economy by reason</h3><canvas id="chart-coins"></canvas></div>
+      <div class="chart-card">
+        <h3>Real-money purchases</h3>
+        <div class="tile-row" style="grid-template-columns:1fr 1fr;">
+          <div class="stat-tile"><div class="stat-label">Avg per purchase</div><div class="stat-value" id="stat-avg-purchase">—</div></div>
+          <div class="stat-tile"><div class="stat-label">Total coins sold</div><div class="stat-value" id="stat-total-purchase">—</div></div>
+        </div>
+        <div class="empty-note" id="purchase-empty-note" style="display:none;">No purchase data yet — coin checkout isn't live.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  const SUPABASE_URL = 'https://aqaezprsbcyqpnnavdpv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
+
+  const CHART_COLORS = ['--series-1','--series-2','--series-3','--series-4','--series-5','--series-6','--series-7','--series-8']
+    .map((v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+  const inkColor = () => getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim();
+  const gridColor = () => getComputedStyle(document.documentElement).getPropertyValue('--gridline').trim();
+
+  Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+  Chart.defaults.color = inkColor();
+
+  function baseBarOptions() {
+    return {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: inkColor() } },
+        y: { beginAtZero: true, grid: { color: gridColor() }, ticks: { color: inkColor(), precision: 0 } },
+      },
+    };
+  }
+
+  function renderBarChart(canvasId, labels, data, colorIdx) {
+    const el = document.getElementById(canvasId);
+    if (!labels.length) {
+      el.parentElement.innerHTML = el.parentElement.querySelector('h3').outerHTML + '<div class="empty-note">No data yet</div>';
+      return;
+    }
+    new Chart(el, {
+      type: 'bar',
+      data: { labels, datasets: [{ data, backgroundColor: CHART_COLORS[colorIdx % CHART_COLORS.length], borderRadius: 4 }] },
+      options: baseBarOptions(),
+    });
+  }
+
+  // Single-series categorical bars (age/region/categories/hours/coins) all
+  // use one fixed slot from the validated 8-hue order rather than cycling
+  // per-bar — color follows the entity (the metric), not each bar's rank.
+  function renderDashboard(snap) {
+    const ov = snap.overview || {};
+    document.getElementById('overview-tiles').innerHTML = `
+      <div class="stat-tile"><div class="stat-label">Total players</div><div class="stat-value">${ov.total_players ?? 0}</div></div>
+      <div class="stat-tile"><div class="stat-label">Adventures started</div><div class="stat-value">${ov.total_adventures ?? 0}</div></div>
+      <div class="stat-tile"><div class="stat-label">Adventures completed</div><div class="stat-value">${ov.completed_adventures ?? 0}</div></div>
+      <div class="stat-tile"><div class="stat-label">Completion rate</div><div class="stat-value">${Math.round((ov.completion_rate ?? 0) * 100)}%</div></div>
+    `;
+
+    const demo = snap.demographics || {};
+    const ageOrder = ['under_18','18_24','25_34','35_44','45_54','55_plus','unknown'];
+    const ageLabels = { under_18: 'Under 18', '18_24': '18–24', '25_34': '25–34', '35_44': '35–44', '45_54': '45–54', '55_plus': '55+', unknown: 'Unknown' };
+    const ageBuckets = (demo.age_buckets || []).sort((a, b) => ageOrder.indexOf(a.bucket) - ageOrder.indexOf(b.bucket));
+    renderBarChart('chart-age', ageBuckets.map((b) => ageLabels[b.bucket] || b.bucket), ageBuckets.map((b) => b.count), 0);
+    renderBarChart('chart-region', (demo.regions || []).map((r) => r.city), (demo.regions || []).map((r) => r.count), 1);
+
+    const gp = snap.gameplay || {};
+    renderBarChart('chart-categories', (gp.categories || []).map((c) => c.theme), (gp.categories || []).map((c) => c.count), 2);
+    const modeLabels = { curated: 'Curated', fork_in_the_road: 'Fork in the Road', wine_country: 'Wine Country' };
+    renderBarChart('chart-modes', (gp.adventure_modes || []).map((m) => modeLabels[m.mode] || m.mode), (gp.adventure_modes || []).map((m) => m.count), 3);
+    const hourRows = gp.hours_of_day || [];
+    renderBarChart('chart-hours', hourRows.map((h) => `${h.hour}:00`), hourRows.map((h) => h.count), 4);
+    document.getElementById('stat-total-rerolls').textContent = gp.reroll_usage?.total_rerolls ?? 0;
+    document.getElementById('stat-avg-rerolls').textContent = gp.reroll_usage?.avg_rerolls_per_stop ?? 0;
+
+    const rankings = (snap.rankings?.top_players || []);
+    document.getElementById('rankings-body').innerHTML = rankings.length
+      ? rankings.map((p) => `<tr><td>${escapeHtml(p.display_name)}</td><td>${p.level}</td><td>${p.xp}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty-note">No players yet</td></tr>';
+
+    const venues = (snap.venue_performance || []);
+    document.getElementById('venues-body').innerHTML = venues.length
+      ? venues.map((v) => `<tr>
+          <td>${escapeHtml(v.venue_name)}</td>
+          <td>${v.offered_count}</td>
+          <td>${v.chosen_count}</td>
+          <td>${v.conversion_rate != null ? Math.round(v.conversion_rate * 100) + '%' : '—'}</td>
+          <td>${v.muso_rating_count > 0 ? `${v.muso_rating}/10 (${v.muso_rating_count})` : '—'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="empty-note">No venue offers logged yet</td></tr>';
+
+    const mon = snap.monetization || {};
+    const byReason = mon.by_reason || [];
+    renderBarChart('chart-coins', byReason.map((r) => r.reason), byReason.map((r) => r.total_amount), 5);
+    const hasPurchases = byReason.some((r) => r.reason === 'purchase' && r.transaction_count > 0);
+    document.getElementById('stat-avg-purchase').textContent = hasPurchases ? mon.avg_purchase_amount : '—';
+    document.getElementById('stat-total-purchase').textContent = hasPurchases ? mon.total_purchase_revenue_coins : '—';
+    document.getElementById('purchase-empty-note').style.display = hasPurchases ? 'none' : 'block';
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  async function loadDashboard() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return;
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-dashboard-data`, {
+      headers: { 'Authorization': `Bearer ${session.access_token}`, 'apikey': SUPABASE_ANON_KEY },
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 403) {
+      document.getElementById('not-authorized').classList.add('visible');
+      document.getElementById('signout-btn').style.display = 'inline-block';
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById('not-authorized').classList.add('visible');
+      document.getElementById('not-authorized').querySelector('p').textContent = data.error || 'Could not load dashboard data.';
+      document.getElementById('signout-btn').style.display = 'inline-block';
+      return;
+    }
+
+    document.getElementById('dashboard').classList.add('visible');
+    document.getElementById('signout-btn').style.display = 'inline-block';
+    renderDashboard(data);
+  }
+
+  window.sendMagicLink = async function () {
+    const email = document.getElementById('signin-email').value.trim();
+    const statusEl = document.getElementById('signin-status');
+    if (!email) { statusEl.textContent = 'Enter your email first.'; return; }
+    document.getElementById('signin-btn').disabled = true;
+    statusEl.textContent = 'Sending…';
+    const { error } = await supabaseClient.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: location.origin + location.pathname },
+    });
+    document.getElementById('signin-btn').disabled = false;
+    statusEl.textContent = error ? error.message : 'Check your email for a sign-in link.';
+  };
+
+  window.signOut = async function () {
+    await supabaseClient.auth.signOut();
+    location.reload();
+  };
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      document.getElementById('signin-wrap').style.display = 'none';
+      loadDashboard();
+    }
+  });
+
+  (async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      document.getElementById('signin-wrap').style.display = 'none';
+      await loadDashboard();
+    }
+  })();
+</script>
+</body>
+</html>
