@@ -2014,6 +2014,16 @@
         return;
       }
 
+      // Set optimistically, before the actual init call — so the section
+      // reads correctly during the countdown and even if starting fails
+      // (e.g. "no venues found"), rather than only updating on success.
+      const headingEl = document.getElementById('adventure-heading');
+      if (headingEl) {
+        headingEl.textContent = venueTheme === 'wine_country'
+          ? '🍷 Start your MUSO Wine Country Adventure'
+          : '🍀 Start your MUSO Real Venues Adventure';
+      }
+
       document.getElementById('adventure-ready-overlay').setAttribute('hidden', '');
       document.getElementById('adventure-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
