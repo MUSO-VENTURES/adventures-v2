@@ -569,7 +569,7 @@ function pickContrastingChoices(
     }
   }
 
-  return diversifyLabels(chosen);
+  return chosen;
 }
 
 // ---------------------------------------------------------------
@@ -684,7 +684,14 @@ async function pickOpenChoices(
     }
   }
 
-  return result;
+  // diversifyLabels() belongs here, on the final merged result, not inside
+  // pickContrastingChoices() itself — a closed pick from attempt 1 gets
+  // silently dropped and re-requested on attempt 2, and each attempt calls
+  // pickContrastingChoices() independently with no memory of labels an
+  // earlier attempt already placed into `result`. Diversifying per-attempt
+  // meant two same-theme picks landing in different attempts still showed
+  // the identical label, which is exactly the bug this was meant to fix.
+  return diversifyLabels(result);
 }
 
 // Records that these venues were offered as fork choices — the
