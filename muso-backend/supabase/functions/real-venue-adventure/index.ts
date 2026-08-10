@@ -104,6 +104,13 @@ const DEFAULT_RADIUS_MILES = 15;
 const YELP_MAX_RADIUS_METERS = 40000; // ~24.85 miles, Yelp's hard cap
 const FREE_REROLLS = 3;
 const EXTRA_ROLL_COST = 20;
+// Quality floor on Yelp's own rating — only 4.0+ star venues are ever
+// offered as a fork choice. Applied as a hard filter (not just a
+// weightedRandomPick weighting bump) on searchNearbyVenues()'s return
+// value, so every code path (init/advance/reroll) is covered from one
+// place. A venue with no Yelp rating at all is excluded too — no rating
+// means no way to confirm it clears the bar.
+const MIN_YELP_RATING = 4.0;
 
 const VALID_BUDGETS: Record<string, string> = {
   "$": "1",
@@ -285,7 +292,13 @@ async function searchNearbyVenues(
     console.log(`nearby_candidate_venues returned 0 rows for ${rows.length} upserted yelp_ids, radius=${opts.radiusMiles}mi, lat=${opts.lat}, lng=${opts.lng}`);
   }
 
-  return (candidates ?? []) as Candidate[];
+  const allCandidates = (candidates ?? []) as Candidate[];
+  const highRated = allCandidates.filter((c) => c.rating != null && c.rating >= MIN_YELP_RATING);
+  if (highRated.length < allCandidates.length) {
+    console.log(`Filtered out ${allCandidates.length - highRated.length} of ${allCandidates.length} candidates below the ${MIN_YELP_RATING}-star minimum`);
+  }
+
+  return highRated;
 }
 
 // The within-theme pick used by pickContrastingChoices() below — "a random
