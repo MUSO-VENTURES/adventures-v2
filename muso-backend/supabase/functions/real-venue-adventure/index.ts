@@ -474,7 +474,7 @@ const THEME_VARIANT_ALTERNATES: Record<string, { label: string; emoji: string }[
     { label: "Tasting Spot", emoji: "🍇" },
   ],
   morning_fuel: [
-    { label: "Coffee Break", emoji: "🫖" },
+    { label: "Morning Bite", emoji: "🥯" },
     { label: "Caffeine Stop", emoji: "🧋" },
     { label: "Sweet Start", emoji: "🥐" },
   ],
