@@ -452,35 +452,64 @@ const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Local Gem", emoji: 
 // A sparse market can genuinely only have 2 distinct themes worth of open,
 // rated candidates — in that case pickContrastingChoices()'s last-resort
 // backfill has to repeat one, which used to mean two cards showing the
-// exact same label ("Nearby Pick" twice). Rather than that read as
-// broken/boring, diversifyLabels() below swaps in a different display
-// name from the same theme's pool for each repeat — same underlying
-// theme.key (still used for chosen_theme_key/analytics), different
-// on-card wording, so all 3 choices always look distinct even when the
-// real category variety isn't there.
-const THEME_LABEL_ALTERNATES: Record<string, string[]> = {
-  nearby: ["Hidden Find", "Off the Beaten Path", "Worth the Detour", "Local Favorite", "Curious Stop"],
-  winery: ["Wine Stop", "Pour & Explore", "Vino Find", "Tasting Spot"],
-  morning_fuel: ["Coffee Break", "Caffeine Stop", "Sweet Start"],
-  food: ["Bite to Eat", "Local Eats", "Quick Bite"],
+// exact same label AND emoji ("Nearby Pick" 📍 twice). Rather than that
+// read as broken/boring, diversifyLabels() below swaps in a different
+// label+emoji pairing from the same theme's pool for each repeat — same
+// underlying theme.key (still used for chosen_theme_key/analytics) and
+// same accent color (still visibly "the same family"), just a different
+// name and icon, so all 3 cards always look distinct even when the real
+// category variety isn't there.
+const THEME_VARIANT_ALTERNATES: Record<string, { label: string; emoji: string }[]> = {
+  nearby: [
+    { label: "Hidden Find", emoji: "🔍" },
+    { label: "Off the Beaten Path", emoji: "🧭" },
+    { label: "Worth the Detour", emoji: "⭐" },
+    { label: "Local Favorite", emoji: "❤️" },
+    { label: "Curious Stop", emoji: "❓" },
+  ],
+  winery: [
+    { label: "Wine Stop", emoji: "🍾" },
+    { label: "Pour & Explore", emoji: "🍇" },
+    { label: "Vino Find", emoji: "🥂" },
+    { label: "Tasting Spot", emoji: "🍇" },
+  ],
+  morning_fuel: [
+    { label: "Coffee Break", emoji: "🫖" },
+    { label: "Caffeine Stop", emoji: "🧋" },
+    { label: "Sweet Start", emoji: "🥐" },
+  ],
+  food: [
+    { label: "Bite to Eat", emoji: "🥪" },
+    { label: "Local Eats", emoji: "🍴" },
+    { label: "Quick Bite", emoji: "🍕" },
+  ],
+  entertainment: [
+    { label: "Fun Stop", emoji: "🎯" },
+    { label: "Get Moving", emoji: "🚴" },
+  ],
+  sightseeing: [
+    { label: "Scenic Stop", emoji: "🌄" },
+    { label: "Photo Op", emoji: "📸" },
+  ],
 };
 
 function diversifyLabels<T extends { theme: Theme }>(chosen: T[]): T[] {
-  const usedLabels = new Set<string>();
+  const usedVariants = new Set<string>(); // "label|emoji" pairs already on screen
   const nextAltIndex: Record<string, number> = {};
   return chosen.map((c) => {
-    let label = c.theme.label;
-    if (usedLabels.has(label)) {
-      const pool = THEME_LABEL_ALTERNATES[c.theme.key] ?? [];
+    let { label, emoji } = c.theme;
+    if (usedVariants.has(`${label}|${emoji}`)) {
+      const pool = THEME_VARIANT_ALTERNATES[c.theme.key] ?? [];
       let idx = nextAltIndex[c.theme.key] ?? 0;
-      while (idx < pool.length && usedLabels.has(pool[idx])) idx++;
+      while (idx < pool.length && usedVariants.has(`${pool[idx].label}|${pool[idx].emoji}`)) idx++;
       if (idx < pool.length) {
-        label = pool[idx];
+        label = pool[idx].label;
+        emoji = pool[idx].emoji;
         nextAltIndex[c.theme.key] = idx + 1;
       }
     }
-    usedLabels.add(label);
-    return { ...c, theme: { ...c.theme, label } };
+    usedVariants.add(`${label}|${emoji}`);
+    return { ...c, theme: { ...c.theme, label, emoji } };
   });
 }
 
