@@ -512,6 +512,8 @@
     transition:transform .15s;
   }
   .real-venue-cta .rvc-btn:hover{ transform:scale(1.03); }
+  .real-venue-cta.wine-cta{ background:linear-gradient(135deg, #5b4b8a, #7a3b69); }
+  .real-venue-cta.wine-cta .rvc-btn{ color:#5b4b8a; }
   .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
 
   .reroll-btn{
@@ -1847,6 +1849,13 @@
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown()">Start a Real Adventure</button>
       </div>
+      <div class="real-venue-cta wine-cta">
+        <div>
+          <div class="rvc-title">🍷 Wine Country Adventure</div>
+          <div class="rvc-desc">Every stop is a real, nearby winery or tasting room — boutique vs. estate vs. tasting-room bar. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.</div>
+        </div>
+        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
+      </div>
       <div class="curated-routes-divider">— or pick a curated route —</div>
     `;
     body.innerHTML = `${realVenueCta}<div class="route-pick-list">${routes.map(r => {
@@ -1878,7 +1887,10 @@
   // Mirrors startRealVenueAdventure()'s own sign-in/onboarding guard so a
   // player who hasn't onboarded yet gets redirected there BEFORE the
   // countdown runs, not after.
-  window.beginAdventureCountdown = async function () {
+  // venueTheme: undefined (default fork-in-the-road) or 'wine_country' —
+  // threaded straight through to the init POST body; everything else
+  // about the ceremony/flow is identical either way.
+  window.beginAdventureCountdown = async function (venueTheme) {
     // Wrapped in try/catch on purpose: this used to have no error handling
     // at all, so any unexpected exception here (a missing element, a
     // rejected promise) died as a silent unhandled rejection — the button
@@ -1906,14 +1918,14 @@
         await new Promise((resolve) => setTimeout(resolve, 650));
       }
       overlay.setAttribute('hidden', '');
-      startRealVenueAdventure();
+      startRealVenueAdventure(venueTheme);
     } catch (e) {
       document.getElementById('adventure-countdown-overlay')?.setAttribute('hidden', '');
       alert('Could not start the adventure: ' + e.message);
     }
   };
 
-  window.startRealVenueAdventure = async function () {
+  window.startRealVenueAdventure = async function (venueTheme) {
     if (!currentSession) { alert('Sign in first to start a real-venue adventure.'); return; }
 
     if (!currentProfile?.preferences?.onboardingCompletedAt) {
@@ -1922,8 +1934,11 @@
       return;
     }
 
+    const isWineCountry = venueTheme === 'wine_country';
     const body = document.getElementById('adventure-body');
-    body.innerHTML = '<div class="empty-state">🎲 Chancing your luck — finding your first real venue…</div>';
+    body.innerHTML = isWineCountry
+      ? '<div class="empty-state">🍷 Uncorking your route — finding your first winery…</div>'
+      : '<div class="empty-state">🎲 Chancing your luck — finding your first real venue…</div>';
     // beginAdventureCountdown() already scrolled to #adventure-section
     // before the countdown played, but the full-screen countdown overlay
     // sitting on top for ~2.6s gives plenty of time for scroll position to
@@ -1951,9 +1966,11 @@
 
       const partyId = await ensurePartyId();
 
-      const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'init', partyId, lat: currentLat, lng: currentLng });
+      const initBody = { action: 'init', partyId, lat: currentLat, lng: currentLng };
+      if (isWineCountry) initBody.venueTheme = 'wine_country';
+      const { res, data } = await postEdgeFunction('real-venue-adventure', initBody);
       if (!res.ok) {
-        body.innerHTML = `<div class="empty-state">Couldn't start a real-venue adventure: ${data.error || res.statusText}</div>`;
+        body.innerHTML = `<div class="empty-state">Couldn't start ${isWineCountry ? 'a wine country' : 'a real-venue'} adventure: ${data.error || res.statusText}</div>`;
         return;
       }
 
@@ -1963,7 +1980,7 @@
       const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
       body.innerHTML = isRlsError
         ? '<div class="empty-state">Your sign-in session expired partway through. Please sign in again above, then try again.</div>'
-        : `<div class="empty-state">Couldn't start a real-venue adventure: ${e.message}</div>`;
+        : `<div class="empty-state">Couldn't start ${isWineCountry ? 'a wine country' : 'a real-venue'} adventure: ${e.message}</div>`;
     }
   };
 
@@ -2484,6 +2501,41 @@
   let progressMapRenderers = [];      // one DirectionsRenderer per leg drawn
   let progressMapLegsDrawn = new Set(); // leg keys already requested, so a re-render never double-fetches the same leg
 
+  // Builds a marker icon showing the venue's own photo in a colored ring
+  // (red/green, matching visited/active state) with a small numbered badge
+  // — a plain SVG data URI rather than google.maps.marker.AdvancedMarkerElement,
+  // since that requires a Map ID configured in Google Cloud Console (another
+  // setup step) where this just works with the existing Maps JS API key.
+  // Falls back to the original plain colored circle + centered number when
+  // a stop has no photo (shouldn't happen going forward now that venue
+  // selection requires one, but older/pre-existing stops might).
+  function buildMarkerIcon(number, fillColor, imageUrl) {
+    if (!imageUrl) {
+      return {
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+        label: { text: String(number), color: '#fff', fontWeight: '700', fontSize: '11px' },
+      };
+    }
+    const size = 44, r = 18, cx = 20, cy = 20, badgeR = 9, badgeCx = 34, badgeCy = 34;
+    const escUrl = String(imageUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <defs><clipPath id="pc-${number}"><circle cx="${cx}" cy="${cy}" r="${r - 2}"/></clipPath></defs>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/>
+      <image href="${escUrl}" x="${cx - r}" y="${cy - r}" width="${r * 2}" height="${r * 2}" clip-path="url(#pc-${number})" preserveAspectRatio="xMidYMid slice"/>
+      <circle cx="${cx}" cy="${cy}" r="${r - 1}" fill="none" stroke="${fillColor}" stroke-width="3"/>
+      <circle cx="${badgeCx}" cy="${badgeCy}" r="${badgeR}" fill="${fillColor}" stroke="#fff" stroke-width="2"/>
+      <text x="${badgeCx}" y="${badgeCy + 4}" font-family="-apple-system,sans-serif" font-weight="700" font-size="11" fill="#fff" text-anchor="middle">${number}</text>
+    </svg>`;
+    return {
+      icon: {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(size, size),
+        anchor: new google.maps.Point(cx, cy),
+      },
+      label: undefined,
+    };
+  }
+
   function resetProgressMap() {
     progressMapMarkers.forEach((m) => m.setMap(null));
     progressMapMarkers = new Map();
@@ -2532,13 +2584,13 @@
       // current one, so "not done" here always means "the active stop".
       const isDone = doneIds.has(s.id);
       const fillColor = isDone ? '#e8503f' : '#0ea5a0';
+      const icon = buildMarkerIcon(i + 1, fillColor, s.imageUrl);
 
       let marker = progressMapMarkers.get(s.id);
       if (!marker) {
         marker = new google.maps.Marker({
           position: pos, map: progressMap, title: `${i + 1}. ${s.name}`,
-          label: { text: String(i + 1), color: '#fff', fontWeight: '700', fontSize: '11px' },
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 },
+          ...icon,
         });
         progressMapMarkers.set(s.id, marker);
 
@@ -2554,10 +2606,11 @@
         progressMapInfoWindows.set(s.id, nameTag);
       } else {
         // Re-render of an already-placed marker (e.g. it just flipped from
-        // active to visited on check-in) — sync the color in place rather
-        // than leaving it stuck at whatever it was when first created.
-        const icon = marker.getIcon();
-        if (icon && icon.fillColor !== fillColor) marker.setIcon({ ...icon, fillColor });
+        // active to visited on check-in) — the visited/active color is now
+        // baked into the generated icon (SVG ring + badge) rather than a
+        // separate `fillColor` field that could be patched in place, so
+        // this rebuilds the whole icon rather than patching one property.
+        marker.setIcon(icon.icon);
       }
     });
 

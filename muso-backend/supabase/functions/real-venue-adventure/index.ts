@@ -338,8 +338,12 @@ function weightedRandomPick(candidates: Candidate[]): Candidate {
 
 // ---------------------------------------------------------------
 // Fork-in-the-road: contrasting theme buckets for the 3-choice reveal.
-// Best-effort keyword match against Yelp's own category string — same
-// "good enough, not perfect" spirit as the family-safe filtering above.
+// Best-effort keyword match against Yelp's category string AND the
+// venue's own name — same "good enough, not perfect" spirit as the
+// family-safe filtering above. Matching the name too matters most for the
+// wine buckets below: Yelp's category taxonomy only has "Wineries"/"Wine
+// Bars," nothing distinguishing boutique vs. estate vs. tasting-room, so
+// that signal can only come from words in the business's own name.
 // ---------------------------------------------------------------
 
 type Theme = { key: string; label: string; emoji: string; color: string };
@@ -385,15 +389,37 @@ const THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const GENERAL_THEME: Theme = { key: "local", label: "Local Pick", emoji: "📍", color: "#2a2438" };
 
-function classifyTheme(candidate: Candidate): Theme {
-  const cat = (candidate.category ?? "").toLowerCase();
-  for (const bucket of THEME_BUCKETS) {
+// Wine Country Adventure — every candidate is already a winery/tasting
+// room (locked via WINE_YELP_CATEGORIES below), so the general mood
+// buckets above (cozy/adventurous/social/artsy/foodie) would barely
+// differentiate anything. This parallel bucket set classifies by the
+// *kind* of wine venue instead, matched against Yelp's category/name text.
+const WINE_YELP_CATEGORIES = ["wineries", "wine_bars"];
+const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "boutique", label: "Boutique Winery", emoji: "🍇", color: "#7a3b69",
+    keywords: ["boutique", "family owned", "small batch", "artisan"],
+  },
+  {
+    key: "estate", label: "Estate & Vineyard", emoji: "🏛️", color: "#5b4b8a",
+    keywords: ["estate", "vineyard", "chateau", "château", "villa", "ranch"],
+  },
+  {
+    key: "tasting_bar", label: "Tasting Room Bar", emoji: "🥂", color: "#0b6e68",
+    keywords: ["wine bar", "tasting room", "wine lounge", "cellar", "wine cellar"],
+  },
+];
+const WINE_GENERAL_THEME: Theme = { key: "winery", label: "Winery", emoji: "🍷", color: "#2a2438" };
+
+function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: string[] })[] = THEME_BUCKETS): Theme {
+  const cat = `${candidate.category ?? ""} ${candidate.name ?? ""}`.toLowerCase();
+  for (const bucket of buckets) {
     if (bucket.keywords.some((kw) => cat.includes(kw))) {
       const { keywords: _keywords, ...theme } = bucket;
       return theme;
     }
   }
-  return GENERAL_THEME;
+  return buckets === WINE_THEME_BUCKETS ? WINE_GENERAL_THEME : GENERAL_THEME;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -410,10 +436,14 @@ function shuffle<T>(arr: T[]): T[] {
 // toward higher-rated/featured venues within each theme via
 // weightedRandomPick. Backfills from the general remaining pool if fewer
 // than n themes have any matching candidates (e.g. a sparse market).
-function pickContrastingChoices(candidates: Candidate[], n: number): (Candidate & { theme: Theme })[] {
+function pickContrastingChoices(
+  candidates: Candidate[],
+  n: number,
+  buckets: (Theme & { keywords: string[] })[] = THEME_BUCKETS,
+): (Candidate & { theme: Theme })[] {
   const byTheme = new Map<string, { theme: Theme; items: Candidate[] }>();
   for (const c of candidates) {
-    const theme = classifyTheme(c);
+    const theme = classifyTheme(c, buckets);
     if (!byTheme.has(theme.key)) byTheme.set(theme.key, { theme, items: [] });
     byTheme.get(theme.key)!.items.push(c);
   }
@@ -437,10 +467,10 @@ function pickContrastingChoices(candidates: Candidate[], n: number): (Candidate 
   // an absolute last resort, when fewer than n distinct themes exist among
   // ALL nearby candidates.
   if (chosen.length < n) {
-    const remaining = candidates.filter((c) => !usedIds.has(c.id) && !usedThemeKeys.has(classifyTheme(c).key));
+    const remaining = candidates.filter((c) => !usedIds.has(c.id) && !usedThemeKeys.has(classifyTheme(c, buckets).key));
     while (chosen.length < n && remaining.length) {
       const pick = weightedRandomPick(remaining);
-      const theme = classifyTheme(pick);
+      const theme = classifyTheme(pick, buckets);
       chosen.push({ ...pick, theme });
       usedIds.add(pick.id);
       usedThemeKeys.add(theme.key);
@@ -452,7 +482,7 @@ function pickContrastingChoices(candidates: Candidate[], n: number): (Candidate 
     const remaining = candidates.filter((c) => !usedIds.has(c.id));
     while (chosen.length < n && remaining.length) {
       const pick = weightedRandomPick(remaining);
-      chosen.push({ ...pick, theme: classifyTheme(pick) });
+      chosen.push({ ...pick, theme: classifyTheme(pick, buckets) });
       usedIds.add(pick.id);
       remaining.splice(remaining.findIndex((c) => c.id === pick.id), 1);
     }
@@ -619,8 +649,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Set your preferences before starting a real-venue adventure." }, 400);
     }
 
+    // Wine Country Adventure — locks search to wineries/tasting rooms and
+    // swaps in wine-specific mood buckets, overriding the player's normal
+    // interests-derived categories rather than adding to them. Persisted
+    // on the route so advance()/reroll() reapply the same lock on every
+    // later stop of this same adventure.
+    const venueTheme = body.venueTheme === "wine_country" ? "wine_country" : null;
+    const isWineCountry = venueTheme === "wine_country";
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = resolveYelpCategories(prefs);
+    const categories = isWineCountry ? WINE_YELP_CATEGORIES : resolveYelpCategories(prefs);
+    const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
 
     const candidates = await searchNearbyVenues(admin, yelpKey, {
       lat, lng, radiusMiles, budget: prefs.budget, categories,
@@ -630,7 +668,7 @@ Deno.serve(async (req) => {
     }
 
     const stopCount = profile.unlocked_stop_count ?? 3;
-    const choices = pickContrastingChoices(candidates, 3);
+    const choices = pickContrastingChoices(candidates, 3, buckets);
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = candidates.filter((c) => !offeredIds.has(c.id));
 
@@ -639,8 +677,11 @@ Deno.serve(async (req) => {
       .insert({
         owner_party_id: partyId,
         twist_key: "real-auto",
-        title: "Real Venues Adventure",
-        description: "A fork in the road at every stop — pick your path from real, live nearby venues.",
+        title: isWineCountry ? "Wine Country Adventure" : "Real Venues Adventure",
+        description: isWineCountry
+          ? "A fork in the road at every stop — pick your path through real, live nearby wineries and tasting rooms."
+          : "A fork in the road at every stop — pick your path from real, live nearby venues.",
+        venue_theme: venueTheme,
       })
       .select("id")
       .single();
@@ -694,15 +735,17 @@ Deno.serve(async (req) => {
 
     const { data: stop, error: stopErr } = await admin
       .from("route_stops")
-      .select("id, route_id, venue_id, is_mystery, reroll_count, candidate_pool, offered_choices, routes!inner(owner_party_id)")
+      .select("id, route_id, venue_id, is_mystery, reroll_count, candidate_pool, offered_choices, routes!inner(owner_party_id, venue_theme)")
       .eq("id", routeStopId)
       .maybeSingle();
     if (stopErr || !stop) return jsonResponse({ error: "Stop not found." }, 404);
 
-    const ownerPartyId = (stop as unknown as { routes: { owner_party_id: string | null } }).routes?.owner_party_id;
+    const stopRoute = (stop as unknown as { routes: { owner_party_id: string | null; venue_theme: string | null } }).routes;
+    const ownerPartyId = stopRoute?.owner_party_id;
     if (!ownerPartyId || !(await isPartyMember(admin, ownerPartyId, userId))) {
       return jsonResponse({ error: "You're not a member of that party." }, 403);
     }
+    const rerollBuckets = stopRoute?.venue_theme === "wine_country" ? WINE_THEME_BUCKETS : THEME_BUCKETS;
     // Reroll only makes sense while choices are offered and nothing's been
     // committed yet — once venue_id is set the fork has already been taken.
     if (stop.is_mystery || stop.venue_id || !stop.offered_choices) {
@@ -748,7 +791,7 @@ Deno.serve(async (req) => {
       spent = EXTRA_ROLL_COST;
     }
 
-    const choices = pickContrastingChoices(pool, 3);
+    const choices = pickContrastingChoices(pool, 3, rerollBuckets);
     const offeredIds = new Set(choices.map((c) => c.id));
     const newPool = pool.filter((c) => !offeredIds.has(c.id));
 
@@ -835,7 +878,7 @@ Deno.serve(async (req) => {
 
     const { data: adventure, error: advErr } = await admin
       .from("adventures")
-      .select("id, party_id, route_id, mode")
+      .select("id, party_id, route_id, mode, routes(venue_theme)")
       .eq("id", adventureId)
       .maybeSingle();
     if (advErr || !adventure) return jsonResponse({ error: "Adventure not found." }, 404);
@@ -845,6 +888,7 @@ Deno.serve(async (req) => {
     if (!(await isPartyMember(admin, adventure.party_id, userId))) {
       return jsonResponse({ error: "You're not a member of that party." }, 403);
     }
+    const isWineCountry = (adventure as unknown as { routes: { venue_theme: string | null } | null }).routes?.venue_theme === "wine_country";
 
     const { data: allStops } = await admin
       .from("route_stops")
@@ -862,7 +906,8 @@ Deno.serve(async (req) => {
     if (!profile) return jsonResponse({ error: "Couldn't load your profile." }, 400);
     const prefs = (profile.preferences ?? {}) as Preferences;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = resolveYelpCategories(prefs);
+    const categories = isWineCountry ? WINE_YELP_CATEGORIES : resolveYelpCategories(prefs);
+    const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
 
     const alreadyVisitedVenueIds = new Set(stops.filter((s) => s.venue_id).map((s) => s.venue_id as string));
 
@@ -874,7 +919,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No new nearby venues found for the next stop — try again shortly." }, 404);
     }
 
-    const choices = pickContrastingChoices(fresh, 3);
+    const choices = pickContrastingChoices(fresh, 3, buckets);
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = fresh.filter((c) => !offeredIds.has(c.id));
 
