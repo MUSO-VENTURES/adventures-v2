@@ -1291,7 +1291,7 @@
 
 <section class="adventure-section" id="adventure-section">
   <div class="adventure-inner">
-    <h2>📱 Start a MUSO Adventure</h2>
+    <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
     <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
     <div id="adventure-body"></div>
     <div class="progress-map-wrap" id="adventure-progress-map-wrap" hidden>
@@ -1914,6 +1914,8 @@
 
   async function renderRoutePicker() {
     const body = document.getElementById('adventure-body');
+    const headingEl = document.getElementById('adventure-heading');
+    if (headingEl) headingEl.textContent = '📱 Start a MUSO Adventure';
     // owner_party_id is null for curated/global routes — explicitly filtered
     // here so a player's own ad-hoc real-venue route (owner_party_id set,
     // readable to them under the 0016 RLS policy) never leaks into this
@@ -2241,6 +2243,15 @@
     const body = document.getElementById('adventure-body');
     if (!activeAdventure) return;
     const { route, stops, doneIds, stopsLocked, unlockedStopCount, totalStops } = activeAdventure;
+
+    // Names the section after whichever specific adventure is actually
+    // active, instead of the generic "Start a MUSO Adventure" — e.g. "Start
+    // your MUSO Wine Country Adventure" once one is under way.
+    const headingEl = document.getElementById('adventure-heading');
+    if (headingEl && route?.title) {
+      const emoji = /wine country/i.test(route.title) ? '🍷' : activeAdventure.mode === 'real_venue' ? '🍀' : '📱';
+      headingEl.textContent = `${emoji} Start your MUSO ${route.title}`;
+    }
     const firstIncompleteIdx = stops.findIndex(s => !doneIds.has(s.id));
     const allVisibleDone = firstIncompleteIdx === -1;
     // Only celebrate "complete" once there's nothing left to unlock, either —
