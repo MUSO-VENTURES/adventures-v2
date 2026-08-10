@@ -168,6 +168,8 @@ function milesToMeters(miles: number): number {
   return Math.round(miles * 1609.34);
 }
 
+type YelpHours = { hour_type: string; is_open_now: boolean; open: { day: number; start: string; end: string; is_overnight: boolean }[] }[];
+
 type Candidate = {
   id: string;
   name: string;
@@ -181,6 +183,9 @@ type Candidate = {
   distance_miles: number;
   muso_rating: number | null;
   muso_rating_count: number | null;
+  yelp_id: string | null;
+  hours: YelpHours | null;
+  hours_fetched_at: string | null;
 };
 
 // Runs a live Yelp search, upserts results into `venues` (via the existing
@@ -492,6 +497,121 @@ function pickContrastingChoices(
 }
 
 // ---------------------------------------------------------------
+// Venue hours — "never offer a closed or closing-soon venue."
+// ---------------------------------------------------------------
+
+const HOURS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — hours change rarely; avoids re-fetching Yelp Business Details on every search near the same venue
+const CLOSING_SOON_BUFFER_MINUTES = 30;
+// Every current/planned venue (Tri-Valley, Napa, Mendocino, Lake County) is
+// in Pacific time — hardcoded rather than adding a timezone-lookup
+// dependency for a case that doesn't exist yet. Revisit if this ever
+// expands outside California.
+const VENUE_TIMEZONE = "America/Los_Angeles";
+
+// Fetches (or reuses a cached, <24h-old) Yelp Business Details record for
+// one candidate's hours. Only the Business Details endpoint returns hours
+// — the Search endpoint used above doesn't — so this is a second,
+// per-candidate Yelp call, deliberately only made lazily for candidates
+// actually about to be offered (see pickOpenChoices below), not the whole
+// search result set, to keep Yelp quota usage bounded.
+async function getVenueHours(admin: Admin, yelpKey: string, candidate: Candidate): Promise<YelpHours | null> {
+  if (candidate.hours && candidate.hours_fetched_at) {
+    const age = Date.now() - new Date(candidate.hours_fetched_at).getTime();
+    if (age < HOURS_CACHE_TTL_MS) return candidate.hours;
+  }
+  if (!candidate.yelp_id) return candidate.hours ?? null; // nothing to look up against — best-effort fall back to whatever's cached, else unknown
+
+  try {
+    const res = await fetch(`https://api.yelp.com/v3/businesses/${encodeURIComponent(candidate.yelp_id)}`, {
+      headers: { Authorization: `Bearer ${yelpKey}` },
+    });
+    if (!res.ok) {
+      console.error(`Yelp business details failed for ${candidate.yelp_id}: ${res.status} ${res.statusText}`);
+      return candidate.hours ?? null;
+    }
+    const data = await res.json();
+    const hours = Array.isArray(data.hours) ? (data.hours as YelpHours) : null;
+    // Best-effort cache write — a failure here shouldn't break venue
+    // offering, it just means the next request re-fetches instead of
+    // hitting cache.
+    await admin.from("venues").update({ hours, hours_fetched_at: new Date().toISOString() }).eq("id", candidate.id);
+    return hours;
+  } catch (e) {
+    console.error("Yelp business details threw:", e);
+    return candidate.hours ?? null;
+  }
+}
+
+// Unknown hours (Yelp lookup failed, or no yelp_id) fall back to "assume
+// open" — a missing data point shouldn't block venue offering the way a
+// confirmed-closed status should.
+function isOpenOrClosingSoon(hours: YelpHours | null): { open: boolean; closingSoon: boolean } {
+  if (!hours || !hours.length) return { open: true, closingSoon: false };
+  const regular = hours.find((h) => h.hour_type === "REGULAR") ?? hours[0];
+  // is_open_now is Yelp's own authoritative "is it open right now"
+  // computation — trusted directly rather than re-derived from the `open`
+  // array, which sidesteps any ambiguity in exactly how Yelp indexes
+  // day-of-week there. The `open` array is only parsed below for the
+  // "closing soon" lookahead, which Yelp doesn't provide as a flag.
+  if (!regular.is_open_now) return { open: false, closingSoon: false };
+
+  const nowPacific = new Date(new Date().toLocaleString("en-US", { timeZone: VENUE_TIMEZONE }));
+  // Yelp's day field: 0=Monday..6=Sunday (confirmed against Yelp's own
+  // docs). JS Date#getDay() is 0=Sunday..6=Saturday, hence the shift.
+  const weekday = (nowPacific.getDay() + 6) % 7;
+  const minutesNow = nowPacific.getHours() * 60 + nowPacific.getMinutes();
+
+  for (const block of regular.open.filter((o) => o.day === weekday)) {
+    // Skip overnight blocks (span past midnight) rather than risk a wrong
+    // closing-soon read from them — is_open_now above already confirmed
+    // the venue is open right now regardless.
+    if (block.is_overnight) continue;
+    const endMinutes = parseInt(block.end.slice(0, 2), 10) * 60 + parseInt(block.end.slice(2), 10);
+    if (minutesNow <= endMinutes && endMinutes - minutesNow <= CLOSING_SOON_BUFFER_MINUTES) {
+      return { open: true, closingSoon: true };
+    }
+  }
+  return { open: true, closingSoon: false };
+}
+
+// Wraps pickContrastingChoices with the open/closing-soon filter — picks
+// candidates, checks each one's hours (lazily, only the ones actually
+// picked), keeps the open ones, and asks for more from the remaining pool
+// until n are filled or the pool/attempt budget runs out. Never returns a
+// closed or closing-soon venue; may return fewer than n if the area
+// genuinely doesn't have enough currently-open options.
+async function pickOpenChoices(
+  admin: Admin,
+  yelpKey: string,
+  candidates: Candidate[],
+  n: number,
+  buckets: (Theme & { keywords: string[] })[],
+  maxAttempts = 8,
+): Promise<(Candidate & { theme: Theme; hours: YelpHours | null })[]> {
+  const excludedIds = new Set<string>();
+  const result: (Candidate & { theme: Theme; hours: YelpHours | null })[] = [];
+
+  for (let attempt = 0; attempt < maxAttempts && result.length < n; attempt++) {
+    const pool = candidates.filter((c) => !excludedIds.has(c.id));
+    if (!pool.length) break;
+    const picked = pickContrastingChoices(pool, n - result.length, buckets);
+    if (!picked.length) break;
+
+    for (const choice of picked) {
+      excludedIds.add(choice.id); // never reconsider this exact candidate again, open or not
+      const hours = await getVenueHours(admin, yelpKey, choice);
+      const status = isOpenOrClosingSoon(hours);
+      if (status.open && !status.closingSoon) {
+        result.push({ ...choice, hours });
+        if (result.length >= n) break;
+      }
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------
 // Shared loaders
 // ---------------------------------------------------------------
 
@@ -677,7 +797,10 @@ Deno.serve(async (req) => {
     const stopCount = Number.isInteger(requestedStopCount)
       ? Math.min(Math.max(requestedStopCount, 2), unlockedCap)
       : unlockedCap;
-    const choices = pickContrastingChoices(candidates, 3, buckets);
+    const choices = await pickOpenChoices(admin, yelpKey, candidates, 3, buckets);
+    if (!choices.length) {
+      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+    }
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = candidates.filter((c) => !offeredIds.has(c.id));
 
@@ -775,6 +898,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No other nearby venues to roll into right now." }, 404);
     }
 
+    // Pick (and hours-verify) choices BEFORE touching coins/reroll_count —
+    // a spin that comes back with nothing open shouldn't cost the player
+    // anything.
+    const choices = await pickOpenChoices(admin, yelpKey, pool, 3, rerollBuckets);
+    if (!choices.length) {
+      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+    }
+
     const rerollCount = stop.reroll_count ?? 0;
     let spent = 0;
     if (rerollCount >= FREE_REROLLS) {
@@ -800,7 +931,6 @@ Deno.serve(async (req) => {
       spent = EXTRA_ROLL_COST;
     }
 
-    const choices = pickContrastingChoices(pool, 3, rerollBuckets);
     const offeredIds = new Set(choices.map((c) => c.id));
     const newPool = pool.filter((c) => !offeredIds.has(c.id));
 
@@ -928,7 +1058,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No new nearby venues found for the next stop — try again shortly." }, 404);
     }
 
-    const choices = pickContrastingChoices(fresh, 3, buckets);
+    const choices = await pickOpenChoices(admin, yelpKey, fresh, 3, buckets);
+    if (!choices.length) {
+      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+    }
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = fresh.filter((c) => !offeredIds.has(c.id));
 
