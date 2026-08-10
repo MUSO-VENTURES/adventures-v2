@@ -526,6 +526,14 @@
     padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
   }
   .rvc-sc-pill.active{ background:#fff; color:var(--coral); border-color:#fff; }
+  .invite-friends-cta{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    background:var(--card-bg); border:2px dashed var(--teal); border-radius:16px;
+    padding:14px 18px; margin-bottom:16px;
+  }
+  .invite-friends-cta .rvc-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.98rem; color:var(--deep-teal); }
+  .invite-friends-cta .rvc-desc{ font-size:0.8rem; opacity:0.85; margin-top:2px; max-width:380px; }
+  .invite-friends-cta .party-invite-btn{ background:var(--teal); flex-shrink:0; padding:9px 18px; font-size:0.82rem; }
   .wine-cta .rvc-sc-pill.active{ color:#5b4b8a; }
   .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
 
@@ -1058,7 +1066,7 @@
     <div class="gate-error" id="gate-error"></div>
 
     <button type="button" class="gate-enter-btn" id="gate-enter-btn" onclick="attemptEnterSite()">Continue to the Preview</button>
-    <span class="gate-leave-link" onclick="window.location.href='https://www.google.com'">I do not agree — leave the site</span>
+    <span class="gate-leave-link" onclick="window.location.href='https://www.google.com'">I do not agree, leave the site</span>
   </div>
 </div>
 
@@ -1889,22 +1897,14 @@
   }
 
   // ---------- INVITE MODAL: SHOW MY QR / SCAN A QR ----------
-  // No activeAdventure requirement here on purpose — "Show my QR" needs
-  // one (there's no party to invite people into otherwise), but "Scan a
-  // QR" is exactly how a brand new player joins someone else's adventure
-  // in the first place, before they have one of their own. When opened
-  // without an adventure, the "Show my QR" tab is hidden and this jumps
-  // straight to scanning.
+  // Both tabs work with no activeAdventure requirement — "Show my QR" is
+  // a player's permanent personal code (getMyPersonalCode, not tied to
+  // any one party/adventure), so gathering a group can happen *before*
+  // anyone's started anything. Claiming it server-side creates a party
+  // for the inviter if they don't already have one.
   window.openInviteModal = function () {
     document.getElementById('party-invite-overlay').removeAttribute('hidden');
-    const showTabBtn = document.getElementById('invite-tab-show');
-    if (activeAdventure?.partyId) {
-      showTabBtn.style.display = '';
-      switchInviteTab('show');
-    } else {
-      showTabBtn.style.display = 'none';
-      switchInviteTab('scan');
-    }
+    switchInviteTab('show');
   };
 
   window.closeInviteModal = function () {
@@ -1932,15 +1932,15 @@
   async function generateInviteQr() {
     const hint = document.getElementById('invite-code-hint');
     const wrap = document.getElementById('invite-qr-canvas-wrap');
-    hint.textContent = 'Generating your invite code…';
+    hint.textContent = 'Loading your invite code…';
     wrap.innerHTML = '';
     try {
-      const { res, data } = await postPartySocial('createInvite', { partyId: activeAdventure.partyId });
-      if (!res.ok) { hint.textContent = data.error || 'Could not create an invite right now.'; return; }
+      const { res, data } = await postPartySocial('getMyPersonalCode');
+      if (!res.ok) { hint.textContent = data.error || 'Could not load your invite code right now.'; return; }
       const canvas = document.createElement('canvas');
       wrap.appendChild(canvas);
       await QRCode.toCanvas(canvas, data.joinUrl, { width: 220, margin: 1, color: { dark: '#2a2438', light: '#ffffff' } });
-      hint.textContent = 'Have them scan this with their camera, or share the link directly.';
+      hint.textContent = 'This is your permanent code. Have them scan it anytime, or share the link directly.';
     } catch (e) {
       hint.textContent = 'Could not generate a QR code: ' + (e?.message || e);
     }
@@ -2320,6 +2320,20 @@
       counts[r.id] = count || 0;
     }
     const unlockedStopCount = currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
+    // Shown before either adventure-type card on purpose — most groups
+    // explore better together, so gathering people is framed as the
+    // natural first step, not an afterthought buried below the venue
+    // picks. Solo play still works fine; this is just an invitation, not
+    // a requirement (openInviteModal() has no party/adventure
+    // precondition, so this works even for a player who's never started
+    // anything yet).
+    const inviteFriendsCta = `
+      <div class="invite-friends-cta">
+        <div class="rvc-title">👥 Bring Your Crew</div>
+        <div class="rvc-desc">Most adventures are more fun with company. Invite friends now so you start together, or explore solo, up to you.</div>
+        <button type="button" class="party-invite-btn" onclick="openInviteModal()">📷 Invite Friends</button>
+      </div>
+    `;
     const realVenueCta = `
       <div class="real-venue-cta">
         <div>
@@ -2343,12 +2357,9 @@
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
       </div>
-      <div style="text-align:center; margin:14px 0;">
-        <button type="button" class="party-invite-btn" onclick="openInviteModal()">📷 Join a Party: Scan an Invite</button>
-      </div>
       <div class="curated-routes-divider">or pick a curated route</div>
     `;
-    body.innerHTML = `${realVenueCta}<div class="route-pick-list">${routes.map(r => {
+    body.innerHTML = `${inviteFriendsCta}${realVenueCta}<div class="route-pick-list">${routes.map(r => {
       const total = counts[r.id];
       const capped = total > unlockedStopCount;
       return `
@@ -4120,10 +4131,19 @@
     }, 'image/png');
   };
 
+  // Fire-and-forget: getMyPersonalCode lazily creates the code if it
+  // doesn't exist yet, so calling it right after sign-in means a player's
+  // permanent QR is already sitting there the first time they open the
+  // invite modal or their profile, instead of generating on first view.
+  function ensurePersonalInviteCode() {
+    postPartySocial('getMyPersonalCode').catch(() => {});
+  }
+
   async function initAuth() {
     if (!supabaseClient) { renderAccountBar(); return; }
     const { data: { session } } = await supabaseClient.auth.getSession();
     currentSession = session;
+    if (currentSession) ensurePersonalInviteCode();
     await refreshProfileAndBadges();
     renderAccountBar();
     await applyGateStateFromProfile();
@@ -4143,6 +4163,7 @@
       // is enough; only a real sign-in/out/user-update needs the full
       // reload below.
       if (_event === 'TOKEN_REFRESHED') return;
+      if (currentSession) ensurePersonalInviteCode();
       await refreshProfileAndBadges();
       renderAccountBar();
       await applyGateStateFromProfile();

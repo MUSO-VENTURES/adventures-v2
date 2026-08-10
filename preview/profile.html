@@ -124,6 +124,16 @@
   }
   .empty-note{ font-size:0.88rem; opacity:0.6; padding:8px 0; }
 
+  .qr-card-body{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  #profile-qr-canvas-wrap{ flex-shrink:0; line-height:0; }
+  #profile-qr-canvas-wrap canvas{ border-radius:12px; }
+  .qr-card-text{ flex:1; min-width:180px; }
+  .qr-card-text p{ font-size:0.85rem; opacity:0.7; margin-bottom:10px; }
+  .qr-share-btn{
+    background:var(--teal); color:#fff; border:none; padding:9px 18px; border-radius:999px;
+    font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'Fredoka',sans-serif;
+  }
+
   form.edit-form{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:4px; }
   form.edit-form .full{ grid-column:1 / -1; }
   @media (max-width:640px){ form.edit-form{ grid-template-columns:1fr; } }
@@ -307,6 +317,17 @@
     </div>
 
     <div class="card">
+      <h2>My QR Code</h2>
+      <div class="qr-card-body">
+        <div id="profile-qr-canvas-wrap"></div>
+        <div class="qr-card-text">
+          <p id="profile-qr-hint">Loading your invite code…</p>
+          <button type="button" class="qr-share-btn" onclick="shareProfileQr()">Share my link</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Badges earned</h2>
       <div id="badges-content" class="empty-note">Loading…</div>
     </div>
@@ -356,6 +377,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
   const SUPABASE_URL = 'https://aqaezprsbcyqpnnavdpv.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxYWV6cHJzYmN5cXBubmF2ZHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4MDU1NjksImV4cCI6MjA5OTM4MTU2OX0.8rpmMQSo6pgjdKfeeBFgY3lybvNVmFo4O10gjLg2kso';
@@ -800,6 +822,57 @@
     }).join('')}</div>`;
   }
 
+  // Permanent personal invite QR, shown at the top of the profile so a
+  // player always has it handy to share, whether or not an adventure is
+  // active. Mirrors preview/index.html's invite-modal "Show my QR" tab,
+  // which calls the same party-social action.
+  async function callPartySocial(action) {
+    async function attempt() {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/party-social`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': SUPABASE_ANON_KEY },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    }
+    let result = await attempt();
+    if (result.res.status === 401) {
+      const { data: refreshed, error } = await supabaseClient.auth.refreshSession();
+      if (!error && refreshed?.session) { session = refreshed.session; result = await attempt(); }
+    }
+    return result;
+  }
+
+  let profileJoinUrl = null;
+
+  async function renderProfileQr() {
+    const hint = document.getElementById('profile-qr-hint');
+    const wrap = document.getElementById('profile-qr-canvas-wrap');
+    try {
+      const { res, data } = await callPartySocial('getMyPersonalCode');
+      if (!res.ok) { hint.textContent = data.error || 'Could not load your invite code right now.'; return; }
+      profileJoinUrl = data.joinUrl;
+      wrap.innerHTML = '';
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      await QRCode.toCanvas(canvas, data.joinUrl, { width: 150, margin: 1, color: { dark: '#2a2438', light: '#ffffff' } });
+      hint.textContent = 'Anyone who scans this joins your crew on MUSO Adventures.';
+    } catch (e) {
+      hint.textContent = 'Could not generate a QR code: ' + (e?.message || e);
+    }
+  }
+
+  window.shareProfileQr = async function () {
+    if (!profileJoinUrl) return;
+    const shareData = { title: 'Join me on MUSO Adventures', text: 'Join my crew on MUSO Adventures!', url: profileJoinUrl };
+    if (navigator.share) {
+      try { await navigator.share(shareData); return; } catch (e) {}
+    }
+    try { await navigator.clipboard.writeText(profileJoinUrl); alert('Invite link copied! Send it to a friend.'); }
+    catch (e) { alert('Your invite link: ' + profileJoinUrl); }
+  };
+
   async function init() {
     const { data: { session: s } } = await supabaseClient.auth.getSession();
     session = s;
@@ -842,6 +915,7 @@
     renderLeaderboard();
     renderPhotobooth();
     renderTrophyCase();
+    renderProfileQr();
   }
 
   init();
