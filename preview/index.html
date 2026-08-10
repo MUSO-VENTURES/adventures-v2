@@ -2882,8 +2882,23 @@
     const stack = document.querySelector(`.fork-stack[data-stop-id="${routeStopId}"]`);
     const expandedCard = stack ? stack.querySelector('.fork-stack-card.expanded') : null;
     const spinBtn = stack ? stack.querySelector('.fork-spin-btn') : null;
-    if (spinBtn) { spinBtn.disabled = true; spinBtn.classList.add('spinning'); spinBtn.textContent = '🎲 Spinning…'; }
-    expandedCard?.querySelector('.fork-choose-btn')?.setAttribute('disabled', '');
+    // Disabling a button right after it's tapped yanks focus away from it —
+    // on mobile Safari that can force the page to jump/scroll (usually all
+    // the way to the top) as it tries to figure out where focus should go
+    // next. Blurring first, before disabling, avoids handing it that
+    // decision at all — a purely visual glitch (the spin itself still ran
+    // correctly), but jarring mid-animation.
+    if (spinBtn) {
+      spinBtn.blur();
+      spinBtn.disabled = true;
+      spinBtn.classList.add('spinning');
+      spinBtn.textContent = '🎲 Spinning…';
+    }
+    const chooseBtn = expandedCard?.querySelector('.fork-choose-btn');
+    if (chooseBtn) {
+      chooseBtn.blur();
+      chooseBtn.setAttribute('disabled', '');
+    }
 
     let pool = [];
     try {
