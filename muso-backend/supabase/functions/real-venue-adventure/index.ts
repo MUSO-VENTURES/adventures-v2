@@ -395,20 +395,22 @@ const THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 const GENERAL_THEME: Theme = { key: "local", label: "Local Pick", emoji: "📍", color: "#2a2438" };
 
 // Wine Country Adventure — every candidate is a winery/tasting room OR one
-// of the early-day companion categories below, so the general mood
-// buckets above (cozy/adventurous/social/artsy/foodie) would barely
-// differentiate anything. This parallel bucket set classifies by the
-// *kind* of wine venue instead, matched against Yelp's category/name text.
+// of the companion categories below, so the general mood buckets above
+// (cozy/adventurous/social/artsy/foodie) would barely differentiate
+// anything. This parallel bucket set classifies by the *kind* of wine-
+// country stop instead, matched against Yelp's category/name text.
 const WINE_YELP_CATEGORIES = ["wineries", "wine_bars"];
 // Most wineries don't open until mid-morning/early-afternoon — searching
 // wineries only meant an early-day player got "no venues found" with
 // nothing to do until they opened. These ride along in the same search so
 // pickOpenChoices()'s existing hours filter (built for the general hours-
-// gating feature) naturally prefers whichever half of the pool is
-// actually open right now: coffee/breakfast/bike rentals early, shifting
-// to real wineries as the day goes on and they open — no separate
-// time-of-day logic needed, just a wider net for the same filter.
-const WINE_EARLY_DAY_CATEGORIES = ["coffee", "breakfast_brunch", "bikerentals", "diners", "bakeries"];
+// gating feature) naturally prefers whichever part of the pool is
+// actually open right now: coffee/food/entertainment/sightseeing early,
+// shifting to real wineries as the day goes on and they open — no
+// separate time-of-day logic needed, just a wider net for the same filter.
+const WINE_COMPANION_CATEGORIES = [
+  "coffee", "breakfast_brunch", "bikerentals", "diners", "bakeries", "landmarks", "parks",
+];
 const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "boutique", label: "Boutique Winery", emoji: "🍇", color: "#7a3b69",
@@ -422,9 +424,26 @@ const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
     key: "tasting_bar", label: "Tasting Room Bar", emoji: "🥂", color: "#0b6e68",
     keywords: ["wine bar", "tasting room", "wine lounge", "cellar", "wine cellar"],
   },
+  // Four distinct companion buckets, not one lumped-together "coffee or
+  // whatever" bucket — split so pickContrastingChoices() actually has
+  // enough distinct themes to draw 3 different picks from instead of
+  // repeating the same one twice (which is what a single catch-all bucket
+  // produced in practice — two "Morning Fuel" cards and one "Winery").
   {
     key: "morning_fuel", label: "Morning Fuel", emoji: "☕", color: "#8a5b3b",
-    keywords: ["coffee", "cafe", "breakfast", "brunch", "bakery", "diner", "bike", "cycle", "pastry", "donut"],
+    keywords: ["coffee", "cafe", "bakery", "pastry", "donut"],
+  },
+  {
+    key: "food", label: "Food", emoji: "🍽️", color: "#c9622f",
+    keywords: ["breakfast", "brunch", "diner", "sandwich", "deli"],
+  },
+  {
+    key: "entertainment", label: "Entertainment", emoji: "🚲", color: "#2f8f5b",
+    keywords: ["bike", "cycle", "rental", "tour"],
+  },
+  {
+    key: "sightseeing", label: "Sightseeing", emoji: "🗺️", color: "#1d6fa3",
+    keywords: ["landmark", "historic", "monument", "scenic", "viewpoint", "overlook", "park", "garden"],
   },
 ];
 const WINE_GENERAL_THEME: Theme = { key: "winery", label: "Winery", emoji: "🍷", color: "#2a2438" };
@@ -818,7 +837,7 @@ Deno.serve(async (req) => {
     const venueTheme = body.venueTheme === "wine_country" ? "wine_country" : null;
     const isWineCountry = venueTheme === "wine_country";
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_EARLY_DAY_CATEGORIES] : resolveYelpCategories(prefs);
+    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES] : resolveYelpCategories(prefs);
     const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
 
     const candidates = await searchNearbyVenues(admin, yelpKey, {
@@ -1112,7 +1131,7 @@ Deno.serve(async (req) => {
     if (!profile) return jsonResponse({ error: "Couldn't load your profile." }, 400);
     const prefs = (profile.preferences ?? {}) as Preferences;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_EARLY_DAY_CATEGORIES] : resolveYelpCategories(prefs);
+    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES] : resolveYelpCategories(prefs);
     const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
 
     const alreadyVisitedVenueIds = new Set(stops.filter((s) => s.venue_id).map((s) => s.venue_id as string));
