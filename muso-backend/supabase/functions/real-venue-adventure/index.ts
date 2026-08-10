@@ -611,6 +611,34 @@ async function pickOpenChoices(
   return result;
 }
 
+// Records that these venues were offered as fork choices — the
+// impressions half of the impressions/conversions data the admin
+// dashboard's venue-performance table (and eventually partner ROI
+// reporting) is built on. Best-effort: logging failures must never break
+// the actual offer response, same spirit as this file's badge/notification
+// side-effects elsewhere.
+async function logVenueOffers(
+  admin: Admin,
+  choices: (Candidate & { theme: Theme })[],
+  routeStopId: string,
+  adventureId: string | null,
+): Promise<void> {
+  if (!choices.length) return;
+  try {
+    const { error } = await admin.from("venue_offer_events").insert(
+      choices.map((c) => ({
+        venue_id: c.id,
+        route_stop_id: routeStopId,
+        adventure_id: adventureId,
+        theme_key: c.theme?.key ?? null,
+      })),
+    );
+    if (error) console.error("venue_offer_events insert failed:", error.message);
+  } catch (e) {
+    console.error("logVenueOffers threw:", e);
+  }
+}
+
 // ---------------------------------------------------------------
 // Shared loaders
 // ---------------------------------------------------------------
@@ -855,6 +883,8 @@ Deno.serve(async (req) => {
       .single();
     if (advErr) return jsonResponse({ error: advErr.message }, 400);
 
+    if (stops && stops[0]) await logVenueOffers(admin, choices, stops[0].id, adventure.id);
+
     return jsonResponse({ adventure, routeId: route.id, stops });
   }
 
@@ -946,6 +976,13 @@ Deno.serve(async (req) => {
       .single();
     if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
 
+    // adventure_id intentionally left null here — reroll doesn't otherwise
+    // need to look up the adventure row (only the coin-debit branch above
+    // does, and only when the free-roll allowance is used up), and
+    // venue_offer_events' aggregates group by venue, not by adventure, so
+    // this lineage field isn't load-bearing for the dashboard.
+    await logVenueOffers(admin, choices, routeStopId, null);
+
     return jsonResponse({
       stop: updated,
       spent,
@@ -994,11 +1031,28 @@ Deno.serve(async (req) => {
         name: picked.name,
         description: [picked.category, picked.address].filter(Boolean).join(" · "),
         offered_choices: null,
+        chosen_theme_key: picked.theme?.key ?? null,
       })
       .eq("id", routeStopId)
       .select("id, name, description, venue_id")
       .single();
     if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+
+    // Best-effort — flips this venue's most recent offer-event for this
+    // stop to "chosen," the conversion half of the impressions/conversions
+    // data the admin dashboard's venue-performance table reads from. A
+    // failure here shouldn't undo an already-successful choice.
+    try {
+      const { error: offerUpdateErr } = await admin
+        .from("venue_offer_events")
+        .update({ chosen: true, chosen_at: new Date().toISOString() })
+        .eq("route_stop_id", routeStopId)
+        .eq("venue_id", picked.id)
+        .eq("chosen", false);
+      if (offerUpdateErr) console.error("venue_offer_events chosen-update failed:", offerUpdateErr.message);
+    } catch (e) {
+      console.error("venue_offer_events chosen-update threw:", e);
+    }
 
     return jsonResponse({ stop: updated });
   }
@@ -1076,6 +1130,8 @@ Deno.serve(async (req) => {
       .select("id, stop_order, name, description, venue_id, offered_choices")
       .single();
     if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+
+    await logVenueOffers(admin, choices, nextPlaceholder.id, adventureId);
 
     return jsonResponse({ stop: updated, done: false });
   }
