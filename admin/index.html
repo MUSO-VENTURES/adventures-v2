@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>MUSO Adventures — Admin Dashboard</title>
+<title>MUSO Adventures: Admin Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -150,15 +150,15 @@
       <div class="chart-card">
         <h3>Reroll / Spin usage</h3>
         <div class="tile-row" style="grid-template-columns:1fr 1fr;">
-          <div class="stat-tile"><div class="stat-label">Total rerolls</div><div class="stat-value" id="stat-total-rerolls">—</div></div>
-          <div class="stat-tile"><div class="stat-label">Avg per stop</div><div class="stat-value" id="stat-avg-rerolls">—</div></div>
+          <div class="stat-tile"><div class="stat-label">Total rerolls</div><div class="stat-value" id="stat-total-rerolls">-</div></div>
+          <div class="stat-tile"><div class="stat-label">Avg per stop</div><div class="stat-value" id="stat-avg-rerolls">-</div></div>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Rankings — Top Players</h2>
+    <h2>Rankings: Top Players</h2>
     <div class="chart-card">
       <table>
         <thead><tr><th>Player</th><th>Level</th><th>XP</th></tr></thead>
@@ -168,7 +168,7 @@
   </section>
 
   <section>
-    <h2>Venue Performance <span style="font-weight:400; color:var(--text-muted); font-size:0.8rem;">— impressions/conversions, the foundation for future partner ROI reporting</span></h2>
+    <h2>Venue Performance <span style="font-weight:400; color:var(--text-muted); font-size:0.8rem;">(impressions/conversions, the foundation for future partner ROI reporting)</span></h2>
     <div class="chart-card">
       <table>
         <thead><tr><th>Venue</th><th>Offered</th><th>Chosen</th><th>Conversion</th><th>MUSO Rating</th></tr></thead>
@@ -184,10 +184,10 @@
       <div class="chart-card">
         <h3>Real-money purchases</h3>
         <div class="tile-row" style="grid-template-columns:1fr 1fr;">
-          <div class="stat-tile"><div class="stat-label">Avg per purchase</div><div class="stat-value" id="stat-avg-purchase">—</div></div>
-          <div class="stat-tile"><div class="stat-label">Total coins sold</div><div class="stat-value" id="stat-total-purchase">—</div></div>
+          <div class="stat-tile"><div class="stat-label">Avg per purchase</div><div class="stat-value" id="stat-avg-purchase">-</div></div>
+          <div class="stat-tile"><div class="stat-label">Total coins sold</div><div class="stat-value" id="stat-total-purchase">-</div></div>
         </div>
-        <div class="empty-note" id="purchase-empty-note" style="display:none;">No purchase data yet — coin checkout isn't live.</div>
+        <div class="empty-note" id="purchase-empty-note" style="display:none;">No purchase data yet, coin checkout isn't live.</div>
       </div>
     </div>
   </section>
@@ -273,8 +273,8 @@
           <td>${escapeHtml(v.venue_name)}</td>
           <td>${v.offered_count}</td>
           <td>${v.chosen_count}</td>
-          <td>${v.conversion_rate != null ? Math.round(v.conversion_rate * 100) + '%' : '—'}</td>
-          <td>${v.muso_rating_count > 0 ? `${v.muso_rating}/10 (${v.muso_rating_count})` : '—'}</td>
+          <td>${v.conversion_rate != null ? Math.round(v.conversion_rate * 100) + '%' : '-'}</td>
+          <td>${v.muso_rating_count > 0 ? `${v.muso_rating}/10 (${v.muso_rating_count})` : '-'}</td>
         </tr>`).join('')
       : '<tr><td colspan="5" class="empty-note">No venue offers logged yet</td></tr>';
 
@@ -282,8 +282,8 @@
     const byReason = mon.by_reason || [];
     renderBarChart('chart-coins', byReason.map((r) => r.reason), byReason.map((r) => r.total_amount), 5);
     const hasPurchases = byReason.some((r) => r.reason === 'purchase' && r.transaction_count > 0);
-    document.getElementById('stat-avg-purchase').textContent = hasPurchases ? mon.avg_purchase_amount : '—';
-    document.getElementById('stat-total-purchase').textContent = hasPurchases ? mon.total_purchase_revenue_coins : '—';
+    document.getElementById('stat-avg-purchase').textContent = hasPurchases ? mon.avg_purchase_amount : '-';
+    document.getElementById('stat-total-purchase').textContent = hasPurchases ? mon.total_purchase_revenue_coins : '-';
     document.getElementById('purchase-empty-note').style.display = hasPurchases ? 'none' : 'block';
   }
 

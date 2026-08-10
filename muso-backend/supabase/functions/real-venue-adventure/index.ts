@@ -843,7 +843,7 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
   const userId = userData?.user?.id;
   if (userErr || !userId) {
-    return jsonResponse({ error: "Your session has expired — sign in again." }, 401);
+    return jsonResponse({ error: "Your session has expired. Sign in again." }, 401);
   }
 
   let body: Record<string, unknown>;
@@ -970,7 +970,7 @@ Deno.serve(async (req) => {
       lat, lng, radiusMiles, budget: prefs.budget, categories,
     });
     if (!candidates.length) {
-      return jsonResponse({ error: "No matching venues found nearby — try widening your search radius in preferences." }, 404);
+      return jsonResponse({ error: "No matching venues found nearby. Try widening your search radius in preferences." }, 404);
     }
 
     // Every adventure defaults to 3 stops — a party can drop to 2 for a
@@ -985,7 +985,7 @@ Deno.serve(async (req) => {
       : unlockedCap;
     const choices = await pickOpenChoices(admin, yelpKey, candidates, 3, buckets);
     if (!choices.length) {
-      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+      return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = candidates.filter((c) => !offeredIds.has(c.id));
@@ -997,8 +997,8 @@ Deno.serve(async (req) => {
         twist_key: "real-auto",
         title: isWineCountry ? "Wine Country Adventure" : "Real Venues Adventure",
         description: isWineCountry
-          ? "A fork in the road at every stop — pick your path through real, live nearby wineries and tasting rooms."
-          : "A fork in the road at every stop — pick your path from real, live nearby venues.",
+          ? "A fork in the road at every stop. Pick your path through real, live nearby wineries and tasting rooms."
+          : "A fork in the road at every stop. Pick your path from real, live nearby venues.",
         venue_theme: venueTheme,
       })
       .select("id")
@@ -1091,7 +1091,7 @@ Deno.serve(async (req) => {
     // anything.
     const choices = await pickOpenChoices(admin, yelpKey, pool, 3, rerollBuckets);
     if (!choices.length) {
-      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+      return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
 
     const rerollCount = stop.reroll_count ?? 0;
@@ -1267,12 +1267,12 @@ Deno.serve(async (req) => {
     });
     const fresh = candidates.filter((c) => !alreadyVisitedVenueIds.has(c.id));
     if (!fresh.length) {
-      return jsonResponse({ error: "No new nearby venues found for the next stop — try again shortly." }, 404);
+      return jsonResponse({ error: "No new nearby venues found for the next stop. Try again shortly." }, 404);
     }
 
     const choices = await pickOpenChoices(admin, yelpKey, fresh, 3, buckets);
     if (!choices.length) {
-      return jsonResponse({ error: "No currently-open venues nearby right now — try again shortly." }, 404);
+      return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
     const offeredIds = new Set(choices.map((c) => c.id));
     const remainingPool = fresh.filter((c) => !offeredIds.has(c.id));

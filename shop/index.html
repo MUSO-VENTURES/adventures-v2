@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MUSO Adventures — Adventure Coins &amp; MUSO Pass</title>
+<title>MUSO Adventures: Adventure Coins &amp; MUSO Pass</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -319,14 +319,14 @@
 <header class="hero">
   <span class="eyebrow">Adventure Coins</span>
   <h1>Coins unlock more adventure.</h1>
-  <p>Coins are how you go further, see more real venues, and unlock fun stuff along the way. Here's exactly what they do, what they cost, and how to get more — no confusing fine print.</p>
+  <p>Coins are how you go further, see more real venues, and unlock fun stuff along the way. Here's exactly what they do, what they cost, and how to get more. No confusing fine print.</p>
 </header>
 
 <!-- ============ WHAT COINS DO ============ -->
 <section id="what-coins-do">
   <div class="section-heading">
     <h2>🪙 What can coins actually do?</h2>
-    <p>Every coin cost below is a one-time unlock unless marked "repeatable" — meaning once you unlock it, it's yours for good.</p>
+    <p>Every coin cost below is a one-time unlock unless marked "repeatable", meaning once you unlock it, it's yours for good.</p>
   </div>
   <div class="unlock-grid">
     <div class="unlock-card">
@@ -344,7 +344,7 @@
     <div class="unlock-card">
       <div class="u-emoji">🔍</div>
       <div class="u-title">Find Real Venues</div>
-      <div class="u-desc">See real, live venues with photos and directions — not just a locked preview.</div>
+      <div class="u-desc">See real, live venues with photos and directions, not just a locked preview.</div>
       <div class="u-cost">🪙 250 coins</div>
     </div>
     <div class="unlock-card">
@@ -380,7 +380,7 @@
     <div class="unlock-card">
       <div class="u-emoji">⭐</div>
       <div class="u-title">100-Mile Exclusive Range</div>
-      <div class="u-desc">The farthest search range there is — a MUSO Pass+ member perk, not for sale with coins.</div>
+      <div class="u-desc">The farthest search range there is, a MUSO Pass+ member perk, not for sale with coins.</div>
       <div class="u-cost subscriber-only">MUSO Pass+ only</div>
     </div>
   </div>
@@ -390,7 +390,7 @@
 <section id="coin-packs">
   <div class="section-heading">
     <h2>Buy Adventure Coins</h2>
-    <p>Bigger packs get you more coins for less per coin — the math does the "bulk discount" for you, so just pick what fits your adventure.</p>
+    <p>Bigger packs get you more coins for less per coin. The math does the "bulk discount" for you, so just pick what fits your adventure.</p>
   </div>
   <div class="pack-grid">
     <div class="pack-card">
@@ -464,7 +464,7 @@
 <!-- ============ MUSO PASS ============ -->
 <section id="muso-pass">
   <div class="section-heading">
-    <h2>🎟️ MUSO Pass — for frequent players</h2>
+    <h2>🎟️ MUSO Pass: for frequent players</h2>
     <p>If you're playing every week, a monthly Pass gets you more coins than you'd spend buying them one at a time, plus perks that stick around all month.</p>
   </div>
   <div class="pass-grid">
@@ -507,7 +507,7 @@
   <div class="faq-list">
     <div class="faq-item">
       <div class="faq-q">Do coins expire?</div>
-      <div class="faq-a">No — once you have coins, they're yours until you spend them.</div>
+      <div class="faq-a">No, once you have coins, they're yours until you spend them.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">Do unlocks expire?</div>
@@ -515,7 +515,7 @@
     </div>
     <div class="faq-item">
       <div class="faq-q">What's the difference between buying coins and subscribing?</div>
-      <div class="faq-a">Buying a pack is a one-time top-up you can use however you like. MUSO Pass is a monthly plan that hands you a fresh batch of coins automatically and keeps certain unlocks active the whole time you're subscribed — better value if you play often.</div>
+      <div class="faq-a">Buying a pack is a one-time top-up you can use however you like. MUSO Pass is a monthly plan that hands you a fresh batch of coins automatically and keeps certain unlocks active the whole time you're subscribed. Better value if you play often.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">Can I just play for free?</div>
@@ -536,7 +536,7 @@
     </div>
     <div class="pass-sheet-icon reveal-item r1">🎟️</div>
     <h2 class="pass-sheet-title reveal-item r1"><span class="pre">Unlock </span>MUSO Pass</h2>
-    <p class="pass-sheet-sub reveal-item r1">More adventures, more unlocks — for less than one round of drinks a month.</p>
+    <p class="pass-sheet-sub reveal-item r1">More adventures, more unlocks, for less than one round of drinks a month.</p>
 
     <ul class="pass-sheet-perks reveal-item r2" id="pass-sheet-perks"></ul>
 
@@ -544,7 +544,7 @@
   </div>
 
   <div class="pass-sheet-cta-wrap">
-    <button type="button" class="pass-sheet-cta" id="pass-sheet-cta" data-tier="pass" onclick="subscribeToPass(this)">Subscribe — $7.99/month</button>
+    <button type="button" class="pass-sheet-cta" id="pass-sheet-cta" data-tier="pass" onclick="subscribeToPass(this)">Subscribe: $7.99/month</button>
     <p class="pass-sheet-fine">Cancel anytime from your account. Renews monthly until canceled.</p>
   </div>
 </div>
@@ -620,7 +620,7 @@
         btn.textContent = 'Sign in to subscribe';
       } else if (active && tier === activeTier) {
         btn.disabled = false;
-        btn.textContent = 'Your current plan — manage';
+        btn.textContent = 'Your current plan: manage';
         btn.classList.add('current');
       } else if (active) {
         btn.disabled = false;
@@ -760,7 +760,7 @@
 
     const cta = document.getElementById('pass-sheet-cta');
     cta.dataset.tier = key;
-    cta.textContent = `Subscribe — $${tier.price.toFixed(2)}/month`;
+    cta.textContent = `Subscribe: $${tier.price.toFixed(2)}/month`;
   }
 
   function renderPassSheetTier(key) {
@@ -918,7 +918,7 @@
     if (new URLSearchParams(window.location.search).get('checkout') === 'success') {
       setTimeout(() => {
         const msg = document.getElementById('signin-msg');
-        if (msg) msg.textContent = 'Purchase complete — check your account for new coins or an active subscription!';
+        if (msg) msg.textContent = 'Purchase complete! Check your account for new coins or an active subscription!';
       }, 300);
     }
   })();

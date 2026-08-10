@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MUSO Adventures — Live Preview</title>
+<title>MUSO Adventures: Live Preview</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -951,11 +951,11 @@
 <div class="gate-overlay" id="gate-overlay">
   <div class="gate-card">
     <h2>Before you preview an adventure</h2>
-    <p class="gate-sub">This preview pulls real, live venues — including bars — near your chosen radius. Please read and confirm the following.</p>
+    <p class="gate-sub">This preview pulls real, live venues, including bars, near your chosen radius. Please read and confirm the following.</p>
 
     <div class="gate-disclaimer-box" id="gate-disclaimer-text">
       <p><strong>Participant acknowledgment &amp; assumption of risk.</strong> By using MUSO Adventures, you acknowledge and agree that: (1) routes may include physical activities, alcohol and/or cannabis service, and visits to third-party venues not owned or operated by MUSO Ventures ("MUSO"); (2) MUSO curates and suggests routes and venues but does not supervise, control, or guarantee the conduct of any venue, staff, or fellow participant; (3) you are solely responsible for your own decisions, safety, and conduct throughout any MUSO Adventure; (4) any injury, loss, dispute, or other harm arising from your participation, including at third-party venues, is your responsibility and not that of MUSO, its officers, employees, or affiliates, except where caused by MUSO's own gross negligence or willful misconduct; (5) many venues (bars, dispensaries, axe-throwing locations) require their own separate liability waiver or ID check on-site, and this acknowledgment does not replace that requirement.</p>
-      <p><strong>Age requirement.</strong> You must be 21 years of age or older to enter routes involving bars, dispensaries, alcohol, or cannabis. We calculate your age from the birthday you provide below — MUSO does not otherwise independently verify identity, and venues will still check ID on-site as required by law.</p>
+      <p><strong>Age requirement.</strong> You must be 21 years of age or older to enter routes involving bars, dispensaries, alcohol, or cannabis. We calculate your age from the birthday you provide below. MUSO does not otherwise independently verify identity, and venues will still check ID on-site as required by law.</p>
     </div>
 
     <div class="gate-field-row">
@@ -972,10 +972,10 @@
       </div>
       <div class="dob-wheel-summary" id="dob-wheel-summary" aria-live="polite"></div>
       <input type="hidden" id="gate-birthdate">
-      <span class="gate-field-hint">Unlocks 21+ venues when you're eligible — and lets us send you something for your birthday 🎂</span>
+      <span class="gate-field-hint">Unlocks 21+ venues when you're eligible, and lets us send you something for your birthday 🎂</span>
     </div>
     <div class="gate-field-row">
-      <label for="gate-email" class="gate-field-label">Email <span class="gate-field-optional">(optional — for birthday specials)</span></label>
+      <label for="gate-email" class="gate-field-label">Email <span class="gate-field-optional">(optional, for birthday specials)</span></label>
       <input type="email" id="gate-email" class="gate-input" placeholder="you@example.com">
     </div>
 
@@ -1017,7 +1017,7 @@
     </div>
     <canvas id="pb-canvas" hidden></canvas>
     <div class="pb-hint">
-      This photo counts for <strong id="pb-stop-name">this stop</strong> — worth
+      This photo counts for <strong id="pb-stop-name">this stop</strong>, worth
       +<span id="pb-coin-amt"></span> Adventure Coins. Take as many as you like while you're
       here; once you check in (or move on to the next stop) this photo window closes.
     </div>
@@ -1140,7 +1140,7 @@
       <span>🧭 Set Your Preferences</span>
       <span class="pb-close" onclick="closeOnboarding()">&times;</span>
     </div>
-    <div class="pb-hint" style="margin-bottom:14px;">Saved once, reused every time you start a Real Adventure — edit anytime from your profile.</div>
+    <div class="pb-hint" style="margin-bottom:14px;">Saved once, reused every time you start a Real Adventure. Edit anytime from your profile.</div>
 
     <div class="mode-toggle">
       <div class="mode-tab active" data-mode="quick" onclick="setOnboardingMode('quick')">Quick Setup</div>
@@ -1232,7 +1232,7 @@
 
         <div class="form-group">
           <span class="form-label">Anything else?</span>
-          <span class="form-hint">Accessibility needs, allergies, preferences — whatever helps us fine-tune it</span>
+          <span class="form-hint">Accessibility needs, allergies, preferences, whatever helps us fine-tune it</span>
           <textarea class="form-textarea" id="onb-notes-field" placeholder="e.g. wheelchair accessible, nut allergy, prefers quiet spots..."></textarea>
         </div>
       </div>
@@ -1286,7 +1286,7 @@
 <header class="hero">
   <span class="eyebrow">Live preview</span>
   <h1>Real venues. Real choices. Real adventure.</h1>
-  <p>Every stop offers you three real, contrasting nearby venues — cozy vs. bold vs. lively — pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral — just choose your own adventure.</p>
+  <p>Every stop offers you three real, contrasting nearby venues, pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral, just choose your own adventure.</p>
 </header>
 
 <section class="adventure-section" id="adventure-section">
@@ -1830,7 +1830,7 @@
     const waitMatch = error.message.match(/after (\d+) seconds?/i);
     if (waitMatch) {
       const wait = Number(waitMatch[1]);
-      msg.textContent = `You already have a link on the way — you can request another in ${wait}s.`;
+      msg.textContent = `You already have a link on the way. You can request another in ${wait}s.`;
       startSigninCooldown(wait);
     } else {
       msg.textContent = `Error: ${error.message}`;
@@ -1886,7 +1886,7 @@
       activeAdventure = null;
       return;
     }
-    sub.textContent = 'Check in at real stops as you go — each one earns XP, and your first check-in unlocks your profile.';
+    sub.textContent = 'Check in at real stops as you go. Each one earns XP, and your first check-in unlocks your profile.';
     body.innerHTML = '<div class="empty-state">Loading…</div>';
 
     // Resume an in-progress adventure: check this device's local storage
@@ -1922,7 +1922,7 @@
     // curated picker.
     const { data: routes, error } = await supabaseClient.from('routes').select('id, title, description').is('owner_party_id', null).order('created_at', { ascending: true });
     if (error || !routes || !routes.length) {
-      body.innerHTML = '<div class="empty-state">No adventure routes are set up yet — check back soon.</div>';
+      body.innerHTML = '<div class="empty-state">No adventure routes are set up yet. Check back soon.</div>';
       return;
     }
     const counts = {};
@@ -1934,8 +1934,8 @@
     const realVenueCta = `
       <div class="real-venue-cta">
         <div>
-          <div class="rvc-title">🍀 Fork in the Road — Real Venue Adventure</div>
-          <div class="rvc-desc">Every stop gives you 3 real, contrasting picks near you — cozy vs. bold vs. lively. Choose your own path, or reroll for 3 new options (3 free rolls per stop).</div>
+          <div class="rvc-title">🍀 Fork in the Road: Real Venue Adventure</div>
+          <div class="rvc-desc">Every stop gives you 3 real, contrasting picks near you. Choose your own path, or reroll for 3 new options (3 free rolls per stop).</div>
           <div class="rvc-stopcount">
             <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('default', 3, this)">3 stops</button>
             <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('default', 2, this)">2 stops</button>
@@ -1946,7 +1946,7 @@
       <div class="real-venue-cta wine-cta">
         <div>
           <div class="rvc-title">🍷 Wine Country Adventure</div>
-          <div class="rvc-desc">Every stop is a real, nearby winery or tasting room — boutique vs. estate vs. tasting-room bar. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.</div>
+          <div class="rvc-desc">Every stop is a real, nearby winery or tasting room. Not open yet? No problem, fuel up with coffee, breakfast, or a scenic stop nearby, then the adventure shifts to real wineries as they open. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.</div>
           <div class="rvc-stopcount">
             <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('wine_country', 3, this)">3 stops</button>
             <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('wine_country', 2, this)">2 stops</button>
@@ -1954,7 +1954,7 @@
         </div>
         <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
       </div>
-      <div class="curated-routes-divider">— or pick a curated route —</div>
+      <div class="curated-routes-divider">or pick a curated route</div>
     `;
     body.innerHTML = `${realVenueCta}<div class="route-pick-list">${routes.map(r => {
       const total = counts[r.id];
@@ -1964,7 +1964,7 @@
         <div>
           <div class="rp-title">${r.title}</div>
           <div class="rp-desc">${r.description || ''}</div>
-          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops — 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
+          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
         </div>
         <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
       </div>
@@ -2057,8 +2057,8 @@
     const isWineCountry = venueTheme === 'wine_country';
     const body = document.getElementById('adventure-body');
     body.innerHTML = isWineCountry
-      ? '<div class="empty-state">🍷 Uncorking your route — finding your first winery…</div>'
-      : '<div class="empty-state">🎲 Chancing your luck — finding your first real venue…</div>';
+      ? '<div class="empty-state">🍷 Uncorking your route, finding your first winery…</div>'
+      : '<div class="empty-state">🎲 Chancing your luck, finding your first real venue…</div>';
     // beginAdventureCountdown() already scrolled to #adventure-section
     // before the countdown played, but the full-screen countdown overlay
     // sitting on top for ~2.6s gives plenty of time for scroll position to
@@ -2347,7 +2347,7 @@
               <div class="fork-choice-addr">${c.address || ''}</div>
               ${noteHtml}
               <div class="fork-choice-actions">
-                <button type="button" class="fork-choose-btn" ${disabledAttr} onclick="chooseStop('${s.id}', '${c.id}')">Choose This — ${safeName}</button>
+                <button type="button" class="fork-choose-btn" ${disabledAttr} onclick="chooseStop('${s.id}', '${c.id}')">Choose ${safeName}</button>
                 <button type="button" class="fork-spin-btn" data-stop-id="${s.id}" onclick="spinForkCard('${s.id}')">🎲 Spin</button>
               </div>
             </div>
@@ -2412,7 +2412,7 @@
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;" data-hours="${(s.hours ? JSON.stringify(s.hours) : '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
             ${photoControl}
             ${checkinNoteHtml}
-            <button type="button" class="checkin-btn" ${checkinBlocked ? 'disabled' : ''} onclick="beginCheckIn('${s.id}', '${safeName}')">I'm here — Check in</button>
+            <button type="button" class="checkin-btn" ${checkinBlocked ? 'disabled' : ''} onclick="beginCheckIn('${s.id}', '${safeName}')">I'm Here! Check In</button>
             ${testControl}
           </div>
         `;
@@ -2499,14 +2499,14 @@
             <div class="cap">${(p.route_stops && p.route_stops.name) || 'Stop'}</div>
           </div>
         `).join('')}</div>`
-      : '<p style="opacity:0.6; font-size:0.85rem;">No photos captured this time — add one at check-in next time for a full strip here.</p>';
+      : '<p style="opacity:0.6; font-size:0.85rem;">No photos captured this time. Add one at check-in next time for a full strip here.</p>';
 
     const badgesHtml = sessionBadges.length
       ? `<div class="summary-badge-row">${sessionBadges.map((b) => `<span class="summary-badge-chip">${b.emoji || '🏅'} ${b.name}</span>`).join('')}</div>`
       : '';
 
     bodyEl.innerHTML = `
-      <p style="opacity:0.75; font-size:0.9rem; margin-bottom:14px;">You checked in at every stop — nice work! Here's what this adventure earned.</p>
+      <p style="opacity:0.75; font-size:0.9rem; margin-bottom:14px;">You checked in at every stop, nice work! Here's what this adventure earned.</p>
       <div class="summary-stats-row">
         <div class="summary-stat"><div class="num">+${sessionXpEarned}</div><div class="label">XP earned</div></div>
         <div class="summary-stat"><div class="num">+${sessionCoinsEarned}</div><div class="label">Coins earned</div></div>
@@ -2874,11 +2874,11 @@
     const hintEl = document.getElementById('adventure-progress-hint');
     if (hintEl) {
       if (!currentStop) {
-        hintEl.textContent = "Adventure complete — here's your full route.";
+        hintEl.textContent = "Adventure complete! Here's your full route.";
       } else if (currentStop.venue_id) {
-        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length} — head to ${currentStop.name}`;
+        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length}: head to ${currentStop.name}`;
       } else {
-        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length} — choose your path above`;
+        hintEl.textContent = `Stop ${knownStops.length} of ${stops.length}: choose your path above`;
       }
     }
   }
@@ -2901,7 +2901,7 @@
 
     const nextLabel = nextStop.is_mystery ? 'a surprise location' : nextStop.name;
     document.getElementById('nextvenue-title').textContent = '✓ Checked in!';
-    document.getElementById('nextvenue-hint').innerHTML = `Next stop: <strong>${nextLabel}</strong> — here's the path to get there.`;
+    document.getElementById('nextvenue-hint').innerHTML = `Next stop: <strong>${nextLabel}</strong>. Here's the path to get there.`;
     document.getElementById('nextvenue-btn').textContent = `Continue to ${nextLabel}`;
     document.getElementById('nextvenue-overlay').removeAttribute('hidden');
 
@@ -3006,7 +3006,7 @@
       let toastMsg = '';
       if (progress.xpGained) {
         toastMsg = progress.leveledUp
-          ? `🎉 +${progress.xpGained} XP — Level Up! Now Level ${progress.newLevel}`
+          ? `🎉 +${progress.xpGained} XP, Level Up! Now Level ${progress.newLevel}`
           : `+${progress.xpGained} XP`;
       }
       if (progress.coinsGained) {
@@ -3549,7 +3549,7 @@
         gateOk = !!(saved && saved.disclaimerAccepted && typeof saved.age === 'number' && saved.age >= requiredAge);
       } catch (e) {}
       if (!gateOk) {
-        alert(`That content rating needs age confirmation first — please complete the age check above.`);
+        alert(`That content rating needs age confirmation first. Please complete the age check above.`);
         document.getElementById('gate-overlay').removeAttribute('hidden');
         return;
       }
@@ -3590,13 +3590,13 @@
 
   // ---------- CELEBRATIONS + PRAISE COPY ----------
   const BADGE_PRAISE = {
-    first_checkin: { title: 'Adventure Begins!', praise: "You just checked in at your very first MUSO stop — your profile is now unlocked. Nice work getting started!" },
-    level_5: { title: 'Level 5!', praise: "You've leveled up to 5 — real venue search just unlocked for you." },
+    first_checkin: { title: 'Adventure Begins!', praise: "You just checked in at your very first MUSO stop, your profile is now unlocked. Nice work getting started!" },
+    level_5: { title: 'Level 5!', praise: "You've leveled up to 5! Real venue search just unlocked for you." },
     level_10: { title: 'Level 10!', praise: "Double digits! You're one of the most active explorers out there." },
     radius_unlocked: { title: 'Explorer Range Unlocked', praise: "You can now search up to 50 miles out. Go wide." },
     venue_search_unlocked: { title: 'Venue Hunter Unlocked', praise: "Real, live venue results are all yours now." },
-    theme_unlocked: { title: 'Style Unlocked', praise: "You unlocked your first visual theme — make it yours." },
-    adventure_completed: { title: 'Route Complete!', praise: "You checked in at every stop on this adventure. That's the whole thing — well played." },
+    theme_unlocked: { title: 'Style Unlocked', praise: "You unlocked your first visual theme. Make it yours." },
+    adventure_completed: { title: 'Route Complete!', praise: "You checked in at every stop on this adventure. That's the whole thing, well played." },
   };
 
   function queueCelebrations(badges) {
@@ -3638,7 +3638,7 @@
   }
 
   function showXpToast(xpGained, leveledUp, newLevel) {
-    showToast(leveledUp ? `🎉 +${xpGained} XP — Level Up! Now Level ${newLevel}` : `+${xpGained} XP`);
+    showToast(leveledUp ? `🎉 +${xpGained} XP, Level Up! Now Level ${newLevel}` : `+${xpGained} XP`);
   }
 
   // ---------- BADGE SHARE IMAGE ----------
@@ -3708,8 +3708,8 @@
       const a = document.createElement('a');
       a.href = url; a.download = fileName; a.click();
       URL.revokeObjectURL(url);
-      try { await navigator.clipboard.writeText(caption); alert('Badge image downloaded and caption copied — paste it into your post!'); }
-      catch (e) { alert('Badge image downloaded — share it with the caption: ' + caption); }
+      try { await navigator.clipboard.writeText(caption); alert('Badge image downloaded and caption copied. Paste it into your post!'); }
+      catch (e) { alert('Badge image downloaded! Share it with the caption: ' + caption); }
     }, 'image/png');
   };
 
