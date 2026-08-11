@@ -255,7 +255,10 @@
 
     const gp = snap.gameplay || {};
     renderBarChart('chart-categories', (gp.categories || []).map((c) => c.theme), (gp.categories || []).map((c) => c.count), 2);
-    const modeLabels = { curated: 'Curated', fork_in_the_road: 'Fork in the Road', wine_country: 'Wine Country' };
+    const modeLabels = {
+      curated: 'Curated', fork_in_the_road: 'Fork in the Road', wine_country: 'Wine Country',
+      dog_friendly: 'Dog Friendly', outdoor: 'Outdoor', oddities: 'Oddities', foodie_tour: 'Foodies',
+    };
     renderBarChart('chart-modes', (gp.adventure_modes || []).map((m) => modeLabels[m.mode] || m.mode), (gp.adventure_modes || []).map((m) => m.count), 3);
     const hourRows = gp.hours_of_day || [];
     renderBarChart('chart-hours', hourRows.map((h) => `${h.hour}:00`), hourRows.map((h) => h.count), 4);

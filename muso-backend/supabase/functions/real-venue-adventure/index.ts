@@ -457,6 +457,99 @@ const WINE_NEARBY_FALLBACK: Theme = { key: "nearby", label: "Local Gem", emoji: 
 // outrank one once it is.
 const WINERY_THEME_KEYS = new Set(["boutique", "estate", "tasting_bar", "winery"]);
 
+// ---------------------------------------------------------------
+// Themed real-venue adventures beyond Wine Country. Same shape/mechanic as
+// Wine Country above (locked search categories + its own bucket set), no
+// changes needed to the choose/commit/checkin state machine at all — that
+// logic only ever cares that a stop has 3 offered_choices, never which
+// theme produced them. THEME_SET_META (below classifyTheme) is what wires
+// each bucket set's own fallback theme in without special-casing.
+// ---------------------------------------------------------------
+
+const DOG_YELP_CATEGORIES = ["dogparks", "petstore", "parks", "breweries", "beergardens", "hiking"];
+const DOG_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "dog_park", label: "Dog Park", emoji: "🐕", color: "#4a8f3c",
+    keywords: ["dog park", "off-leash", "off leash", "dog run", "bark park"],
+  },
+  {
+    key: "pet_shop", label: "Pet Boutique", emoji: "🦴", color: "#c9622f",
+    keywords: ["pet store", "pet shop", "pet boutique", "pet supply", "grooming", "pet groomer"],
+  },
+  {
+    key: "patio_hang", label: "Pup-Friendly Patio", emoji: "🍺", color: "#8a5b3b",
+    keywords: ["brewery", "beer garden", "biergarten", "patio", "taproom", "beer hall"],
+  },
+  {
+    key: "trail", label: "Trail Walk", emoji: "🥾", color: "#2f8f5b",
+    keywords: ["trail", "hike", "hiking", "preserve", "open space", "greenbelt"],
+  },
+];
+const DOG_GENERAL_THEME: Theme = { key: "dog_spot", label: "Dog-Friendly Spot", emoji: "🐾", color: "#4a8f3c" };
+
+const OUTDOOR_YELP_CATEGORIES = ["hiking", "parks", "climbing", "kayaking", "campgrounds", "outdoorgear"];
+const OUTDOOR_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "trailhead", label: "Trailhead", emoji: "🥾", color: "#2f8f5b",
+    keywords: ["trail", "hike", "hiking", "summit", "overlook", "ridge"],
+  },
+  {
+    key: "water", label: "On the Water", emoji: "🛶", color: "#1d6fa3",
+    keywords: ["kayak", "paddle", "lake", "river", "canoe", "boat launch"],
+  },
+  {
+    key: "climb", label: "Climb & Explore", emoji: "🧗", color: "#8a5b3b",
+    keywords: ["climbing", "rock", "boulder", "zipline", "zip line", "ropes course"],
+  },
+  {
+    key: "scenic", label: "Scenic Stop", emoji: "🌄", color: "#c9622f",
+    keywords: ["park", "preserve", "viewpoint", "scenic", "garden", "reserve", "campground"],
+  },
+];
+const OUTDOOR_GENERAL_THEME: Theme = { key: "outdoor_spot", label: "Outdoor Pick", emoji: "🏞️", color: "#2f8f5b" };
+
+const ODDITIES_YELP_CATEGORIES = ["museums", "thriftstores", "arcades", "escapegames", "antiques", "giftshops"];
+const ODDITIES_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "curiosity_shop", label: "Curiosity Shop", emoji: "🔮", color: "#5b3b8a",
+    keywords: ["oddities", "curiosities", "curio", "occult", "metaphysical", "witch"],
+  },
+  {
+    key: "weird_museum", label: "Weird Museum", emoji: "🦴", color: "#7a3b69",
+    keywords: ["museum", "taxidermy", "oddity", "wax museum", "curiosities"],
+  },
+  {
+    key: "vintage_find", label: "Vintage Find", emoji: "🕰️", color: "#8a5b3b",
+    keywords: ["antique", "vintage", "thrift", "flea market", "retro"],
+  },
+  {
+    key: "strange_fun", label: "Strange & Fun", emoji: "👾", color: "#0b6e68",
+    keywords: ["arcade", "escape room", "haunted", "novelty", "game"],
+  },
+];
+const ODDITIES_GENERAL_THEME: Theme = { key: "odd_spot", label: "Odd Find", emoji: "🔮", color: "#5b3b8a" };
+
+const FOODIE_YELP_CATEGORIES = ["restaurants", "foodtrucks", "bakeries", "desserts", "specialtyfood", "icecream"];
+const FOODIE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "street_eats", label: "Street Eats", emoji: "🌮", color: "#c9622f",
+    keywords: ["food truck", "taco", "street food", "food cart"],
+  },
+  {
+    key: "sit_down", label: "Sit-Down Spot", emoji: "🍽️", color: "#8a3b3b",
+    keywords: ["restaurant", "bistro", "steakhouse", "fine dining", "kitchen", "grill"],
+  },
+  {
+    key: "sweet_tooth", label: "Sweet Tooth", emoji: "🍰", color: "#c9628f",
+    keywords: ["dessert", "bakery", "ice cream", "donut", "cupcake", "creamery"],
+  },
+  {
+    key: "world_flavors", label: "World Flavors", emoji: "🍜", color: "#0ea5a0",
+    keywords: ["sushi", "thai", "mexican", "italian", "indian", "chinese", "vietnamese", "korean", "mediterranean"],
+  },
+];
+const FOODIE_GENERAL_THEME: Theme = { key: "food_spot", label: "Tasty Find", emoji: "🍽️", color: "#c9622f" };
+
 // A sparse market can genuinely only have 2 distinct themes worth of open,
 // rated candidates — in that case pickContrastingChoices()'s last-resort
 // backfill has to repeat one, which used to mean two cards showing the
@@ -521,6 +614,89 @@ function diversifyLabels<T extends { theme: Theme }>(chosen: T[]): T[] {
   });
 }
 
+// Per-bucket-set fallback behavior, keyed by the bucket array's own object
+// identity (the same "which set is this" trick classifyTheme/pickOpenChoices
+// used to do with a hardcoded `buckets !== WINE_THEME_BUCKETS` check) — this
+// is what lets classifyTheme/pickOpenChoices below stay bucket-set-agnostic
+// while Wine Country keeps its bespoke regex fallback and winery-first sort,
+// and each newer theme set gets a plain single fallback theme with no sort
+// bias. Populated once, right after every bucket-set const above exists.
+type ThemeSetMeta = {
+  fallbackRegex?: RegExp;
+  fallbackMatchTheme?: Theme;
+  fallbackNoMatchTheme?: Theme;
+  generalTheme?: Theme;
+  primaryKeys?: Set<string>;
+};
+const THEME_SET_META = new Map<(Theme & { keywords: string[] })[], ThemeSetMeta>([
+  [
+    WINE_THEME_BUCKETS,
+    {
+      // `category` is Yelp's own first-listed category for a business, which
+      // often isn't the same category our search actually matched it on — a
+      // diner or park found via the companion-category search can easily not
+      // contain any of the food/entertainment/sightseeing keywords above, and
+      // was previously mislabeled "Winery" by a single shared fallback (the
+      // only fallback that existed). Only call it a winery if its own
+      // category/name text actually says so; anything else companion-shaped
+      // gets its own honest "nearby pick" label instead.
+      fallbackRegex: /winery|winer(y|ies)|vineyard|wine/,
+      fallbackMatchTheme: WINE_GENERAL_THEME,
+      fallbackNoMatchTheme: WINE_NEARBY_FALLBACK,
+      primaryKeys: WINERY_THEME_KEYS,
+    },
+  ],
+  [DOG_THEME_BUCKETS, { generalTheme: DOG_GENERAL_THEME }],
+  [OUTDOOR_THEME_BUCKETS, { generalTheme: OUTDOOR_GENERAL_THEME }],
+  [ODDITIES_THEME_BUCKETS, { generalTheme: ODDITIES_GENERAL_THEME }],
+  [FOODIE_THEME_BUCKETS, { generalTheme: FOODIE_GENERAL_THEME }],
+]);
+
+// Keyed by routes.venue_theme — the single source of truth for every
+// locked themed adventure (init/reroll/advance below all look a route's
+// venueTheme up here instead of a per-theme boolean). Adding a new themed
+// adventure is just adding an entry here (plus a bucket set + Yelp
+// categories above and a picker CTA card in preview/index.html) — nothing
+// in the choose/commit/checkin state machine needs to know it exists.
+type ThemeRegistryEntry = {
+  buckets: (Theme & { keywords: string[] })[];
+  yelpCategories: string[];
+  title: string;
+  description: string;
+};
+const THEME_REGISTRY: Record<string, ThemeRegistryEntry> = {
+  wine_country: {
+    buckets: WINE_THEME_BUCKETS,
+    yelpCategories: [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES],
+    title: "Wine Country Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby wineries and tasting rooms.",
+  },
+  dog_friendly: {
+    buckets: DOG_THEME_BUCKETS,
+    yelpCategories: DOG_YELP_CATEGORIES,
+    title: "Dog Friendly Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby dog-friendly spots.",
+  },
+  outdoor: {
+    buckets: OUTDOOR_THEME_BUCKETS,
+    yelpCategories: OUTDOOR_YELP_CATEGORIES,
+    title: "Outdoor Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby trails and outdoor spots.",
+  },
+  oddities: {
+    buckets: ODDITIES_THEME_BUCKETS,
+    yelpCategories: ODDITIES_YELP_CATEGORIES,
+    title: "Oddities Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby curiosities and oddities.",
+  },
+  foodie_tour: {
+    buckets: FOODIE_THEME_BUCKETS,
+    yelpCategories: FOODIE_YELP_CATEGORIES,
+    title: "Foodies Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby food spots.",
+  },
+};
+
 function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: string[] })[] = THEME_BUCKETS): Theme {
   const cat = `${candidate.category ?? ""} ${candidate.name ?? ""}`.toLowerCase();
   for (const bucket of buckets) {
@@ -529,16 +705,10 @@ function classifyTheme(candidate: Candidate, buckets: (Theme & { keywords: strin
       return theme;
     }
   }
-  if (buckets !== WINE_THEME_BUCKETS) return GENERAL_THEME;
-  // `category` is Yelp's own first-listed category for a business, which
-  // often isn't the same category our search actually matched it on — a
-  // diner or park found via the companion-category search can easily not
-  // contain any of the food/entertainment/sightseeing keywords above, and
-  // was previously mislabeled "Winery" by a single shared fallback (the
-  // only fallback that existed). Only call it a winery if its own
-  // category/name text actually says so; anything else companion-shaped
-  // gets its own honest "nearby pick" label instead.
-  return /winery|winer(y|ies)|vineyard|wine/.test(cat) ? WINE_GENERAL_THEME : WINE_NEARBY_FALLBACK;
+  const meta = THEME_SET_META.get(buckets);
+  if (!meta) return GENERAL_THEME;
+  if (meta.fallbackRegex) return meta.fallbackRegex.test(cat) ? meta.fallbackMatchTheme! : meta.fallbackNoMatchTheme!;
+  return meta.generalTheme ?? GENERAL_THEME;
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -757,14 +927,16 @@ async function pickOpenChoices(
   // meant two same-theme picks landing in different attempts still showed
   // the identical label, which is exactly the bug this was meant to fix.
   const diversified = applyTimeOfDayLabels(diversifyLabels(result));
-  if (buckets !== WINE_THEME_BUCKETS) return diversified;
+  const primaryKeys = THEME_SET_META.get(buckets)?.primaryKeys;
+  if (!primaryKeys) return diversified;
 
-  // Wine Country only: bubble any open winery up to card 1. Array.sort is
-  // stable, so this only ever moves winery-themed entries forward as a
-  // block — it never reshuffles the relative order among the rest.
+  // Bucket sets with a primaryKeys set (currently only Wine Country) bubble
+  // their headline theme up to card 1. Array.sort is stable, so this only
+  // ever moves primary-themed entries forward as a block — it never
+  // reshuffles the relative order among the rest.
   return [...diversified].sort((a, b) => {
-    const aFirst = WINERY_THEME_KEYS.has(a.theme.key) ? 0 : 1;
-    const bFirst = WINERY_THEME_KEYS.has(b.theme.key) ? 0 : 1;
+    const aFirst = primaryKeys.has(a.theme.key) ? 0 : 1;
+    const bFirst = primaryKeys.has(b.theme.key) ? 0 : 1;
     return aFirst - bFirst;
   });
 }
@@ -955,16 +1127,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Set your preferences before starting a real-venue adventure." }, 400);
     }
 
-    // Wine Country Adventure — locks search to wineries/tasting rooms and
-    // swaps in wine-specific mood buckets, overriding the player's normal
-    // interests-derived categories rather than adding to them. Persisted
-    // on the route so advance()/reroll() reapply the same lock on every
-    // later stop of this same adventure.
-    const venueTheme = body.venueTheme === "wine_country" ? "wine_country" : null;
-    const isWineCountry = venueTheme === "wine_country";
+    // Themed adventures (Wine Country, Dog Friendly, Outdoor, Oddities,
+    // Foodies) lock search to their own category set and swap in their own
+    // mood buckets, overriding the player's normal interests-derived
+    // categories rather than adding to them. Persisted on the route so
+    // advance()/reroll() reapply the same lock on every later stop of this
+    // same adventure.
+    const venueTheme = typeof body.venueTheme === "string" && THEME_REGISTRY[body.venueTheme] ? body.venueTheme : null;
+    const themeEntry = venueTheme ? THEME_REGISTRY[venueTheme] : null;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES] : resolveYelpCategories(prefs);
-    const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
+    const categories = themeEntry ? themeEntry.yelpCategories : resolveYelpCategories(prefs);
+    const buckets = themeEntry ? themeEntry.buckets : THEME_BUCKETS;
 
     const candidates = await searchNearbyVenues(admin, yelpKey, {
       lat, lng, radiusMiles, budget: prefs.budget, categories,
@@ -995,10 +1168,8 @@ Deno.serve(async (req) => {
       .insert({
         owner_party_id: partyId,
         twist_key: "real-auto",
-        title: isWineCountry ? "Wine Country Adventure" : "Real Venues Adventure",
-        description: isWineCountry
-          ? "A fork in the road at every stop. Pick your path through real, live nearby wineries and tasting rooms."
-          : "A fork in the road at every stop. Pick your path from real, live nearby venues.",
+        title: themeEntry ? themeEntry.title : "Real Venues Adventure",
+        description: themeEntry ? themeEntry.description : "A fork in the road at every stop. Pick your path from real, live nearby venues.",
         venue_theme: venueTheme,
       })
       .select("id")
@@ -1065,7 +1236,7 @@ Deno.serve(async (req) => {
     if (!ownerPartyId || !(await isPartyMember(admin, ownerPartyId, userId))) {
       return jsonResponse({ error: "You're not a member of that party." }, 403);
     }
-    const rerollBuckets = stopRoute?.venue_theme === "wine_country" ? WINE_THEME_BUCKETS : THEME_BUCKETS;
+    const rerollBuckets = stopRoute?.venue_theme ? (THEME_REGISTRY[stopRoute.venue_theme]?.buckets ?? THEME_BUCKETS) : THEME_BUCKETS;
     // Reroll only makes sense while choices are offered and nothing's been
     // committed yet — once venue_id is set the fork has already been taken.
     if (stop.is_mystery || stop.venue_id || !stop.offered_choices) {
@@ -1239,7 +1410,8 @@ Deno.serve(async (req) => {
     if (!(await isPartyMember(admin, adventure.party_id, userId))) {
       return jsonResponse({ error: "You're not a member of that party." }, 403);
     }
-    const isWineCountry = (adventure as unknown as { routes: { venue_theme: string | null } | null }).routes?.venue_theme === "wine_country";
+    const advanceVenueTheme = (adventure as unknown as { routes: { venue_theme: string | null } | null }).routes?.venue_theme;
+    const advanceThemeEntry = advanceVenueTheme ? THEME_REGISTRY[advanceVenueTheme] : null;
 
     const { data: allStops } = await admin
       .from("route_stops")
@@ -1257,8 +1429,8 @@ Deno.serve(async (req) => {
     if (!profile) return jsonResponse({ error: "Couldn't load your profile." }, 400);
     const prefs = (profile.preferences ?? {}) as Preferences;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = isWineCountry ? [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES] : resolveYelpCategories(prefs);
-    const buckets = isWineCountry ? WINE_THEME_BUCKETS : THEME_BUCKETS;
+    const categories = advanceThemeEntry ? advanceThemeEntry.yelpCategories : resolveYelpCategories(prefs);
+    const buckets = advanceThemeEntry ? advanceThemeEntry.buckets : THEME_BUCKETS;
 
     const alreadyVisitedVenueIds = new Set(stops.filter((s) => s.venue_id).map((s) => s.venue_id as string));
 

@@ -490,49 +490,72 @@
   }
   .adventure-inner h2{ font-size:1.3rem; margin-bottom:6px; }
   .adventure-sub{ opacity:0.7; font-size:0.9rem; margin-bottom:18px; }
-  .route-pick-list{ display:flex; flex-direction:column; gap:12px; }
-  .route-pick-card{
-    display:flex; align-items:center; justify-content:space-between; gap:14px;
-    background:var(--cream); border-radius:14px; padding:16px 18px; flex-wrap:wrap;
-  }
-  .route-pick-card .rp-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; }
-  .route-pick-card .rp-desc{ font-size:0.85rem; opacity:0.7; margin-top:2px; max-width:420px; }
-  .route-pick-card .rp-meta{ font-size:0.78rem; opacity:0.55; margin-top:4px; }
-  .start-adv-btn{
-    background:var(--coral); color:#fff; border:none; padding:10px 20px; border-radius:999px;
-    font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; cursor:pointer; flex-shrink:0;
-    transition:transform .15s;
-  }
-  .start-adv-btn:hover{ transform:scale(1.03); }
-
-  .real-venue-cta{
-    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
-    background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; border-radius:16px;
-    padding:18px 20px; margin-bottom:16px;
-  }
-  .real-venue-cta .rvc-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.05rem; }
-  .real-venue-cta .rvc-desc{ font-size:0.85rem; opacity:0.92; margin-top:2px; max-width:420px; }
-  .real-venue-cta .rvc-btn{
-    background:#fff; color:var(--coral); border:none; padding:11px 22px; border-radius:999px;
-    font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.88rem; cursor:pointer; flex-shrink:0;
-    transition:transform .15s;
-  }
-  .real-venue-cta .rvc-btn:hover{ transform:scale(1.03); }
-  .real-venue-cta.wine-cta{ background:linear-gradient(135deg, #5b4b8a, #7a3b69); }
-  .real-venue-cta.wine-cta .rvc-btn{ color:#5b4b8a; }
-  .rvc-stopcount{ display:flex; gap:6px; margin-top:8px; }
-  .rvc-sc-pill{
-    background:rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.5); color:#fff;
-    padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
-  }
-  .rvc-sc-pill.active{ background:#fff; color:var(--coral); border-color:#fff; }
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
   .invite-friends-cta .rvc-desc{ font-size:0.8rem; opacity:0.7; }
   .invite-friends-cta .party-invite-btn{ background:var(--teal); padding:9px 22px; font-size:0.82rem; }
-  .wine-cta .rvc-sc-pill.active{ color:#5b4b8a; }
-  .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
+
+  /* ---------- ADVENTURE PICKER ACCORDION ----------
+     Every "adventure type" card (Fork in the Road, Wine Country, and the
+     other themed real-venue adventures) plus every curated route renders
+     as one collapsed name-only row; tapping expands it in place to reveal
+     the existing desc/stop-count/Start content. See advAccordionStep()
+     below for the auto-cycle behavior — this block is purely presentation. */
+  .adv-accordion{ display:flex; flex-direction:column; gap:8px; margin-bottom:8px; }
+  .adv-acc-item{
+    border-radius:14px; overflow:hidden; background:var(--card);
+    box-shadow:0 2px 8px rgba(var(--shadow-rgb),0.06);
+  }
+  .adv-acc-header{
+    width:100%; display:flex; align-items:center; gap:10px; padding:14px 16px; border:none; cursor:pointer;
+    background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; font-family:'Fredoka',sans-serif;
+    font-weight:700; font-size:0.95rem; text-align:left;
+  }
+  .adv-acc-item.curated .adv-acc-header{ background:rgba(var(--shadow-rgb),0.07); color:var(--ink); }
+  .adv-acc-emoji{ font-size:1.15rem; flex-shrink:0; }
+  .adv-acc-name{ flex:1; }
+  .adv-acc-chevron{ transition:transform .25s; opacity:0.85; flex-shrink:0; }
+  .adv-acc-item.open .adv-acc-chevron{ transform:rotate(90deg); }
+  .adv-acc-body{ padding:16px 18px; }
+  .adv-acc-body[hidden]{ display:none; }
+  .adv-acc-body .rvc-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
+  .adv-acc-body .rvc-stopcount{ display:flex; gap:8px; margin-top:12px; }
+  .adv-acc-body .rvc-sc-pill{
+    background:rgba(var(--shadow-rgb),0.08); border:1.5px solid rgba(var(--shadow-rgb),0.15); color:var(--ink);
+    padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
+  }
+  .adv-acc-body .rvc-sc-pill.active{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .adv-acc-body .rvc-btn, .adv-acc-body .start-adv-btn{
+    display:block; width:100%; margin-top:14px; background:var(--coral); color:#fff; border:none;
+    padding:11px 20px; border-radius:12px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.88rem; cursor:pointer; transition:transform .15s;
+  }
+  .adv-acc-body .rvc-btn:hover, .adv-acc-body .start-adv-btn:hover{ transform:scale(1.02); }
+  .adv-acc-body .rp-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
+  .adv-acc-body .rp-meta{ font-size:0.75rem; opacity:0.55; margin-top:6px; }
+
+  /* Reused outside the accordion too (end-of-adventure recap's "Start
+     Another Adventure" button), so it needs its own non-nested base style. */
+  .start-adv-btn{
+    background:var(--coral); color:#fff; border:none; padding:10px 20px; border-radius:999px;
+    font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; cursor:pointer;
+    transition:transform .15s;
+  }
+  .start-adv-btn:hover{ transform:scale(1.03); }
+
+  /* One gradient + one accent color per adventure type — collapsed rows
+     stay color-coded so the list reads at a glance even before expanding. */
+  .wine-cta .adv-acc-header{ background:linear-gradient(135deg, #5b4b8a, #7a3b69); }
+  .wine-cta .adv-acc-body .rvc-sc-pill.active, .wine-cta .adv-acc-body .rvc-btn{ background:#5b4b8a; }
+  .dog-cta .adv-acc-header{ background:linear-gradient(135deg, #4a8f3c, #8fbf6a); }
+  .dog-cta .adv-acc-body .rvc-sc-pill.active, .dog-cta .adv-acc-body .rvc-btn{ background:#4a8f3c; }
+  .outdoor-cta .adv-acc-header{ background:linear-gradient(135deg, #1d6fa3, #4fa3c9); }
+  .outdoor-cta .adv-acc-body .rvc-sc-pill.active, .outdoor-cta .adv-acc-body .rvc-btn{ background:#1d6fa3; }
+  .oddities-cta .adv-acc-header{ background:linear-gradient(135deg, #5b3b8a, #9256c4); }
+  .oddities-cta .adv-acc-body .rvc-sc-pill.active, .oddities-cta .adv-acc-body .rvc-btn{ background:#5b3b8a; }
+  .foodie-cta .adv-acc-header{ background:linear-gradient(135deg, #c9622f, #e08a4f); }
+  .foodie-cta .adv-acc-body .rvc-sc-pill.active, .foodie-cta .adv-acc-body .rvc-btn{ background:#c9622f; }
 
   .reroll-btn{
     background:transparent; border:2px solid var(--coral); color:var(--coral);
@@ -2345,6 +2368,43 @@
     else { await renderRoutePicker(); }
   }
 
+  // One entry per themed real-venue adventure — mirrors the backend's
+  // THEME_REGISTRY (real-venue-adventure/index.ts) key-for-key, so adding a
+  // new themed adventure is just adding an entry here plus one there.
+  // colorClass hooks the CSS gradient/accent defined next to .wine-cta etc.
+  const REAL_VENUE_ADVENTURE_THEMES = [
+    {
+      venueTheme: null, emoji: '🍀', title: 'Fork in the Road: Real Venue Adventure', colorClass: '',
+      desc: 'Every stop gives you 3 real, contrasting picks near you. Choose your own path, or reroll for 3 new options (3 free rolls per stop).',
+      startLabel: 'Start a Real Adventure', countdownHeading: '🍀 Start your MUSO Real Venues Adventure',
+    },
+    {
+      venueTheme: 'wine_country', emoji: '🍷', title: 'Wine Country Adventure', colorClass: 'wine-cta',
+      desc: "Every stop is a real, nearby winery or tasting room. Not open yet? No problem, fuel up with coffee, breakfast, or a scenic stop nearby, then the adventure shifts to real wineries as they open. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.",
+      startLabel: 'Start a Wine Country Adventure', countdownHeading: '🍷 Start your MUSO Wine Country Adventure',
+    },
+    {
+      venueTheme: 'dog_friendly', emoji: '🐾', title: 'Dog Friendly Adventure', colorClass: 'dog-cta',
+      desc: 'Every stop welcomes your pup. Dog parks, pet-friendly patios, and trail walks near you, real and nearby.',
+      startLabel: 'Start a Dog Friendly Adventure', countdownHeading: '🐾 Start your MUSO Dog Friendly Adventure',
+    },
+    {
+      venueTheme: 'outdoor', emoji: '🏞️', title: 'Outdoor Adventure', colorClass: 'outdoor-cta',
+      desc: 'Every stop gets you outside. Trails, water, climbing, and scenic spots near you, real and nearby.',
+      startLabel: 'Start an Outdoor Adventure', countdownHeading: '🏞️ Start your MUSO Outdoor Adventure',
+    },
+    {
+      venueTheme: 'oddities', emoji: '🔮', title: 'Oddities Adventure', colorClass: 'oddities-cta',
+      desc: 'Every stop is a little strange, in a good way. Curiosity shops, weird museums, and vintage finds near you.',
+      startLabel: 'Start an Oddities Adventure', countdownHeading: '🔮 Start your MUSO Oddities Adventure',
+    },
+    {
+      venueTheme: 'foodie_tour', emoji: '🍽️', title: 'Foodies Adventure', colorClass: 'foodie-cta',
+      desc: 'Every stop is a real bite worth trying. Street eats, sit-down spots, and sweets near you, real and nearby.',
+      startLabel: 'Start a Foodies Adventure', countdownHeading: '🍽️ Start your MUSO Foodies Adventure',
+    },
+  ];
+
   async function renderRoutePicker() {
     const body = document.getElementById('adventure-body');
     const headingEl = document.getElementById('adventure-heading');
@@ -2364,58 +2424,126 @@
       counts[r.id] = count || 0;
     }
     const unlockedStopCount = currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
-    // Shown before either adventure-type card on purpose — most groups
-    // explore better together, so gathering people is framed as the
-    // natural first step, not an afterthought buried below the venue
-    // picks. Solo play still works fine; this is just an invitation, not
-    // a requirement (openInviteModal() has no party/adventure
-    // precondition, so this works even for a player who's never started
-    // anything yet).
+    // Shown before the accordion on purpose — most groups explore better
+    // together, so gathering people is framed as the natural first step,
+    // not an afterthought buried below the venue picks. Solo play still
+    // works fine; this is just an invitation, not a requirement
+    // (openInviteModal() has no party/adventure precondition, so this
+    // works even for a player who's never started anything yet).
     const inviteFriendsCta = `
       <div class="invite-friends-cta">
         <button type="button" class="party-invite-btn" onclick="openInviteModal()">👥 Invite Friends</button>
         <div class="rvc-desc">Explore together, or go solo, your call.</div>
       </div>
     `;
-    const realVenueCta = `
-      <div class="real-venue-cta">
-        <div>
-          <div class="rvc-title">🍀 Fork in the Road: Real Venue Adventure</div>
-          <div class="rvc-desc">Every stop gives you 3 real, contrasting picks near you. Choose your own path, or reroll for 3 new options (3 free rolls per stop).</div>
+    // Every "adventure type" (the themed real-venue picks above) and every
+    // curated route renders through the same collapsed-row/accordion shape
+    // — see advAccordionStep() below for the auto-cycle behavior. Building
+    // one flat items[] array (rather than two separately-styled sections)
+    // is what lets the accordion cycle through all of them as a single list.
+    const items = [
+      ...REAL_VENUE_ADVENTURE_THEMES.map((t) => ({
+        emoji: t.emoji,
+        name: t.title,
+        colorClass: t.colorClass,
+        kindClass: '',
+        bodyHtml: `
+          <div class="rvc-desc">${t.desc}</div>
           <div class="rvc-stopcount">
-            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('default', 3, this)">3 stops</button>
-            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('default', 2, this)">2 stops</button>
+            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 3, this)">3 stops</button>
+            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 2, this)">2 stops</button>
           </div>
-        </div>
-        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown()">Start a Real Adventure</button>
-      </div>
-      <div class="real-venue-cta wine-cta">
-        <div>
-          <div class="rvc-title">🍷 Wine Country Adventure</div>
-          <div class="rvc-desc">Every stop is a real, nearby winery or tasting room. Not open yet? No problem, fuel up with coffee, breakfast, or a scenic stop nearby, then the adventure shifts to real wineries as they open. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.</div>
-          <div class="rvc-stopcount">
-            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('wine_country', 3, this)">3 stops</button>
-            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('wine_country', 2, this)">2 stops</button>
+          <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
+        `,
+      })),
+      ...routes.map((r) => {
+        const total = counts[r.id];
+        const capped = total > unlockedStopCount;
+        return {
+          emoji: '🗺️',
+          name: r.title,
+          colorClass: '',
+          kindClass: 'curated',
+          bodyHtml: `
+            <div class="rp-desc">${r.description || ''}</div>
+            <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
+            <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
+          `,
+        };
+      }),
+    ];
+    const accordionHtml = `
+      <div class="adv-accordion" id="adv-accordion">
+        ${items.map((item, i) => `
+          <div class="adv-acc-item ${item.colorClass} ${item.kindClass}">
+            <button type="button" class="adv-acc-header" onclick="toggleAdvAccordion(${i})">
+              <span class="adv-acc-emoji">${item.emoji}</span>
+              <span class="adv-acc-name">${item.name}</span>
+              <span class="adv-acc-chevron">›</span>
+            </button>
+            <div class="adv-acc-body" hidden>${item.bodyHtml}</div>
           </div>
-        </div>
-        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown('wine_country')">Start a Wine Country Adventure</button>
-      </div>
-      <div class="curated-routes-divider">or pick a curated route</div>
-    `;
-    body.innerHTML = `${inviteFriendsCta}${realVenueCta}<div class="route-pick-list">${routes.map(r => {
-      const total = counts[r.id];
-      const capped = total > unlockedStopCount;
-      return `
-      <div class="route-pick-card">
-        <div>
-          <div class="rp-title">${r.title}</div>
-          <div class="rp-desc">${r.description || ''}</div>
-          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
-        </div>
-        <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
+        `).join('')}
       </div>
     `;
-    }).join('')}</div>`;
+    body.innerHTML = `${inviteFriendsCta}${accordionHtml}`;
+    initAdvAccordion(items.length);
+  }
+
+  // ---------- ADVENTURE PICKER ACCORDION: AUTO-CYCLE ----------
+  // Rows start collapsed. Left untouched for 5s, the accordion begins
+  // auto-cycling top to bottom, opening one row at a time for 3s each,
+  // looping indefinitely. Clicking a row jumps straight to it (skipping
+  // wherever the cycle was) and holds it open for the same 3s beat before
+  // resuming from there — clicking doesn't stop the cycle for good, it just
+  // re-centers it on whatever the player is looking at right now.
+  const advAccordion = { count: 0, openIndex: -1, idleTimer: null, stepTimer: null };
+
+  function advAccordionClearTimers() {
+    clearTimeout(advAccordion.idleTimer);
+    clearTimeout(advAccordion.stepTimer);
+    advAccordion.idleTimer = null;
+    advAccordion.stepTimer = null;
+  }
+
+  function advAccordionSetOpen(index) {
+    const container = document.getElementById('adv-accordion');
+    if (!container) return; // picker no longer on screen — nothing to do
+    advAccordion.openIndex = index;
+    container.querySelectorAll('.adv-acc-item').forEach((el, i) => {
+      const bodyEl = el.querySelector('.adv-acc-body');
+      if (i === index) { bodyEl.removeAttribute('hidden'); el.classList.add('open'); }
+      else { bodyEl.setAttribute('hidden', ''); el.classList.remove('open'); }
+    });
+  }
+
+  function advAccordionStep(index) {
+    if (!document.getElementById('adv-accordion')) return; // picker torn down mid-timer (adventure started, tab changed) — stop the chain
+    advAccordionSetOpen(index);
+    advAccordion.stepTimer = setTimeout(() => advAccordionStep((index + 1) % advAccordion.count), 3000);
+  }
+
+  function initAdvAccordion(count) {
+    advAccordionClearTimers();
+    advAccordion.count = count;
+    advAccordion.openIndex = -1;
+    if (!count) return;
+    advAccordion.idleTimer = setTimeout(() => advAccordionStep(0), 5000);
+  }
+
+  window.toggleAdvAccordion = function (index) {
+    advAccordionClearTimers();
+    advAccordionStep(index);
+  };
+
+  // Interacting with the stop-count pills inside the currently-open card
+  // shouldn't get yanked away mid-decision by the 3s auto-advance — this
+  // just restarts that card's 3s hold rather than clearing it outright, so
+  // the cycle still resumes on its own once the player stops touching it.
+  function advAccordionHoldCurrent() {
+    if (advAccordion.openIndex < 0 || !document.getElementById('adv-accordion')) return;
+    clearTimeout(advAccordion.stepTimer);
+    advAccordion.stepTimer = setTimeout(() => advAccordionStep((advAccordion.openIndex + 1) % advAccordion.count), 3000);
   }
 
   // ---------- START A REAL-VENUE ADVENTURE ----------
@@ -2425,15 +2553,17 @@
   let onboardingIntent = null; // 'start_adventure' | null — read once by saveOnboardingPreferences()
 
   // Per-CTA stop-count choice from the route picker's pill toggles — keyed
-  // by venueTheme ('default' for the general Fork in the Road card,
-  // 'wine_country' for the wine one). Defaults to 3; the backend still
-  // enforces a floor of 2 and a ceiling of the player's unlocked_stop_count
-  // regardless of what's sent here.
-  let stopCountChoices = { default: 3, wine_country: 3 };
+  // by venueTheme ('default' for the general Fork in the Road card, else
+  // one of REAL_VENUE_ADVENTURE_THEMES' own venueTheme values). Defaults to
+  // 3; the backend still enforces a floor of 2 and a ceiling of the
+  // player's unlocked_stop_count regardless of what's sent here.
+  let stopCountChoices = { default: 3 };
+  for (const t of REAL_VENUE_ADVENTURE_THEMES) if (t.venueTheme) stopCountChoices[t.venueTheme] = 3;
   window.setStopCountChoice = function (key, n, btnEl) {
     stopCountChoices[key] = n;
     btnEl.parentElement.querySelectorAll('.rvc-sc-pill').forEach((el) => el.classList.remove('active'));
     btnEl.classList.add('active');
+    advAccordionHoldCurrent();
   };
 
   // Canonical entry point for starting a real-venue adventure — called both
@@ -2443,9 +2573,10 @@
   // Mirrors startRealVenueAdventure()'s own sign-in/onboarding guard so a
   // player who hasn't onboarded yet gets redirected there BEFORE the
   // countdown runs, not after.
-  // venueTheme: undefined (default fork-in-the-road) or 'wine_country' —
-  // threaded straight through to the init POST body; everything else
-  // about the ceremony/flow is identical either way.
+  // venueTheme: undefined (default fork-in-the-road) or one of
+  // REAL_VENUE_ADVENTURE_THEMES' own venueTheme values — threaded straight
+  // through to the init POST body; everything else about the ceremony/flow
+  // is identical either way.
   window.beginAdventureCountdown = async function (venueTheme) {
     // Wrapped in try/catch on purpose: this used to have no error handling
     // at all, so any unexpected exception here (a missing element, a
@@ -2465,9 +2596,8 @@
       // (e.g. "no venues found"), rather than only updating on success.
       const headingEl = document.getElementById('adventure-heading');
       if (headingEl) {
-        headingEl.textContent = venueTheme === 'wine_country'
-          ? '🍷 Start your MUSO Wine Country Adventure'
-          : '🍀 Start your MUSO Real Venues Adventure';
+        const themeEntry = REAL_VENUE_ADVENTURE_THEMES.find((t) => t.venueTheme === venueTheme);
+        headingEl.textContent = themeEntry ? themeEntry.countdownHeading : REAL_VENUE_ADVENTURE_THEMES[0].countdownHeading;
       }
 
       document.getElementById('adventure-ready-overlay').setAttribute('hidden', '');
@@ -2500,10 +2630,10 @@
       return;
     }
 
-    const isWineCountry = venueTheme === 'wine_country';
+    const themeEntry = REAL_VENUE_ADVENTURE_THEMES.find((t) => t.venueTheme === venueTheme);
     const body = document.getElementById('adventure-body');
-    body.innerHTML = isWineCountry
-      ? '<div class="empty-state">🍷 Uncorking your route, finding your first winery…</div>'
+    body.innerHTML = themeEntry
+      ? `<div class="empty-state">${themeEntry.emoji} Finding your first stop for your ${themeEntry.title}…</div>`
       : '<div class="empty-state">🎲 Chancing your luck, finding your first real venue…</div>';
     // beginAdventureCountdown() already scrolled to #adventure-section
     // before the countdown played, but the full-screen countdown overlay
@@ -2533,11 +2663,12 @@
       const partyId = await ensurePartyId();
 
       const initBody = { action: 'init', partyId, lat: currentLat, lng: currentLng };
-      if (isWineCountry) initBody.venueTheme = 'wine_country';
+      if (themeEntry) initBody.venueTheme = themeEntry.venueTheme;
       initBody.stopCount = stopCountChoices[venueTheme || 'default'] || 3;
       const { res, data } = await postEdgeFunction('real-venue-adventure', initBody);
+      const adventureLabel = themeEntry ? themeEntry.title.toLowerCase() : 'a real-venue adventure';
       if (!res.ok) {
-        body.innerHTML = `<div class="empty-state">Couldn't start ${isWineCountry ? 'a wine country' : 'a real-venue'} adventure: ${data.error || res.statusText}</div>`;
+        body.innerHTML = `<div class="empty-state">Couldn't start ${adventureLabel}: ${data.error || res.statusText}</div>`;
         return;
       }
 
@@ -2545,9 +2676,10 @@
       await loadItinerary(data.adventure.id);
     } catch (e) {
       const isRlsError = e.code === '42501' || /row-level security/i.test(e.message || '');
+      const adventureLabel = themeEntry ? themeEntry.title.toLowerCase() : 'a real-venue adventure';
       body.innerHTML = isRlsError
         ? '<div class="empty-state">Your sign-in session expired partway through. Please sign in again above, then try again.</div>'
-        : `<div class="empty-state">Couldn't start ${isWineCountry ? 'a wine country' : 'a real-venue'} adventure: ${e.message}</div>`;
+        : `<div class="empty-state">Couldn't start ${adventureLabel}: ${e.message}</div>`;
     }
   };
 
