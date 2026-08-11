@@ -136,16 +136,19 @@
   }
   .empty-note{ font-size:0.88rem; opacity:0.6; padding:8px 0; }
 
-  .qr-card-body{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
-  #profile-qr-canvas-wrap{ flex-shrink:0; line-height:0; }
+  /* Centered, minimal layout matching the Invite Friends CTA on the main
+     page (preview/index.html's .invite-friends-cta) for continuity — QR
+     image, one short line, buttons, all centered, no inner box chrome. */
+  .qr-card-body{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; }
+  #profile-qr-canvas-wrap{ line-height:0; }
   #profile-qr-canvas-wrap canvas{ border-radius:12px; }
-  .qr-card-text{ flex:1; min-width:180px; }
-  .qr-card-text p{ font-size:0.85rem; opacity:0.7; margin-bottom:10px; }
+  .qr-card-text{ display:flex; flex-direction:column; align-items:center; }
+  .qr-card-text p{ font-size:0.8rem; opacity:0.7; margin-bottom:10px; max-width:320px; }
   .qr-share-btn{
     background:var(--teal); color:#fff; border:none; padding:9px 18px; border-radius:999px;
     font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'Fredoka',sans-serif;
   }
-  .qr-share-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .qr-share-row{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   .qr-share-row .qr-share-btn.secondary{
     background:rgba(var(--shadow-rgb),0.08); color:var(--ink);
   }

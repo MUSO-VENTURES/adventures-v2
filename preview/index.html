@@ -1012,6 +1012,16 @@
   .celebration-btn.secondary{ background:rgba(var(--shadow-rgb),0.08); color:var(--ink); }
   .celebration-count{ font-size:0.75rem; opacity:0.5; margin-top:14px; }
 
+  /* ---------- CONFETTI (iOS-style burst, e.g. iMessage/App Store) ----------
+     Canvas sits above the celebration overlay (z-index 2000) so pieces fall
+     over the card. Pure canvas, no library: each piece is a tiny rect that
+     tumbles in 3D-ish (scaleY oscillation standing in for a Y-axis flip),
+     drifts sideways on a sine wobble, and falls under gravity. Skipped
+     entirely for prefers-reduced-motion, matching .reveal-on-scroll above. */
+  .confetti-canvas{
+    position:fixed; inset:0; z-index:2001; pointer-events:none;
+  }
+
   /* ---------- TOAST ---------- */
   .xp-toast{
     position:fixed; bottom:24px; right:24px; z-index:1900; background:var(--ink); color:var(--cream);
@@ -1129,6 +1139,7 @@
     <div class="celebration-count" id="celeb-count"></div>
   </div>
 </div>
+<canvas class="confetti-canvas" id="confetti-canvas" hidden></canvas>
 
 <div class="photobooth-overlay" id="photobooth-overlay" hidden>
   <div class="photobooth-card">
@@ -2208,14 +2219,12 @@
     const p = currentProfile;
     const level = p?.level ?? 1;
     const coins = p?.adventure_coins ?? 0;
-    const profileLink = currentBadgeKeys.has('first_checkin')
-      ? `<a href="/preview/profile.html" class="buy-coins-btn" style="text-decoration:none; display:inline-block;">My Profile</a>`
-      : `<span class="buy-coins-btn" style="opacity:0.45; cursor:default;" title="Check in at your first adventure stop to unlock your profile">🔒 Profile</span>`;
+    // Profile access lives in the bottom tabbar's avatar button now (see
+    // #nav-avatar-btn/openProfile()), not duplicated up here too.
     el.innerHTML = `
       <div class="account-chip">
         <span class="level-pill">Lv ${level}</span>
         <span class="coin-pill">🪙 ${coins}</span>
-        ${profileLink}
         <button type="button" class="buy-coins-btn" onclick="openBuyCoins()">Buy Coins</button>
         <span class="signout-link" onclick="signOut()">Sign out</span>
       </div>
@@ -4290,6 +4299,95 @@
     }
   };
 
+  // ---------- CONFETTI ----------
+  // iOS-style burst (the effect you get from "Congratulations" in iMessage,
+  // or completing a ring in Fitness): pieces spray upward from a point near
+  // screen center, then arc and fall under gravity with a sideways wobble
+  // and a tumbling scaleY flip. Runs on canvas rather than DOM nodes so a
+  // few hundred pieces stay smooth on a phone.
+  const CONFETTI_COLORS = ['#e8503f', '#f2994a', '#0ea5a0', '#0b6e68', '#5b4b8a', '#ffd166'];
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let confettiRAF = null;
+
+  function launchConfetti() {
+    if (prefersReducedMotion) return;
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth, h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas.removeAttribute('hidden');
+
+    const originX = w / 2;
+    const originY = h * 0.42;
+    const count = 140;
+    const gravity = 0.16;
+    const drag = 0.994;
+    const pieces = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      const speed = 4 + Math.random() * 7;
+      pieces.push({
+        x: originX,
+        y: originY,
+        vx: Math.cos(angle) * speed * (0.5 + Math.random() * 0.6),
+        vy: Math.sin(angle) * speed - 4 - Math.random() * 4,
+        size: 5 + Math.random() * 5,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        rot: Math.random() * Math.PI,
+        rotSpeed: (Math.random() - 0.5) * 0.35,
+        wobble: Math.random() * Math.PI * 2,
+        wobbleSpeed: 0.08 + Math.random() * 0.08,
+        flip: Math.random() * Math.PI,
+        flipSpeed: 0.15 + Math.random() * 0.15,
+        life: 1,
+      });
+    }
+
+    const start = performance.now();
+    const duration = 3200;
+
+    function frame(now) {
+      const elapsed = now - start;
+      ctx.clearRect(0, 0, w, h);
+      let alive = false;
+      for (const p of pieces) {
+        p.vy += gravity;
+        p.vx *= drag;
+        p.wobble += p.wobbleSpeed;
+        p.x += p.vx + Math.sin(p.wobble) * 0.6;
+        p.y += p.vy;
+        p.rot += p.rotSpeed;
+        p.flip += p.flipSpeed;
+        const fadeStart = duration * 0.7;
+        p.life = elapsed > fadeStart ? Math.max(0, 1 - (elapsed - fadeStart) / (duration - fadeStart)) : 1;
+        if (p.y > h + 30 || p.life <= 0) continue;
+        alive = true;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.scale(1, Math.cos(p.flip));
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2.6, p.size, p.size / 1.3);
+        ctx.restore();
+      }
+      if (alive && elapsed < duration + 500) {
+        confettiRAF = requestAnimationFrame(frame);
+      } else {
+        ctx.clearRect(0, 0, w, h);
+        canvas.setAttribute('hidden', '');
+        confettiRAF = null;
+      }
+    }
+    if (confettiRAF) cancelAnimationFrame(confettiRAF);
+    confettiRAF = requestAnimationFrame(frame);
+  }
+
   // ---------- CELEBRATIONS + PRAISE COPY ----------
   const BADGE_PRAISE = {
     first_checkin: { title: 'Adventure Begins!', praise: "You just checked in at your very first MUSO stop, your profile is now unlocked. Nice work getting started!" },
@@ -4319,6 +4417,7 @@
     document.getElementById('celeb-profile-btn').style.display = badge.key === 'first_checkin' ? 'block' : 'none';
     overlay.removeAttribute('hidden');
     window._currentCelebrationBadge = badge;
+    launchConfetti();
   }
 
   window.dismissCelebration = function () {
