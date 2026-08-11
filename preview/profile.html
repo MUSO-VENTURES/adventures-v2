@@ -77,25 +77,35 @@
   }
   .signin-msg{ font-size:0.8rem; opacity:0.65; margin-top:10px; }
 
+  /* Centered hero layout — enlarged avatar up top, its own pop-in-with-
+     bounce entrance, everything that used to sit beside it (name, member
+     since, level/coin/radius pills) now stacked centered below instead. */
   .profile-header{
-    display:flex; align-items:center; gap:20px; background:var(--card); border-radius:20px;
-    padding:26px 28px; box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.08); margin-bottom:22px; flex-wrap:wrap;
+    display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px;
+    background:var(--card); border-radius:20px;
+    padding:32px 28px 26px; box-shadow:0 8px 30px rgba(var(--shadow-rgb),0.08); margin-bottom:22px;
   }
   .avatar-wrap{ position:relative; flex-shrink:0; }
   .avatar{
-    width:88px; height:88px; border-radius:50%; object-fit:cover; background:var(--coral);
+    width:136px; height:136px; border-radius:50%; object-fit:cover; background:var(--coral);
     display:flex; align-items:center; justify-content:center; color:#fff; font-family:'Fredoka',sans-serif;
-    font-weight:700; font-size:2rem; border:3px solid var(--card); box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.15);
+    font-weight:700; font-size:3rem; border:3px solid var(--card); box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.15);
+    animation:avatarPopUp .6s var(--ease-bounce) backwards;
+  }
+  @keyframes avatarPopUp{
+    from{ transform:translateY(26px) scale(0.7); opacity:0; }
+    to{ transform:translateY(0) scale(1); opacity:1; }
   }
   .avatar-upload-btn{
-    position:absolute; bottom:-2px; right:-2px; background:var(--ink); color:var(--cream); border:2px solid var(--card);
-    border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:0.85rem;
+    position:absolute; bottom:2px; right:2px; background:var(--ink); color:var(--cream); border:2px solid var(--card);
+    border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:0.95rem;
   }
   .avatar-upload-btn input{ display:none; }
+  .profile-id{ display:flex; flex-direction:column; align-items:center; }
   .profile-id h1{ font-size:1.5rem; margin-bottom:4px; }
   .profile-id .member-since{ font-size:0.8rem; opacity:0.6; margin-bottom:8px; }
-  .badge-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .badge-row{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
   .level-pill{ background:var(--plum); color:#fff; font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
   .coin-pill{ background:var(--tangerine); color:var(--ink); font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
   .radius-pill{ background:rgba(14,165,160,0.15); color:var(--deep-teal); font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
@@ -176,7 +186,8 @@
   .upcoming-row .emoji{ font-size:1.3rem; }
   .upcoming-row .when{ margin-left:auto; font-size:0.8rem; opacity:0.6; }
 
-  .signout-link{ font-size:0.8rem; opacity:0.6; text-decoration:underline; cursor:pointer; margin-left:auto; }
+  .signout-link{ font-size:0.8rem; opacity:0.6; text-decoration:underline; cursor:pointer; }
+  .profile-header-links{ display:flex; gap:14px; }
 
   .badge-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px; margin-top:6px; }
   .badge-card{ background:var(--cream); border-radius:14px; padding:16px 14px; text-align:center; }
@@ -319,8 +330,10 @@
           <span class="radius-pill" id="radius-pill">25 mi</span>
         </div>
       </div>
-      <span class="signout-link" onclick="editPreferences()">Edit My Preferences</span>
-      <span class="signout-link" onclick="signOut()">Sign out</span>
+      <div class="profile-header-links">
+        <span class="signout-link" onclick="editPreferences()">Edit My Preferences</span>
+        <span class="signout-link" onclick="signOut()">Sign out</span>
+      </div>
     </div>
 
     <div class="card reveal-on-scroll">
