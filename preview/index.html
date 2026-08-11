@@ -527,13 +527,10 @@
   }
   .rvc-sc-pill.active{ background:#fff; color:var(--coral); border-color:#fff; }
   .invite-friends-cta{
-    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
-    background:var(--card-bg); border:2px dashed var(--teal); border-radius:16px;
-    padding:14px 18px; margin-bottom:16px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
-  .invite-friends-cta .rvc-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.98rem; color:var(--deep-teal); }
-  .invite-friends-cta .rvc-desc{ font-size:0.8rem; opacity:0.85; margin-top:2px; max-width:380px; }
-  .invite-friends-cta .party-invite-btn{ background:var(--teal); flex-shrink:0; padding:9px 18px; font-size:0.82rem; }
+  .invite-friends-cta .rvc-desc{ font-size:0.8rem; opacity:0.7; }
+  .invite-friends-cta .party-invite-btn{ background:var(--teal); padding:9px 22px; font-size:0.82rem; }
   .wine-cta .rvc-sc-pill.active{ color:#5b4b8a; }
   .curated-routes-divider{ font-size:0.78rem; opacity:0.55; text-align:center; margin:18px 0 10px; }
 
@@ -2376,9 +2373,8 @@
     // anything yet).
     const inviteFriendsCta = `
       <div class="invite-friends-cta">
-        <div class="rvc-title">👥 Bring Your Crew</div>
-        <div class="rvc-desc">Most adventures are more fun with company. Invite friends now so you start together, or explore solo, up to you.</div>
         <button type="button" class="party-invite-btn" onclick="openInviteModal()">📷 Invite Friends</button>
+        <div class="rvc-desc">Explore together, or go solo, your call.</div>
       </div>
     `;
     const realVenueCta = `
