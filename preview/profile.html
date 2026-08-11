@@ -133,6 +133,10 @@
     background:var(--teal); color:#fff; border:none; padding:9px 18px; border-radius:999px;
     font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'Fredoka',sans-serif;
   }
+  .qr-share-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .qr-share-row .qr-share-btn.secondary{
+    background:rgba(var(--shadow-rgb),0.08); color:var(--ink);
+  }
 
   form.edit-form{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:4px; }
   form.edit-form .full{ grid-column:1 / -1; }
@@ -322,7 +326,11 @@
         <div id="profile-qr-canvas-wrap"></div>
         <div class="qr-card-text">
           <p id="profile-qr-hint">Loading your invite code…</p>
-          <button type="button" class="qr-share-btn" onclick="shareProfileQr()">Share my link</button>
+          <div class="qr-share-row">
+            <button type="button" class="qr-share-btn" onclick="shareProfileQr()">Share my link</button>
+            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('text')">💬 Text</button>
+            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('email')">✉️ Email</button>
+          </div>
         </div>
       </div>
     </div>
@@ -871,6 +879,35 @@
     }
     try { await navigator.clipboard.writeText(profileJoinUrl); alert('Invite link copied! Send it to a friend.'); }
     catch (e) { alert('Your invite link: ' + profileJoinUrl); }
+  };
+
+  // Same pattern as the invite modal in preview/index.html: try the native
+  // share sheet first so the QR image itself can go along as an attached
+  // file, then fall back to a plain sms:/mailto: link if file sharing
+  // isn't supported.
+  window.shareProfileQrVia = async function (method) {
+    if (!profileJoinUrl) return;
+    const message = `Join my crew on MUSO Adventures! Scan the attached QR code or tap this link to sign in and jump right in: ${profileJoinUrl}`;
+    const canvas = document.querySelector('#profile-qr-canvas-wrap canvas');
+    if (navigator.share && canvas) {
+      try {
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          const file = new File([blob], 'muso-invite-qr.png', { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Join me on MUSO Adventures', text: message });
+            return;
+          }
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    if (method === 'text') {
+      window.location.href = 'sms:?&body=' + encodeURIComponent(message);
+    } else {
+      window.location.href = 'mailto:?subject=' + encodeURIComponent('Join me on MUSO Adventures') + '&body=' + encodeURIComponent(message);
+    }
   };
 
   async function init() {

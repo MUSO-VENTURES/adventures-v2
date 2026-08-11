@@ -868,6 +868,12 @@
   #invite-qr-canvas-wrap{ display:flex; justify-content:center; margin-bottom:12px; }
   #invite-qr-canvas-wrap canvas{ border-radius:12px; }
   .party-invite-hint{ font-size:0.8rem; opacity:0.7; }
+  .party-invite-share-row{ display:flex; gap:10px; margin-top:14px; }
+  .party-invite-share-btn{
+    flex:1; background:rgba(var(--shadow-rgb),0.06); border:none; padding:10px; border-radius:12px;
+    font-weight:700; font-size:0.82rem; cursor:pointer; font-family:'Fredoka',sans-serif; color:var(--ink);
+  }
+  .party-invite-share-btn:active{ background:rgba(var(--shadow-rgb),0.12); }
   #invite-scan-video{ width:100%; border-radius:12px; margin-bottom:10px; background:#000; max-height:280px; object-fit:cover; }
 
   /* ---------- ONBOARDING: PREFERENCE SETUP ----------
@@ -1399,6 +1405,10 @@
     <div class="party-invite-panel" id="invite-panel-show">
       <div id="invite-qr-canvas-wrap"></div>
       <div class="party-invite-hint" id="invite-code-hint">Generating your invite code…</div>
+      <div class="party-invite-share-row">
+        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('text')">💬 Text a Friend</button>
+        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('email')">✉️ Email a Friend</button>
+      </div>
     </div>
     <div class="party-invite-panel" id="invite-panel-scan" hidden>
       <video id="invite-scan-video" playsinline autoplay muted></video>
@@ -1929,14 +1939,18 @@
     }
   };
 
+  let currentInviteJoinUrl = null;
+
   async function generateInviteQr() {
     const hint = document.getElementById('invite-code-hint');
     const wrap = document.getElementById('invite-qr-canvas-wrap');
     hint.textContent = 'Loading your invite code…';
     wrap.innerHTML = '';
+    currentInviteJoinUrl = null;
     try {
       const { res, data } = await postPartySocial('getMyPersonalCode');
       if (!res.ok) { hint.textContent = data.error || 'Could not load your invite code right now.'; return; }
+      currentInviteJoinUrl = data.joinUrl;
       const canvas = document.createElement('canvas');
       wrap.appendChild(canvas);
       await QRCode.toCanvas(canvas, data.joinUrl, { width: 220, margin: 1, color: { dark: '#2a2438', light: '#ffffff' } });
@@ -1945,6 +1959,39 @@
       hint.textContent = 'Could not generate a QR code: ' + (e?.message || e);
     }
   }
+
+  // Text/email invite: tries the native share sheet first so the actual QR
+  // image can ride along as an attached file (Messages and Mail both accept
+  // shared images on iOS/Android) alongside the join link, then falls back
+  // to a plain sms:/mailto: deep link (message + link only, no image) on
+  // browsers without file-sharing support. Either path gets the recipient
+  // a tappable link straight to sign-in, with the QR available to scan too
+  // whenever the share sheet was able to attach it.
+  window.shareInviteVia = async function (method) {
+    if (!currentInviteJoinUrl) return;
+    const joinUrl = currentInviteJoinUrl;
+    const message = `Join my crew on MUSO Adventures! Scan the attached QR code or tap this link to sign in and jump right in: ${joinUrl}`;
+    const canvas = document.querySelector('#invite-qr-canvas-wrap canvas');
+    if (navigator.share && canvas) {
+      try {
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (blob) {
+          const file = new File([blob], 'muso-invite-qr.png', { type: 'image/png' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Join me on MUSO Adventures', text: message });
+            return;
+          }
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    if (method === 'text') {
+      window.location.href = 'sms:?&body=' + encodeURIComponent(message);
+    } else {
+      window.location.href = 'mailto:?subject=' + encodeURIComponent('Join me on MUSO Adventures') + '&body=' + encodeURIComponent(message);
+    }
+  };
 
   // Scanning: rear/environment camera by default (pointing it at someone
   // else's screen), unlike the front-camera default used for avatar
