@@ -814,31 +814,6 @@
     color:#fff; font-size:0.68rem; padding:14px 7px 5px;
   }
 
-  /* ---------- QR CHECK-IN STEP ----------
-     Runs before the check-in actually submits. Venues don't have real,
-     printed per-location QR codes yet, so this shows a template code and
-     auto-completes after a beat — swap in real per-venue QR values here
-     once venues have them printed, no other flow changes needed. */
-  .qrscan-stage{
-    position:relative; width:100%; aspect-ratio:1; max-width:220px; margin:0 auto 16px;
-    background:#fff; border-radius:16px; padding:16px; overflow:hidden;
-    box-shadow:0 8px 24px rgba(0,0,0,0.18);
-  }
-  .qrscan-stage svg{ width:100%; height:100%; display:block; }
-  .qrscan-scanline{
-    position:absolute; left:6%; right:6%; top:6%; height:3px; border-radius:2px;
-    background:linear-gradient(90deg, transparent, var(--coral), transparent);
-    opacity:0; box-shadow:0 0 10px 1px rgba(232,80,63,0.6);
-  }
-  .qrscan-scanline.scanning{ animation:qr-sweep 1.8s ease-in-out; }
-  @keyframes qr-sweep{
-    0%{ opacity:0; top:6%; }
-    8%{ opacity:1; }
-    92%{ opacity:1; }
-    100%{ opacity:0; top:88%; }
-  }
-  .qrscan-hint-icon{ display:inline-block; margin-right:4px; }
-
   /* ---------- NEXT-VENUE PROGRESS MAP ----------
      Shown right after a successful check-in (when there's another stop
      ahead): a pin where the player just checked in, a pin at the next
@@ -1182,19 +1157,39 @@
   </div>
 </div>
 
-<div class="photobooth-overlay" id="qrscan-overlay" hidden>
+<div class="photobooth-overlay" id="venue-checkin-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
-      <span>📷 Scan to Check In</span>
-      <span class="pb-close" onclick="closeQrScan()">&times;</span>
+      <span>📍 Check In</span>
+      <span class="pb-close" onclick="closeVenueCheckin()">&times;</span>
     </div>
-    <div class="qrscan-stage">
-      <svg id="qrscan-code" viewBox="0 0 200 200"></svg>
-      <div class="qrscan-scanline" id="qrscan-scanline"></div>
+    <div id="venue-checkin-choice">
+      <div class="pb-hint" style="margin-bottom:16px;">Verify you're actually here to lock in your check-in.</div>
+      <div class="pb-controls">
+        <button type="button" class="pb-btn primary" onclick="startVenueQrScan()">📷 Scan the Venue QR (+10 bonus)</button>
+        <button type="button" class="pb-btn secondary" onclick="checkInWithLocation()">📍 Check In With My Location</button>
+      </div>
     </div>
-    <div class="pb-hint" id="qrscan-hint">
-      <span class="qrscan-hint-icon">🔎</span>Scanning the QR code at <strong>this stop</strong>…
+    <div id="venue-checkin-scan" hidden>
+      <div class="pb-stage">
+        <video id="venue-scan-video" playsinline autoplay muted></video>
+      </div>
+      <canvas id="venue-scan-canvas" hidden></canvas>
+      <div class="pb-hint" id="venue-scan-hint">Point your camera at the QR code posted at this venue</div>
     </div>
+  </div>
+</div>
+
+<!-- Staff-only: renders/prints a venue's check-in QR (see openVenueQrAdmin()
+     in preview/index.html). Only ever opened from an is_admin-gated link. -->
+<div class="photobooth-overlay" id="venue-qr-admin-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center;">
+    <div class="photobooth-header">
+      <span id="venue-qr-admin-title">Venue Check-In QR</span>
+      <span class="pb-close" onclick="closeVenueQrAdmin()">&times;</span>
+    </div>
+    <div id="venue-qr-admin-canvas-wrap" style="display:flex; justify-content:center; margin-bottom:12px;"></div>
+    <div class="pb-hint">Print or display this at the venue. Scanning it is what earns a player the +10 check-in bonus.</div>
   </div>
 </div>
 
@@ -2170,7 +2165,7 @@
   // 0004_venue_search_and_age_gate.sql, previously unused on this page) so
   // a signed-in player who already completed the gate once never has to
   // re-confirm their age on a later login — see applyGateStateFromProfile().
-  const PROFILE_COLUMNS = 'id, display_name, avatar_url, preferences, xp, level, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count, birth_date, age_confirmed_at, disclaimer_accepted_at';
+  const PROFILE_COLUMNS = 'id, display_name, avatar_url, preferences, xp, level, adventure_coins, unlocked_radius_miles, venues_search_unlocked, unlocked_stop_count, birth_date, age_confirmed_at, disclaimer_accepted_at, is_admin';
 
   async function fetchOrCreateProfile(userId, email) {
     if (!supabaseClient) return null;
@@ -3025,6 +3020,13 @@
         const testControl = TEST_MODE
           ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')">🧪 Test check-in (skip photo)</span>`
           : '';
+        // Staff-only: lets whoever's onboarding a venue actually produce the
+        // physical QR code it needs to post, without a separate admin tool —
+        // generates the same payload venueScanTick()/handleScannedVenueQr()
+        // decode, right from the stop that's currently pointed at that venue.
+        const adminQrControl = (currentProfile?.is_admin && s.venue_id)
+          ? `<span class="test-mode-link" onclick="openVenueQrAdmin('${s.venue_id}', '${safeName}')">🖨️ Get venue QR</span>`
+          : '';
         // Hours gating only applies to real-venue/Wine Country stops —
         // curated venues have no hours data at all (s.hours is always
         // null for them), so isOpenOrClosingSoon(null) naturally resolves
@@ -3041,6 +3043,7 @@
             ${checkinNoteHtml}
             <button type="button" class="checkin-btn" ${checkinBlocked ? 'disabled' : ''} onclick="beginCheckIn('${s.id}', '${safeName}')">I'm Here! Check In</button>
             ${testControl}
+            ${adminQrControl}
           </div>
         `;
       }
@@ -3180,71 +3183,131 @@
     clearActiveAdventure();
   };
 
-  // ---------- QR CHECK-IN STEP ----------
-  // Draws a fixed, deterministic "QR code"-looking grid — not a real
-  // decodable code, since venues don't have printed per-location codes
-  // yet. Swap this step's auto-advance for real camera-based QR decoding
-  // once they do; everything downstream (beginCheckIn -> checkInStop)
-  // stays the same either way.
-  let qrTemplateRendered = false;
-  function renderTemplateQr() {
-    if (qrTemplateRendered) return;
-    qrTemplateRendered = true;
-    const N = 21; // classic small-QR module count, just for the look of it
-    const cell = 200 / N;
-    let seed = 1337;
-    const rand = () => {
-      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-      return seed / 0x7fffffff;
-    };
-    const inFinderZone = (x, y) => {
-      const inCorner = (cx, cy) => x >= cx && x < cx + 7 && y >= cy && y < cy + 7;
-      return inCorner(0, 0) || inCorner(N - 7, 0) || inCorner(0, N - 7);
-    };
-    let modules = '';
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        if (inFinderZone(x, y)) continue;
-        if (rand() > 0.56) {
-          modules += `<rect x="${(x * cell).toFixed(2)}" y="${(y * cell).toFixed(2)}" width="${cell.toFixed(2)}" height="${cell.toFixed(2)}" fill="#1a1a2e"/>`;
-        }
-      }
-    }
-    const finders = [[0, 0], [N - 7, 0], [0, N - 7]].map(([fx, fy]) => `
-      <rect x="${fx * cell}" y="${fy * cell}" width="${7 * cell}" height="${7 * cell}" fill="#1a1a2e"/>
-      <rect x="${(fx + 1) * cell}" y="${(fy + 1) * cell}" width="${5 * cell}" height="${5 * cell}" fill="#fff"/>
-      <rect x="${(fx + 2) * cell}" y="${(fy + 2) * cell}" width="${3 * cell}" height="${3 * cell}" fill="#1a1a2e"/>
-    `).join('');
-    document.getElementById('qrscan-code').innerHTML = `<rect width="200" height="200" fill="#fff"/>${modules}${finders}`;
-  }
-
-  let qrScanTimer = null;
-  window.openQrScan = function (routeStopId, stopName) {
-    renderTemplateQr();
-    document.getElementById('qrscan-hint').innerHTML = `<span class="qrscan-hint-icon">🔎</span>Scanning the QR code at <strong>${stopName || 'this stop'}</strong>…`;
-    document.getElementById('qrscan-overlay').removeAttribute('hidden');
-    const scanline = document.getElementById('qrscan-scanline');
-    scanline.classList.remove('scanning');
-    void scanline.offsetWidth; // restart the sweep animation on every open
-    scanline.classList.add('scanning');
-
-    clearTimeout(qrScanTimer);
-    qrScanTimer = setTimeout(() => {
-      document.getElementById('qrscan-hint').innerHTML = `<span class="qrscan-hint-icon">✅</span>Checked in via QR!`;
-      qrScanTimer = setTimeout(() => {
-        closeQrScan();
-        checkInStop(routeStopId);
-      }, 550);
-    }, 1800);
-  };
-
-  window.closeQrScan = function () {
-    clearTimeout(qrScanTimer);
-    document.getElementById('qrscan-overlay').setAttribute('hidden', '');
-  };
+  // ---------- REAL VENUE CHECK-IN: QR SCAN OR GEOLOCATION ----------
+  // Two ways to prove you're actually at the venue: scan the physical QR
+  // code MUSO posts there (worth a +10 coin bonus — see checkin/index.ts's
+  // verifyMethod handling), or fall back to geolocation (no bonus, but
+  // works even when a venue doesn't have a QR code posted yet, or the
+  // player can't find it). Either way funnels into the same checkInStop(),
+  // just with a different verifyOpts payload.
+  let venueCheckinStopId = null;
 
   window.beginCheckIn = function (routeStopId, stopName) {
-    openQrScan(routeStopId, stopName);
+    venueCheckinStopId = routeStopId;
+    document.getElementById('venue-checkin-choice').hidden = false;
+    document.getElementById('venue-checkin-scan').hidden = true;
+    document.getElementById('venue-checkin-overlay').removeAttribute('hidden');
+  };
+
+  window.closeVenueCheckin = function () {
+    stopVenueQrScan();
+    document.getElementById('venue-checkin-overlay').setAttribute('hidden', '');
+  };
+
+  let venueScanStream = null;
+  let venueScanRafId = null;
+
+  window.startVenueQrScan = async function () {
+    document.getElementById('venue-checkin-choice').hidden = true;
+    document.getElementById('venue-checkin-scan').hidden = false;
+    const hint = document.getElementById('venue-scan-hint');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      hint.textContent = "This browser doesn't support camera access. Close this and check in with your location instead.";
+      return;
+    }
+    const video = document.getElementById('venue-scan-video');
+    try {
+      venueScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      video.srcObject = venueScanStream;
+      await video.play();
+      hint.textContent = 'Point your camera at the QR code posted at this venue';
+      venueScanTick();
+    } catch (e) {
+      hint.textContent = "Couldn't access your camera: " + e.message;
+    }
+  };
+
+  function stopVenueQrScan() {
+    if (venueScanRafId) { cancelAnimationFrame(venueScanRafId); venueScanRafId = null; }
+    if (venueScanStream) { venueScanStream.getTracks().forEach((t) => t.stop()); venueScanStream = null; }
+  }
+
+  function venueScanTick() {
+    const video = document.getElementById('venue-scan-video');
+    const canvas = document.getElementById('venue-scan-canvas');
+    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      venueScanRafId = requestAnimationFrame(venueScanTick);
+      return;
+    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code && code.data) {
+      stopVenueQrScan();
+      handleScannedVenueQr(code.data);
+    } else {
+      venueScanRafId = requestAnimationFrame(venueScanTick);
+    }
+  }
+
+  // Accepts either a full https://…?venuecheckin=ID URL (what the QR
+  // actually encodes) or a bare venue id, same "URL or bare value" leniency
+  // as the invite QR's handleScannedInvite().
+  async function handleScannedVenueQr(scannedText) {
+    let venueId = scannedText;
+    try {
+      const url = new URL(scannedText);
+      venueId = url.searchParams.get('venuecheckin') || scannedText;
+    } catch (e) { /* not a URL — treat the scanned text as a bare venue id */ }
+    const stopId = venueCheckinStopId;
+    closeVenueCheckin();
+    await checkInStop(stopId, { verifyMethod: 'qr', scannedVenueId: venueId });
+  }
+
+  window.checkInWithLocation = function () {
+    const choiceEl = document.getElementById('venue-checkin-choice');
+    const originalHtml = choiceEl.innerHTML;
+    if (!navigator.geolocation) {
+      alert("This browser doesn't support location. Try scanning the venue's QR code instead.");
+      return;
+    }
+    choiceEl.innerHTML = '<div class="pb-hint">📍 Finding your location…</div>';
+    const stopId = venueCheckinStopId;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        closeVenueCheckin();
+        await checkInStop(stopId, { verifyMethod: 'geo', lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => {
+        choiceEl.innerHTML = originalHtml;
+        alert("Couldn't get your location: " + err.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
+  // Staff-only utility: renders a venue's check-in QR so whoever's
+  // onboarding that venue can actually print/display it. Encodes the exact
+  // same ?venuecheckin= URL handleScannedVenueQr() above decodes, and
+  // reuses the same QRCode library already loaded for the personal invite
+  // QR (see generateInviteQr()).
+  window.openVenueQrAdmin = async function (venueId, stopName) {
+    const titleEl = document.getElementById('venue-qr-admin-title');
+    const wrap = document.getElementById('venue-qr-admin-canvas-wrap');
+    titleEl.textContent = `Check-In QR: ${stopName || 'this venue'}`;
+    wrap.innerHTML = '';
+    document.getElementById('venue-qr-admin-overlay').removeAttribute('hidden');
+    const canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    const joinUrl = `${location.origin}${location.pathname}?venuecheckin=${encodeURIComponent(venueId)}`;
+    await QRCode.toCanvas(canvas, joinUrl, { width: 220, margin: 1, color: { dark: '#2a2438', light: '#ffffff' } });
+  };
+
+  window.closeVenueQrAdmin = function () {
+    document.getElementById('venue-qr-admin-overlay').setAttribute('hidden', '');
   };
 
   // ---------- NEXT-VENUE PROGRESS MAP ----------
@@ -3568,7 +3631,7 @@
     document.getElementById('nextvenue-overlay').setAttribute('hidden', '');
   };
 
-  window.checkInStop = async function (routeStopId) {
+  window.checkInStop = async function (routeStopId, verifyOpts) {
     if (!activeAdventure || !currentSession) return;
 
     // If the player captured a photo for this stop, upload it first so we
@@ -3595,7 +3658,7 @@
     }
 
     try {
-      const { res, data } = await postEdgeFunction('checkin', { adventureId: activeAdventure.adventureId, routeStopId, photoUrl });
+      const { res, data } = await postEdgeFunction('checkin', { adventureId: activeAdventure.adventureId, routeStopId, photoUrl, ...verifyOpts });
       if (!res.ok) { alert(data.error || 'Could not check in.'); return; }
 
       if (pendingPhotoCaptures[routeStopId]) {
@@ -3862,11 +3925,11 @@
 
   // ---------- CHECK-IN PHOTO BOOTH ----------
   // Unlisted, query-param-gated dev affordance (?test=1) — same "not linked
-  // from the real app" precedent as /sandbox/index.html. QR check-in is
-  // already a fully decorative simulated scan (see openQrScan() — no real
-  // camera, no location check, works fine from a desk), so the only real
-  // playtesting friction is needing a webcam for the selfie every stop;
-  // this skips just that, nothing else.
+  // from the real app" precedent as /sandbox/index.html. checkInStop()
+  // called directly (bypassing beginCheckIn()'s QR/geo verification
+  // overlay entirely) so testing works from a desk with no camera and no
+  // real location, same spirit as before real verification existed; this
+  // skips just the photo, nothing else.
   const TEST_MODE = new URLSearchParams(location.search).get('test') === '1';
   const CHECKIN_PHOTO_COINS = 10; // must match muso-backend/supabase/functions/checkin/index.ts
   let pendingPhotoCaptures = {};  // routeStopId -> { blob, previewUrl }

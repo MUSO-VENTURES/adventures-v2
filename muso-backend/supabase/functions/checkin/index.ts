@@ -252,6 +252,32 @@ const CHECKIN_PHOTO_COINS = 10;
 // in the coin_transactions reason allow-list via 0020_adventure_complete_coins.sql.
 const ADVENTURE_COMPLETE_COINS = 20;
 
+// ---------------------------------------------------------------
+// Check-in verification: a player either scans the physical QR code posted
+// at a venue (strongest proof they're there, worth a bonus) or, if they
+// can't find one — the venue isn't part of the MUSO network yet, or the
+// code's missing/damaged — checks in via geolocation instead. verifyMethod
+// is optional on the request on purpose: a frontend deploy always lands a
+// few minutes before GitHub Pages actually serves it (and vice versa for
+// this backend, deployed manually), so a stale client calling checkin
+// without it should still work exactly like before this feature existed,
+// not suddenly start failing every check-in mid-rollout.
+// ---------------------------------------------------------------
+const CHECKIN_GEOFENCE_FEET = 100;
+const QR_CHECKIN_BONUS_COINS = 10;
+const EARTH_RADIUS_FEET = 20902231; // 3959 miles * 5280 ft/mile
+
+function haversineFeet(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_FEET * c;
+}
+
 type Badge = { key: string; name: string; description: string; emoji: string };
 type Progress = {
   xpGained: number;
@@ -282,6 +308,10 @@ Deno.serve(async (req) => {
     routeStopId?: string;
     photoUrl?: string;
     etaMinutesOverride?: number;
+    verifyMethod?: "qr" | "geo";
+    lat?: number;
+    lng?: number;
+    scannedVenueId?: string;
   };
 
   try {
@@ -290,7 +320,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { adventureId, routeStopId, photoUrl, etaMinutesOverride } = payload;
+  const { adventureId, routeStopId, photoUrl, etaMinutesOverride, verifyMethod, lat, lng, scannedVenueId } = payload;
   if (!adventureId || !routeStopId) {
     return jsonResponse({ error: "adventureId and routeStopId are required" }, 400);
   }
@@ -311,6 +341,51 @@ Deno.serve(async (req) => {
   // From here on, use the admin client — we need to read venue_contacts and
   // party/route info that a player shouldn't have direct table access to.
   const admin = getSupabaseAdmin();
+
+  // Verification gate — only runs when the caller actually sent a
+  // verifyMethod (see the comment above CHECKIN_GEOFENCE_FEET for why a
+  // missing one is allowed through unverified rather than rejected). Only
+  // applies to stops that actually resolved to a real venue; a stop with no
+  // venue_id has nothing to verify a location against.
+  let qrBonusEligible = false;
+  if (verifyMethod) {
+    const { data: stopForVerify } = await admin
+      .from("route_stops")
+      .select("venue_id")
+      .eq("id", routeStopId)
+      .maybeSingle();
+
+    if (stopForVerify?.venue_id) {
+      if (verifyMethod === "qr") {
+        if (!scannedVenueId || scannedVenueId !== stopForVerify.venue_id) {
+          return jsonResponse({ error: "That QR code doesn't match this stop's venue." }, 400);
+        }
+        qrBonusEligible = true;
+      } else if (verifyMethod === "geo") {
+        if (typeof lat !== "number" || typeof lng !== "number") {
+          return jsonResponse({ error: "Your location is required to check in this way." }, 400);
+        }
+        const { data: venueForVerify } = await admin
+          .from("venues")
+          .select("lat, lng")
+          .eq("id", stopForVerify.venue_id)
+          .maybeSingle();
+        if (typeof venueForVerify?.lat !== "number" || typeof venueForVerify?.lng !== "number") {
+          return jsonResponse(
+            { error: "This venue doesn't have location data yet. Try scanning the QR code instead." },
+            400,
+          );
+        }
+        const distanceFeet = haversineFeet(lat, lng, venueForVerify.lat, venueForVerify.lng);
+        if (distanceFeet > CHECKIN_GEOFENCE_FEET) {
+          return jsonResponse(
+            { error: `You're about ${Math.round(distanceFeet)} ft from the venue. Get within ${CHECKIN_GEOFENCE_FEET} ft to check in.` },
+            400,
+          );
+        }
+      }
+    }
+  }
 
   // 0. Checked BEFORE inserting this check-in: has anyone else in the party
   //    already checked in at this exact stop? Now that check-ins are per
@@ -357,7 +432,7 @@ Deno.serve(async (req) => {
   //    just earned. This runs regardless of how the venue-notification step
   //    below goes — checking in is the player-facing win, the notification
   //    email is a side effect and shouldn't gate it.
-  const [{ count: totalCheckins }, xpResultRes, coinsResultRes] = await Promise.all([
+  const [{ count: totalCheckins }, xpResultRes, coinsResultRes, qrBonusResultRes] = await Promise.all([
     admin.from("check_ins").select("id", { count: "exact", head: true }).eq("checked_in_by", userId),
     admin.rpc("award_xp", { p_profile_id: userId, p_amount: CHECKIN_XP }),
     photoUrl
@@ -365,6 +440,14 @@ Deno.serve(async (req) => {
           p_profile_id: userId,
           p_amount: CHECKIN_PHOTO_COINS,
           p_reason: "photo_bonus",
+          p_adventure_id: adventureId,
+        })
+      : Promise.resolve({ data: null, error: null }),
+    qrBonusEligible
+      ? admin.rpc("credit_coins", {
+          p_profile_id: userId,
+          p_amount: QR_CHECKIN_BONUS_COINS,
+          p_reason: "qr_checkin_bonus",
           p_adventure_id: adventureId,
         })
       : Promise.resolve({ data: null, error: null }),
@@ -376,8 +459,9 @@ Deno.serve(async (req) => {
     leveledUp?: boolean;
   };
   // Best-effort — an odd coin-credit failure shouldn't fail the check-in
-  // itself, it just means this particular photo bonus didn't land.
+  // itself, it just means this particular bonus didn't land.
   let coinsGained = photoUrl && !coinsResultRes?.error ? CHECKIN_PHOTO_COINS : 0;
+  if (qrBonusEligible && !qrBonusResultRes?.error) coinsGained += QR_CHECKIN_BONUS_COINS;
   const isFirstCheckin = (totalCheckins ?? 0) === 1;
 
   const badgeKeysToAward: string[] = [];
