@@ -19,6 +19,7 @@
     --card-bg:rgba(255,255,255,0.6);
     --card-border:rgba(255,255,255,0.5);
     --shadow-rgb:42,36,56;
+    --ease-bounce:cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -102,6 +103,17 @@
   .card{
     background:var(--card); border-radius:18px; padding:22px 24px; margin-bottom:20px;
     box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.07);
+  }
+  /* "Build in as it scrolls into view" — see initScrollReveal() near
+     init(). Each card is revealed once, the first time it crosses the
+     viewport, with a slight overshoot bounce rather than a flat fade. */
+  .card.reveal-on-scroll{
+    opacity:0; transform:translateY(28px);
+    transition:opacity .7s var(--ease-bounce), transform .7s var(--ease-bounce);
+  }
+  .card.reveal-on-scroll.revealed{ opacity:1; transform:translateY(0); }
+  @media (prefers-reduced-motion:reduce){
+    .card.reveal-on-scroll{ opacity:1; transform:none; transition:none; }
   }
   .card h2{ font-size:1.1rem; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
   .card h2 .soon{ font-size:0.68rem; font-weight:600; opacity:0.5; text-transform:uppercase; letter-spacing:0.04em; background:rgba(var(--shadow-rgb),0.06); padding:3px 8px; border-radius:999px; }
@@ -308,7 +320,7 @@
       <span class="signout-link" onclick="signOut()">Sign out</span>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Progress</h2>
       <div class="xp-bar-track"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
       <div class="xp-label" id="xp-label"></div>
@@ -320,7 +332,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>My QR Code</h2>
       <div class="qr-card-body">
         <div id="profile-qr-canvas-wrap"></div>
@@ -335,32 +347,32 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Badges earned</h2>
       <div id="badges-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Leaderboard placement</h2>
       <div id="leaderboard-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Upcoming</h2>
       <div id="upcoming-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Photobooth moments</h2>
       <div id="photo-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Trophy case</h2>
       <div id="trophy-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Edit your profile</h2>
       <form class="edit-form" onsubmit="event.preventDefault(); saveProfile();">
         <div class="field"><label for="f-name">Display name</label><input id="f-name" type="text" maxlength="60"></div>
@@ -377,7 +389,7 @@
       </form>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Coming soon <span class="soon">in progress</span></h2>
       <p class="empty-note">Adventure companions &amp; friends, preferred venues + your ratings, gifting a friend coins or a choose-your-own adventure, and Pay It Forward are next. This page will grow into those as each is built.</p>
     </div>
@@ -953,6 +965,31 @@
     renderPhotobooth();
     renderTrophyCase();
     renderProfileQr();
+    initScrollReveal();
+  }
+
+  // "Build in as it scrolls into view" — each .reveal-on-scroll element
+  // (every .card here) gets a small staggered transition-delay by its
+  // position on the page, then reveals once, the first time it crosses the
+  // viewport. Safe to call more than once — already-bound elements are
+  // skipped via data-reveal-bound.
+  let scrollRevealObserver = null;
+  function initScrollReveal() {
+    if (!scrollRevealObserver) {
+      scrollRevealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('revealed');
+          scrollRevealObserver.unobserve(entry.target);
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+    }
+    const fresh = [...document.querySelectorAll('.reveal-on-scroll:not([data-reveal-bound])')];
+    fresh.forEach((el, i) => {
+      el.setAttribute('data-reveal-bound', '');
+      el.style.transitionDelay = (i * 70) + 'ms';
+      scrollRevealObserver.observe(el);
+    });
   }
 
   init();

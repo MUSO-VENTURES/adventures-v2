@@ -25,6 +25,10 @@
        parallax header. */
     --card-bg:rgba(255,255,255,0.6);
     --card-border:rgba(255,255,255,0.5);
+    /* Slight-overshoot "back ease out" — used everywhere something should
+       feel tapped/alive rather than mechanical: accordion open/close, card
+       deals, button presses, modal pop-ins, scroll reveals. */
+    --ease-bounce:cubic-bezier(0.34, 1.56, 0.64, 1);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -86,6 +90,23 @@
   }
   header.hero h1{ font-size:clamp(1.8rem,4vw,2.6rem); margin-bottom:12px; }
   header.hero p{ opacity:0.75; font-size:1.02rem; line-height:1.6; }
+
+  /* ---------- SCROLL REVEAL ----------
+     Generic "build in as it scrolls into view" treatment — see
+     initScrollReveal() near the bottom of the script, which just adds
+     .revealed the first time an element with this class crosses the
+     viewport (IntersectionObserver, one-shot per element). Kept as a
+     single reusable class/observer rather than one-off animations per
+     section, so any future section opts in for free. prefers-reduced-motion
+     users skip straight to the revealed state, no observer needed. */
+  .reveal-on-scroll{
+    opacity:0; transform:translateY(28px);
+    transition:opacity .7s var(--ease-bounce), transform .7s var(--ease-bounce);
+  }
+  .reveal-on-scroll.revealed{ opacity:1; transform:translateY(0); }
+  @media (prefers-reduced-motion:reduce){
+    .reveal-on-scroll{ opacity:1; transform:none; transition:none; }
+  }
 
   /* ---------- ROKU-STYLE PARALLAX HEADER ----------
      Ported from home-concept.html verbatim (same asset paths, one level up
@@ -242,9 +263,10 @@
   .find-btn{
     background:var(--coral); color:#fff; border:none; padding:12px 26px;
     border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
-    cursor:pointer; font-size:0.95rem; transition:transform .15s;
+    cursor:pointer; font-size:0.95rem; transition:transform .3s var(--ease-bounce);
   }
-  .find-btn:hover{ transform:scale(1.03); }
+  .find-btn:hover{ transform:scale(1.05); }
+  .find-btn:active{ transform:scale(0.96); }
   .find-btn:disabled{ opacity:0.5; cursor:default; transform:none; }
 
   .status-msg{
@@ -281,7 +303,7 @@
   .venue-card{
     background:var(--card); border-radius:18px; overflow:hidden;
     box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.08); display:flex; flex-direction:column;
-    cursor:pointer; transition:transform .15s;
+    cursor:pointer; transition:transform .3s var(--ease-bounce);
   }
   .venue-card:hover{ transform:translateY(-2px); }
   .venue-photo{
@@ -506,19 +528,37 @@
   .adv-acc-item{
     border-radius:14px; overflow:hidden; background:var(--card);
     box-shadow:0 2px 8px rgba(var(--shadow-rgb),0.06);
+    transition:box-shadow .3s ease, transform .3s var(--ease-bounce);
   }
+  .adv-acc-item.open{ box-shadow:0 6px 20px rgba(var(--shadow-rgb),0.12); }
   .adv-acc-header{
     width:100%; display:flex; align-items:center; gap:10px; padding:14px 16px; border:none; cursor:pointer;
     background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; font-family:'Fredoka',sans-serif;
-    font-weight:700; font-size:0.95rem; text-align:left;
+    font-weight:700; font-size:0.95rem; text-align:left; transition:transform .2s var(--ease-bounce);
   }
+  .adv-acc-header:active{ transform:scale(0.98); }
   .adv-acc-item.curated .adv-acc-header{ background:rgba(var(--shadow-rgb),0.07); color:var(--ink); }
-  .adv-acc-emoji{ font-size:1.15rem; flex-shrink:0; }
+  .adv-acc-emoji{ font-size:1.15rem; flex-shrink:0; transition:transform .4s var(--ease-bounce); }
+  .adv-acc-item.open .adv-acc-emoji{ transform:scale(1.2) rotate(-6deg); }
   .adv-acc-name{ flex:1; }
-  .adv-acc-chevron{ transition:transform .25s; opacity:0.85; flex-shrink:0; }
+  .adv-acc-chevron{ transition:transform .4s var(--ease-bounce); opacity:0.85; flex-shrink:0; }
   .adv-acc-item.open .adv-acc-chevron{ transform:rotate(90deg); }
-  .adv-acc-body{ padding:16px 18px; }
-  .adv-acc-body[hidden]{ display:none; }
+  /* Real animated reveal via the CSS grid 0fr/1fr trick — handles
+     arbitrary/dynamic body content height without a hardcoded max-height,
+     and (unlike max-height) settles exactly at its natural height with no
+     leftover empty space. .adv-acc-body itself needs min-height:0 and
+     overflow:hidden for the grid row to actually collapse to zero. */
+  .adv-acc-body-wrap{
+    display:grid; grid-template-rows:0fr;
+    transition:grid-template-rows .5s var(--ease-bounce);
+  }
+  .adv-acc-item.open .adv-acc-body-wrap{ grid-template-rows:1fr; }
+  .adv-acc-body{
+    min-height:0; overflow:hidden; padding:0 18px;
+    opacity:0; transform:translateY(-6px);
+    transition:opacity .3s ease, transform .35s var(--ease-bounce), padding .5s var(--ease-bounce);
+  }
+  .adv-acc-item.open .adv-acc-body{ padding:16px 18px; opacity:1; transform:translateY(0); }
   .adv-acc-body .rvc-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
   .adv-acc-body .rvc-stopcount{ display:flex; gap:8px; margin-top:12px; }
   .adv-acc-body .rvc-sc-pill{
@@ -529,9 +569,10 @@
   .adv-acc-body .rvc-btn, .adv-acc-body .start-adv-btn{
     display:block; width:100%; margin-top:14px; background:var(--coral); color:#fff; border:none;
     padding:11px 20px; border-radius:12px; font-weight:700; font-family:'Fredoka',sans-serif;
-    font-size:0.88rem; cursor:pointer; transition:transform .15s;
+    font-size:0.88rem; cursor:pointer; transition:transform .3s var(--ease-bounce);
   }
-  .adv-acc-body .rvc-btn:hover, .adv-acc-body .start-adv-btn:hover{ transform:scale(1.02); }
+  .adv-acc-body .rvc-btn:hover, .adv-acc-body .start-adv-btn:hover{ transform:scale(1.03); }
+  .adv-acc-body .rvc-btn:active, .adv-acc-body .start-adv-btn:active{ transform:scale(0.97); }
   .adv-acc-body .rp-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
   .adv-acc-body .rp-meta{ font-size:0.75rem; opacity:0.55; margin-top:6px; }
 
@@ -540,9 +581,10 @@
   .start-adv-btn{
     background:var(--coral); color:#fff; border:none; padding:10px 20px; border-radius:999px;
     font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; cursor:pointer;
-    transition:transform .15s;
+    transition:transform .3s var(--ease-bounce);
   }
-  .start-adv-btn:hover{ transform:scale(1.03); }
+  .start-adv-btn:hover{ transform:scale(1.05); }
+  .start-adv-btn:active{ transform:scale(0.96); }
 
   /* One gradient + one accent color per adventure type — collapsed rows
      stay color-coded so the list reads at a glance even before expanding. */
@@ -584,7 +626,7 @@
     background:var(--card); border-radius:16px;
     border-top:4px solid var(--theme-color, var(--coral));
     box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.07);
-    cursor:pointer; transition:transform .2s ease, opacity .2s ease;
+    cursor:pointer; transition:transform .3s var(--ease-bounce), opacity .2s ease;
   }
   /* Collapsed: an even, side-by-side row — equal billing for all 3 moods
      rather than one card visually dominating — icon + label only, nothing
@@ -597,14 +639,14 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px;
     text-align:center;
   }
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card:hover{ transform:translateY(-3px); }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card:hover{ transform:translateY(-4px) scale(1.02); }
   .fork-stack-mood-icon{ font-size:1.7rem; line-height:1; }
   .fork-stack-mood-label{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.82rem; line-height:1.25; }
   /* Expanded: full detail card up top, full width, straightened. */
   .fork-stack-deck.has-expanded{ display:flex; flex-direction:column; gap:10px; min-height:0; }
   .fork-stack-card.expanded{
     padding:16px; display:flex; flex-direction:column; gap:5px; cursor:default;
-    animation:forkCardDeal .3s ease-out;
+    animation:forkCardDeal .45s var(--ease-bounce) backwards;
   }
   .fork-stack-deck.has-expanded .fork-stack-card:not(.expanded){
     height:52px; padding:0 16px; display:flex; flex-direction:row; align-items:center; gap:8px;
@@ -692,7 +734,9 @@
   .photobooth-card{
     background:var(--card); border-radius:24px; max-width:420px; width:100%;
     padding:22px 22px 26px; box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    animation:modalPopIn .4s var(--ease-bounce) backwards;
   }
+  @keyframes modalPopIn{ from{ transform:scale(0.9) translateY(10px); opacity:0; } to{ transform:scale(1) translateY(0); opacity:1; } }
   .photobooth-header{
     display:flex; align-items:center; justify-content:space-between;
     font-family:'Fredoka',sans-serif; font-weight:700; margin-bottom:14px; font-size:1.02rem;
@@ -724,7 +768,7 @@
   /* Fork-choice cards "deal in" staggered on first render — the collapsed
      fan on initial reveal, and the single expanded card whenever a mood
      is picked, both benefit from the same flourish. */
-  .fork-stack-deck:not(.has-expanded) .fork-stack-card{ animation:forkCardDeal .4s ease-out backwards; }
+  .fork-stack-deck:not(.has-expanded) .fork-stack-card{ animation:forkCardDeal .5s var(--ease-bounce) backwards; }
   .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(1){ animation-delay:0ms; }
   .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(2){ animation-delay:120ms; }
   .fork-stack-deck:not(.has-expanded) .fork-stack-card:nth-child(3){ animation-delay:240ms; }
@@ -872,6 +916,7 @@
   .party-invite-card{
     background:var(--card); border-radius:20px; padding:24px 22px; max-width:360px; width:100%;
     position:relative; text-align:center;
+    animation:modalPopIn .4s var(--ease-bounce) backwards;
   }
   .party-invite-card h3{ font-family:'Fredoka',sans-serif; margin:0 0 14px; }
   .party-invite-close{
@@ -1388,13 +1433,13 @@
   <div class="sky-band-scrim"></div>
 </div>
 
-<header class="hero">
+<header class="hero reveal-on-scroll">
   <span class="eyebrow">Live preview</span>
   <h1>Real venues. Real choices. Real adventure.</h1>
   <p>Every stop offers you three real, contrasting nearby venues, pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral, just choose your own adventure.</p>
 </header>
 
-<section class="adventure-section" id="adventure-section">
+<section class="adventure-section reveal-on-scroll" id="adventure-section">
   <div class="adventure-inner">
     <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
     <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
@@ -2475,13 +2520,13 @@
     const accordionHtml = `
       <div class="adv-accordion" id="adv-accordion">
         ${items.map((item, i) => `
-          <div class="adv-acc-item ${item.colorClass} ${item.kindClass}">
+          <div class="adv-acc-item ${item.colorClass} ${item.kindClass}" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${Math.min(i, 6) * 70}ms;">
             <button type="button" class="adv-acc-header" onclick="toggleAdvAccordion(${i})">
               <span class="adv-acc-emoji">${item.emoji}</span>
               <span class="adv-acc-name">${item.name}</span>
               <span class="adv-acc-chevron">›</span>
             </button>
-            <div class="adv-acc-body" hidden>${item.bodyHtml}</div>
+            <div class="adv-acc-body-wrap"><div class="adv-acc-body">${item.bodyHtml}</div></div>
           </div>
         `).join('')}
       </div>
@@ -2510,10 +2555,11 @@
     const container = document.getElementById('adv-accordion');
     if (!container) return; // picker no longer on screen — nothing to do
     advAccordion.openIndex = index;
+    // Visibility/animation is entirely CSS-driven (.adv-acc-item.open, see
+    // the grid-rows trick above) — this just flips the class, no direct
+    // style/attribute manipulation needed.
     container.querySelectorAll('.adv-acc-item').forEach((el, i) => {
-      const bodyEl = el.querySelector('.adv-acc-body');
-      if (i === index) { bodyEl.removeAttribute('hidden'); el.classList.add('open'); }
-      else { bodyEl.setAttribute('hidden', ''); el.classList.remove('open'); }
+      el.classList.toggle('open', i === index);
     });
   }
 
@@ -4902,7 +4948,30 @@
     closeProfile();
   });
 
+  // Generic "build in as it scrolls into view" — safe to call repeatedly
+  // (e.g. after a dynamic re-render adds new .reveal-on-scroll elements);
+  // each element is only ever observed/revealed once, tracked via the
+  // data-reveal-bound attribute rather than a module-level Set so it works
+  // correctly even across full innerHTML replaces that create fresh nodes.
+  let scrollRevealObserver = null;
+  function initScrollReveal() {
+    if (!scrollRevealObserver) {
+      scrollRevealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('revealed');
+          scrollRevealObserver.unobserve(entry.target);
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+    }
+    document.querySelectorAll('.reveal-on-scroll:not([data-reveal-bound])').forEach((el) => {
+      el.setAttribute('data-reveal-bound', '');
+      scrollRevealObserver.observe(el);
+    });
+  }
+
   initAuth();
+  initScrollReveal();
 </script>
 
 <!-- No callback needed — the persistent progress map and next-venue map
