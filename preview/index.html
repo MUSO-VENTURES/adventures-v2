@@ -433,7 +433,11 @@
   .signin-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .signin-form input{
     background:var(--card); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
-    padding:8px 12px; border-radius:999px; font-family:'Nunito',sans-serif; font-size:0.85rem;
+    padding:8px 12px; border-radius:999px; font-family:'Nunito',sans-serif;
+    /* 16px flat, not rem-based — anything smaller makes iOS Safari
+       auto-zoom the whole page on focus (and zoom back out on blur),
+       which is the "wonky/glitchy" jump on tapping this field. */
+    font-size:16px;
     width:min(200px, 52vw);
   }
   .signin-form input:focus{ outline:none; border-color:var(--coral); }
@@ -1170,7 +1174,7 @@
   .review-star-btn.selected{ background:var(--coral); border-color:var(--coral); color:#fff; }
   .review-textarea{
     width:100%; border:2px solid rgba(var(--shadow-rgb),0.12); border-radius:12px; padding:10px 12px;
-    font-family:inherit; font-size:0.85rem; resize:vertical; min-height:52px; margin-bottom:12px;
+    font-family:inherit; font-size:16px; resize:vertical; min-height:52px; margin-bottom:12px;
     background:var(--cream); color:var(--ink); box-sizing:border-box;
   }
   .review-prompt-actions{ display:flex; gap:10px; align-items:center; }

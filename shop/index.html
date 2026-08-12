@@ -69,7 +69,10 @@
   .signin-form{ display:flex; gap:6px; }
   .signin-form input{
     padding:8px 12px; border-radius:999px; border:1.5px solid rgba(var(--shadow-rgb),0.15);
-    font-family:'Nunito', sans-serif; font-size:0.85rem; width:170px;
+    font-family:'Nunito', sans-serif; width:170px;
+    /* 16px flat — anything smaller triggers iOS Safari's auto-zoom on
+       focus (and zoom back out on blur), which reads as a glitchy jump. */
+    font-size:16px;
   }
   .signin-form input:focus{ outline:none; border-color:var(--teal); }
   .signin-btn{
