@@ -609,12 +609,14 @@
   }
   .adv-acc-item.open .adv-acc-body{ padding:16px 18px; opacity:1; transform:translateY(0); }
   .adv-acc-body .rvc-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
-  .adv-acc-body .rvc-stopcount{ display:flex; gap:8px; margin-top:12px; }
+  .adv-acc-body .rvc-stopcount{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .adv-acc-body .rvc-sc-pill{
     background:rgba(var(--shadow-rgb),0.08); border:1.5px solid rgba(var(--shadow-rgb),0.15); color:var(--ink);
     padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
   }
   .adv-acc-body .rvc-sc-pill.active{ background:var(--coral); color:#fff; border-color:var(--coral); }
+  .adv-acc-body .rvc-sc-pill.locked{ background:transparent; border-style:dashed; opacity:0.6; }
+  .adv-acc-body .rvc-sc-pill.locked:hover{ opacity:0.85; }
   .adv-acc-body .rvc-btn, .adv-acc-body .start-adv-btn{
     display:block; width:100%; margin-top:14px; background:var(--coral); color:#fff; border:none;
     padding:11px 20px; border-radius:12px; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -3072,20 +3074,22 @@
     // containerId identifies which accordion (if any) this card's pills
     // should hold open on interaction — null for the featured card, which
     // isn't part of any accordion/auto-cycle timer at all.
-    const themeToItem = (t, containerId) => ({
-      emoji: t.emoji,
-      name: t.title,
-      colorClass: t.colorClass,
-      kindClass: '',
-      bodyHtml: `
-        <div class="rvc-desc">${t.desc}</div>
-        <div class="rvc-stopcount">
-          <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 3, this, ${containerId ? `'${containerId}'` : 'null'})">3 stops</button>
-          <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 2, this, ${containerId ? `'${containerId}'` : 'null'})">2 stops</button>
-        </div>
-        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
-      `,
-    });
+    const themeToItem = (t, containerId) => {
+      const stopKey = t.venueTheme || 'default';
+      return {
+        emoji: t.emoji,
+        name: t.title,
+        colorClass: t.colorClass,
+        kindClass: '',
+        bodyHtml: `
+          <div class="rvc-desc">${t.desc}</div>
+          <div class="rvc-stopcount" data-stopkey="${stopKey}" data-container="${containerId || ''}">
+            ${stopCountPillsHtml(stopKey, containerId)}
+          </div>
+          <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
+        `,
+      };
+    };
     const routeToItem = (r) => {
       const total = counts[r.id];
       const capped = total > unlockedStopCount;
@@ -3145,9 +3149,9 @@
 
   // ---------- ADVENTURE PICKER ACCORDION: AUTO-CYCLE ----------
   // Rows start collapsed. Left untouched for 5s, the accordion begins
-  // auto-cycling top to bottom, opening one row at a time for 3s each,
+  // auto-cycling top to bottom, opening one row at a time for 30s each,
   // looping indefinitely. Clicking a row jumps straight to it (skipping
-  // wherever the cycle was) and holds it open for the same 3s beat before
+  // wherever the cycle was) and holds it open for the same 30s beat before
   // resuming from there — clicking doesn't stop the cycle for good, it just
   // re-centers it on whatever the player is looking at right now.
   // Keyed by container id (there are now two independent accordions,
@@ -3155,6 +3159,7 @@
   // one shared global, so each cycles on its own timer without one
   // resetting the other.
   const advAccordions = new Map();
+  const ADV_ACCORDION_STEP_MS = 30000;
 
   function advAccordionClearTimers(containerId) {
     const state = advAccordions.get(containerId);
@@ -3183,33 +3188,69 @@
     const state = advAccordions.get(containerId);
     if (!state || !document.getElementById(containerId)) return; // picker torn down mid-timer (adventure started, tab changed) — stop the chain
     advAccordionSetOpen(containerId, index);
-    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (index + 1) % state.count), 3000);
+    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (index + 1) % state.count), ADV_ACCORDION_STEP_MS);
+  }
+
+  // Expanding/collapsing rows changes the "Choose Your Own Adventure"
+  // accordion's height, which visually jostles the "Curated Adventures"
+  // section below it. Pausing the cycle once the accordion is mostly
+  // scrolled offstage stops that jostle from disturbing whatever the player
+  // is actually reading, and resuming once it's mostly back onstage picks
+  // the cycle back up. A single shared IntersectionObserver drives both
+  // accordions; 25%/75% thresholds (rather than one 50% line) give a
+  // hysteresis band so a container sitting right at the edge doesn't
+  // flicker pause/resume as the page scrolls.
+  const advAccordionVisibilityObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const containerId = entry.target.id;
+      if (entry.intersectionRatio >= 0.75) advAccordionResume(containerId);
+      else if (entry.intersectionRatio <= 0.25) advAccordionPause(containerId);
+    }
+  }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+
+  function advAccordionPause(containerId) {
+    const state = advAccordions.get(containerId);
+    if (!state || state.paused) return;
+    state.paused = true;
+    advAccordionClearTimers(containerId);
+  }
+
+  function advAccordionResume(containerId) {
+    const state = advAccordions.get(containerId);
+    if (!state || !state.paused) return;
+    state.paused = false;
+    if (!document.getElementById(containerId)) return;
+    advAccordionStep(containerId, state.openIndex >= 0 ? state.openIndex : 0);
   }
 
   function initAdvAccordion(containerId, count) {
     advAccordionClearTimers(containerId);
-    const state = { count, openIndex: -1, idleTimer: null, stepTimer: null };
+    const state = { count, openIndex: -1, idleTimer: null, stepTimer: null, paused: false };
     advAccordions.set(containerId, state);
     if (!count) return;
+    const container = document.getElementById(containerId);
+    if (container) advAccordionVisibilityObserver.observe(container);
     state.idleTimer = setTimeout(() => advAccordionStep(containerId, 0), 5000);
   }
 
   window.toggleAdvAccordion = function (containerId, index) {
     advAccordionClearTimers(containerId);
+    const state = advAccordions.get(containerId);
+    if (state) state.paused = false; // a manual click means it's on screen
     advAccordionStep(containerId, index);
   };
 
   // Interacting with the stop-count pills inside the currently-open card
-  // shouldn't get yanked away mid-decision by the 3s auto-advance — this
-  // just restarts that card's 3s hold rather than clearing it outright, so
-  // the cycle still resumes on its own once the player stops touching it.
+  // shouldn't get yanked away mid-decision by the auto-advance — this just
+  // restarts that card's hold rather than clearing it outright, so the
+  // cycle still resumes on its own once the player stops touching it.
   // containerId is undefined for the featured cards' own pills (they're not
   // part of any accordion/timer), in which case this is a no-op.
   function advAccordionHoldCurrent(containerId) {
     const state = containerId ? advAccordions.get(containerId) : null;
-    if (!state || state.openIndex < 0 || !document.getElementById(containerId)) return;
+    if (!state || state.openIndex < 0 || state.paused || !document.getElementById(containerId)) return;
     clearTimeout(state.stepTimer);
-    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (state.openIndex + 1) % state.count), 3000);
+    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (state.openIndex + 1) % state.count), ADV_ACCORDION_STEP_MS);
   }
 
   // ---------- START A REAL-VENUE ADVENTURE ----------
@@ -3230,6 +3271,41 @@
     btnEl.parentElement.querySelectorAll('.rvc-sc-pill').forEach((el) => el.classList.remove('active'));
     btnEl.classList.add('active');
     advAccordionHoldCurrent(containerId);
+  };
+
+  // Every adventure card offers 2-5 stops. 2 and 3 are always free; 4 and 5
+  // stay locked (dashed pill, padlock) until the player's unlocked_stop_count
+  // reaches them via the same extra_stops unlock (Level 3, or 200 coins) that
+  // already gates bonus stops on curated routes — see unlock-feature/index.ts.
+  // A standalone function (not nested in renderRoutePicker) so it can be
+  // re-run on demand after an unlock without a full picker re-render.
+  function stopCountPillsHtml(key, containerId) {
+    const unlockedStopCount = currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
+    const chosen = stopCountChoices[key] ?? 3;
+    const cIdArg = containerId ? `'${containerId}'` : 'null';
+    return [2, 3, 4, 5].map((n) => {
+      if (n > unlockedStopCount) {
+        return `<button type="button" class="rvc-sc-pill locked" onclick="handleLockedStopPill('${key}', ${n}, ${cIdArg})" title="Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock up to ${EXTRA_STOPS_STOP_COUNT} stops">🔒 ${n} stops</button>`;
+      }
+      return `<button type="button" class="rvc-sc-pill${chosen === n ? ' active' : ''}" onclick="setStopCountChoice('${key}', ${n}, this, ${cIdArg})">${n} stops</button>`;
+    }).join('');
+  }
+
+  // Re-renders just the pill rows in place (not the whole picker), so an
+  // unlock triggered from deep in an auto-cycling accordion doesn't reset
+  // scroll position, open card, or timers — see handleLockedStopPill().
+  function refreshStopCountPills() {
+    document.querySelectorAll('.rvc-stopcount[data-stopkey]').forEach((el) => {
+      el.innerHTML = stopCountPillsHtml(el.getAttribute('data-stopkey'), el.getAttribute('data-container') || null);
+    });
+  }
+
+  window.handleLockedStopPill = async function (key, n, containerId) {
+    advAccordionHoldCurrent(containerId);
+    if (!currentSession) { document.getElementById('signin-email')?.focus(); return; }
+    await window.unlockFeature('extra_stops');
+    if ((currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT) >= n) stopCountChoices[key] = n;
+    refreshStopCountPills();
   };
 
   // Canonical entry point for starting a real-venue adventure — called both
