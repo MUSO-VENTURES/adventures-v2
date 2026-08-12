@@ -132,6 +132,12 @@
     position:absolute; inset:0; z-index:3; pointer-events:none;
     background:linear-gradient(180deg, transparent 0%, transparent calc(100% - 65px), var(--cream) 100%);
   }
+  /* Same idea, inverted — softens the parallax's top edge into whatever
+     sits above it (the nav) instead of a hard cut there too. */
+  .sky-band-scrim-top{
+    position:absolute; inset:0; z-index:3; pointer-events:none;
+    background:linear-gradient(180deg, var(--cream) 0%, transparent 65px, transparent 100%);
+  }
 
   /* ---------- BOTTOM NAV ----------
      Fixed (not absolute like home-concept.html's phone-mock version —
@@ -1477,6 +1483,7 @@
     <div class="px-spacer" id="px-spacer"></div>
   </div>
   <div class="sky-band-scrim"></div>
+  <div class="sky-band-scrim-top"></div>
 </div>
 
 <header class="hero reveal-on-scroll">
