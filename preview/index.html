@@ -3139,12 +3139,16 @@
       <div class="picker-group-label">Choose Your Own Adventure</div>
       ${featuredCardHtml(themeToItem(featuredTheme, null), 0)}
       ${accordionHtml('adv-accordion-themes', otherThemes.map((t) => themeToItem(t, 'adv-accordion-themes')))}
-      <div class="picker-group-label">Curated Adventures</div>
-      ${featuredCardHtml(routeToItem(featuredRoute), 70)}
-      ${accordionHtml('adv-accordion-routes', otherRoutes.map(routeToItem))}
+      <div class="curated-adventures-group" id="curated-adventures-group">
+        <div class="picker-group-label">Curated Adventures</div>
+        ${featuredCardHtml(routeToItem(featuredRoute), 70)}
+        ${accordionHtml('adv-accordion-routes', otherRoutes.map(routeToItem))}
+      </div>
     `;
     initAdvAccordion('adv-accordion-themes', otherThemes.length);
     initAdvAccordion('adv-accordion-routes', otherRoutes.length);
+    const curatedGroupEl = document.getElementById('curated-adventures-group');
+    if (curatedGroupEl) curatedGroupVisibilityObserver.observe(curatedGroupEl);
   }
 
   // ---------- ADVENTURE PICKER ACCORDION: AUTO-CYCLE ----------
@@ -3191,23 +3195,6 @@
     state.stepTimer = setTimeout(() => advAccordionStep(containerId, (index + 1) % state.count), ADV_ACCORDION_STEP_MS);
   }
 
-  // Expanding/collapsing rows changes the "Choose Your Own Adventure"
-  // accordion's height, which visually jostles the "Curated Adventures"
-  // section below it. Pausing the cycle once the accordion is mostly
-  // scrolled offstage stops that jostle from disturbing whatever the player
-  // is actually reading, and resuming once it's mostly back onstage picks
-  // the cycle back up. A single shared IntersectionObserver drives both
-  // accordions; 25%/75% thresholds (rather than one 50% line) give a
-  // hysteresis band so a container sitting right at the edge doesn't
-  // flicker pause/resume as the page scrolls.
-  const advAccordionVisibilityObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      const containerId = entry.target.id;
-      if (entry.intersectionRatio >= 0.75) advAccordionResume(containerId);
-      else if (entry.intersectionRatio <= 0.25) advAccordionPause(containerId);
-    }
-  }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
-
   function advAccordionPause(containerId) {
     const state = advAccordions.get(containerId);
     if (!state || state.paused) return;
@@ -3223,13 +3210,44 @@
     advAccordionStep(containerId, state.openIndex >= 0 ? state.openIndex : 0);
   }
 
+  // The "Curated Adventures" accordion pauses on its own visibility, same as
+  // before: once it's mostly scrolled offstage there's no point burning
+  // cycles animating a row nobody's looking at. 25%/75% thresholds (rather
+  // than one 50% line) give a hysteresis band so a container sitting right
+  // at the edge doesn't flicker pause/resume as the page scrolls.
+  const advAccordionVisibilityObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const containerId = entry.target.id;
+      if (entry.intersectionRatio >= 0.75) advAccordionResume(containerId);
+      else if (entry.intersectionRatio <= 0.25) advAccordionPause(containerId);
+    }
+  }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+
+  // The "Choose Your Own Adventure" accordion (adv-accordion-themes) instead
+  // pauses based on whether "Curated Adventures" is on screen below it —
+  // expanding/collapsing rows changes its height, which jostles the curated
+  // section whenever it's actually in view. Pausing the moment curated
+  // adventures appear, and resuming the moment they scroll away, stops that
+  // jostle from ever disturbing what the player is currently reading.
+  const curatedGroupVisibilityObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) advAccordionPause('adv-accordion-themes');
+      else advAccordionResume('adv-accordion-themes');
+    }
+  });
+
   function initAdvAccordion(containerId, count) {
     advAccordionClearTimers(containerId);
     const state = { count, openIndex: -1, idleTimer: null, stepTimer: null, paused: false };
     advAccordions.set(containerId, state);
     if (!count) return;
-    const container = document.getElementById(containerId);
-    if (container) advAccordionVisibilityObserver.observe(container);
+    // adv-accordion-themes' pause/resume is driven entirely by
+    // curatedGroupVisibilityObserver (see renderRoutePicker()) instead of
+    // its own visibility, so it isn't double-registered here.
+    if (containerId !== 'adv-accordion-themes') {
+      const container = document.getElementById(containerId);
+      if (container) advAccordionVisibilityObserver.observe(container);
+    }
     state.idleTimer = setTimeout(() => advAccordionStep(containerId, 0), 5000);
   }
 
