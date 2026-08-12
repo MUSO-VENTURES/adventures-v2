@@ -3149,9 +3149,9 @@
 
   // ---------- ADVENTURE PICKER ACCORDION: AUTO-CYCLE ----------
   // Rows start collapsed. Left untouched for 5s, the accordion begins
-  // auto-cycling top to bottom, opening one row at a time for 30s each,
+  // auto-cycling top to bottom, opening one row at a time for 15s each,
   // looping indefinitely. Clicking a row jumps straight to it (skipping
-  // wherever the cycle was) and holds it open for the same 30s beat before
+  // wherever the cycle was) and holds it open for the same 15s beat before
   // resuming from there — clicking doesn't stop the cycle for good, it just
   // re-centers it on whatever the player is looking at right now.
   // Keyed by container id (there are now two independent accordions,
@@ -3159,7 +3159,7 @@
   // one shared global, so each cycles on its own timer without one
   // resetting the other.
   const advAccordions = new Map();
-  const ADV_ACCORDION_STEP_MS = 30000;
+  const ADV_ACCORDION_STEP_MS = 15000;
 
   function advAccordionClearTimers(containerId) {
     const state = advAccordions.get(containerId);
