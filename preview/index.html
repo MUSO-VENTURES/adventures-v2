@@ -3241,15 +3241,33 @@
   // The "Choose Your Own Adventure" accordion (adv-accordion-themes) instead
   // pauses based on whether "Curated Adventures" is on screen below it —
   // expanding/collapsing rows changes its height, which jostles the curated
-  // section whenever it's actually in view. Pausing the moment curated
-  // adventures appear, and resuming the moment they scroll away, stops that
-  // jostle from ever disturbing what the player is currently reading.
+  // section whenever it's actually in view.
+  //
+  // Two bugs to avoid here, both of which previously froze the accordion
+  // right after its first card opened:
+  // 1. The default isIntersecting (0-threshold) fires as soon as a single
+  //    pixel is visible — on most viewports the curated group already peeks
+  //    in at the bottom of the screen even at the top of the page, so it
+  //    read as "present" almost immediately.
+  // 2. entry.intersectionRatio is relative to the CURATED GROUP's own
+  //    height, not the viewport's — since that group (featured card +
+  //    accordion) can be taller than the screen, its own ratio climbs slowly
+  //    while scrolling and doesn't track "majority of the page" the way the
+  //    request actually means it.
+  // Coverage is computed directly instead: intersectionRect height over
+  // viewport height is the fraction of the *screen* the curated group
+  // occupies right now. Pause once that's >=50% ("majority of the page"),
+  // resume once it's back down to a sliver (<=10%, "off the staging area"),
+  // with a gap between so it doesn't flicker mid-scroll. A dense threshold
+  // list just makes the observer callback fire often enough during scroll
+  // to keep that coverage figure current.
   const curatedGroupVisibilityObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (entry.isIntersecting) advAccordionPause('adv-accordion-themes');
-      else advAccordionResume('adv-accordion-themes');
+      const coverage = entry.intersectionRect.height / window.innerHeight;
+      if (coverage >= 0.5) advAccordionPause('adv-accordion-themes');
+      else if (coverage <= 0.1) advAccordionResume('adv-accordion-themes');
     }
-  });
+  }, { threshold: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] });
 
   function initAdvAccordion(containerId, count) {
     advAccordionClearTimers(containerId);
