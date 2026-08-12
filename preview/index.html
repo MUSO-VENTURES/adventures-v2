@@ -512,9 +512,18 @@
     transition:transform .3s var(--ease-bounce);
   }
   .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
+  .minigame-card.locked{ opacity:0.75; }
+  .minigame-card.locked .minigame-emoji{ filter:grayscale(1); }
   .minigame-emoji{ font-size:2rem; margin-bottom:8px; }
   .minigame-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; margin-bottom:4px; }
-  .minigame-status{ font-size:0.75rem; opacity:0.55; }
+  .minigame-status{ font-size:0.75rem; opacity:0.55; margin-bottom:10px; }
+  .minigame-play-btn, .minigame-unlock-btn{
+    border:none; border-radius:999px; padding:8px 16px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.78rem; cursor:pointer; transition:transform .2s var(--ease-bounce);
+  }
+  .minigame-play-btn:hover, .minigame-unlock-btn:hover{ transform:scale(1.05); }
+  .minigame-play-btn{ background:var(--coral); color:#fff; }
+  .minigame-unlock-btn{ background:var(--tangerine); color:var(--ink); }
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
@@ -1469,30 +1478,16 @@
   </div>
 </section>
 
-<!-- Mini Games: quick, optional play elements droppable into any adventure
-     for bonus XP/coins. Structural placeholder for now — none of these are
-     wired to real gameplay yet, see conversation for what ships first. -->
+<!-- Mini Games: quick, optional play elements droppable into any adventure,
+     unlocked via gameplay milestones or bought with Adventure Coins. Real
+     game content ships separately — this renders unlock state (Play vs
+     Locked) via renderMinigames() below; gameplay itself is a stub
+     (playMinigame()) until each game is ready to wire in. -->
 <section class="minigames-section reveal-on-scroll" id="minigames-section">
   <div class="adventure-inner">
     <h2>🎮 Mini Games</h2>
-    <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins. More on the way.</p>
-    <div class="minigames-grid">
-      <div class="minigame-card">
-        <div class="minigame-emoji">❓</div>
-        <div class="minigame-title">Trivia Break</div>
-        <div class="minigame-status">Coming soon</div>
-      </div>
-      <div class="minigame-card">
-        <div class="minigame-emoji">📸</div>
-        <div class="minigame-title">Photo Challenge</div>
-        <div class="minigame-status">Coming soon</div>
-      </div>
-      <div class="minigame-card">
-        <div class="minigame-emoji">🔍</div>
-        <div class="minigame-title">Scavenger Clue</div>
-        <div class="minigame-status">Coming soon</div>
-      </div>
-    </div>
+    <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
+    <div class="minigames-grid" id="minigames-grid"></div>
   </div>
 </section>
 
@@ -2267,7 +2262,7 @@
   // after sign-in, after any unlock, and after every check-in, since any of
   // those can change xp/level/coins and/or award a badge.
   async function refreshProfileAndBadges() {
-    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); renderProfileSheetHeader(); return; }
+    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); renderProfileSheetHeader(); refreshMinigameUnlocks(); return; }
     currentProfile = await fetchOrCreateProfile(currentSession.user.id, currentSession.user.email);
     const { data } = await supabaseClient
       .from('profile_badges')
@@ -2275,7 +2270,70 @@
       .eq('profile_id', currentSession.user.id);
     currentBadgeKeys = new Set((data || []).map(r => r.badge_key));
     renderProfileSheetHeader();
+    refreshMinigameUnlocks();
   }
+
+  // ---------- MINI GAMES ----------
+  // Mirrors the backend's MINIGAME_REGISTRY (minigames/index.ts) for
+  // display purposes only — the actual free-at-level/coin-cost enforcement
+  // happens server-side, this is just copy. 'trivia' unlocks automatically
+  // on a player's first check-in (checkin/index.ts), never bought here.
+  const MINIGAMES_CONFIG = [
+    { key: 'trivia', emoji: '❓', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in' },
+    { key: 'photo_challenge', emoji: '📸', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150 },
+    { key: 'scavenger_clue', emoji: '🔍', title: 'Scavenger Clue', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250 },
+  ];
+  let unlockedMinigameKeys = new Set();
+
+  async function refreshMinigameUnlocks() {
+    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); return; }
+    const { res, data } = await postEdgeFunction('minigames', { action: 'listUnlocks' });
+    if (res.ok) unlockedMinigameKeys = new Set((data.unlocks || []).map((u) => u.minigame_key));
+    renderMinigames();
+  }
+
+  function renderMinigames() {
+    const grid = document.getElementById('minigames-grid');
+    if (!grid) return;
+    grid.innerHTML = MINIGAMES_CONFIG.map((g) => {
+      const unlocked = unlockedMinigameKeys.has(g.key);
+      if (unlocked) {
+        return `
+          <div class="minigame-card">
+            <div class="minigame-emoji">${g.emoji}</div>
+            <div class="minigame-title">${g.title}</div>
+            <button type="button" class="minigame-play-btn" onclick="playMinigame('${g.key}')">▶ Play</button>
+          </div>
+        `;
+      }
+      return `
+        <div class="minigame-card locked">
+          <div class="minigame-emoji">${g.emoji}</div>
+          <div class="minigame-title">${g.title}</div>
+          <div class="minigame-status">🔒 ${g.lockedHint}</div>
+          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  window.unlockMinigame = async function (key) {
+    if (!currentSession) { alert('Sign in first to unlock mini games.'); return; }
+    const { res, data } = await postEdgeFunction('minigames', { action: 'unlock', minigameKey: key });
+    if (!res.ok) { alert(data.error || 'Could not unlock that right now.'); return; }
+    await refreshProfileAndBadges(); // coin balance changed, also re-runs refreshMinigameUnlocks()
+    const g = MINIGAMES_CONFIG.find((m) => m.key === key);
+    showToast(`🎉 Unlocked ${g?.title || 'mini game'}!`);
+  };
+
+  // Real gameplay for each mini game ships separately from this app (see
+  // conversation) — this is the integration point it plugs into once
+  // ready, one function per game keyed the same as MINIGAMES_CONFIG/the
+  // backend registry.
+  window.playMinigame = function (key) {
+    const g = MINIGAMES_CONFIG.find((m) => m.key === key);
+    alert(`${g?.title || 'This mini game'} is launching soon!`);
+  };
 
   // Keeps the nav-dock avatar in sync with currentProfile. Name/level/
   // stats/trophy case/avatar etc. all live inside the embedded
