@@ -546,46 +546,10 @@
   .app-view{ display:none; }
   .app-view.active{ display:block; }
 
-  /* ---------- HOME: LANDING CARDS ----------
-     The whole "just a launching ground" ask — two big colored CTAs and
-     nothing else below the hero. Each is a real <button>, not a link, so
-     the whole card is tappable, not just its text. */
-  .landing-cards{
-    max-width:720px; margin:0 auto; padding:0 6vw 6vh;
-    display:grid; grid-template-columns:1fr 1fr; gap:16px;
-  }
-  @media (max-width:640px){ .landing-cards{ grid-template-columns:1fr; } }
-  .landing-card{
-    border:none; border-radius:20px; padding:26px 22px; text-align:left; cursor:pointer;
-    display:flex; flex-direction:column; gap:6px; font-family:'Nunito',sans-serif;
-    box-shadow:0 8px 24px rgba(var(--shadow-rgb),0.12); transition:transform .25s var(--ease-bounce);
-  }
-  .landing-card:hover{ transform:translateY(-4px) scale(1.02); }
-  .landing-card-emoji{ font-size:1.8rem; }
-  .landing-card-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.15rem; }
-  .landing-card-desc{ font-size:0.85rem; opacity:0.92; line-height:1.4; }
-  /* Green, matching the ask exactly — reuses the same green already
-     established for the Dog Friendly/Outdoor adventure themes. */
-  .start-adventure-card{ background:linear-gradient(135deg, #2f8f5b, #4fbf7f); color:#fff; }
-  /* Coral: complements the green (roughly opposite on the color wheel)
-     and is already this app's own primary brand gradient. */
-  .games-card{ background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; }
-
-  /* Compact teaser chips inside the Games card — "little teasers that make
-     the viewer want to click." stopPropagation() on each keeps a chip tap
-     from also triggering the parent card's own onclick (which navigates to
-     the full Games page instead of opening a single game's detail). */
-  .landing-game-teasers{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-  .landing-teaser-chip{
-    display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.35);
-    border-radius:999px; padding:5px 12px 5px 8px; color:#fff; font-family:'Nunito',sans-serif;
-    font-size:0.75rem; font-weight:700; cursor:pointer; transition:transform .2s var(--ease-bounce), background .2s ease;
-  }
-  .landing-teaser-chip:hover{ background:rgba(255,255,255,0.34); transform:scale(1.05); }
-  .landing-teaser-emoji{ font-size:0.95rem; }
-
-  /* A teaser chip "scales to full size" into this — reuses the existing
-     .photobooth-overlay/.photobooth-card pop-in, just centered text. */
+  /* Clicking a .minigame-card on the Games page "scales to full size" into
+     this — reuses the existing .photobooth-overlay/.photobooth-card
+     pop-in, just centered text. */
+  .minigame-card{ cursor:pointer; }
   .minigame-detail-card{ text-align:center; max-width:360px; }
   .minigame-detail-close{ position:absolute; top:14px; right:14px; }
   .minigame-detail-emoji{ font-size:3.4rem; margin-bottom:6px; }
@@ -935,6 +899,25 @@
     background:rgba(var(--shadow-rgb),0.06); position:relative;
   }
   .progress-map-wrap[hidden]{ display:none; }
+
+  /* ---------- MAPS PAGE ---------- */
+  .maps-filter-row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .maps-filter-pill{
+    background:rgba(var(--shadow-rgb),0.06); border:1.5px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
+    padding:7px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
+    font-size:0.8rem; cursor:pointer; transition:all .2s var(--ease-bounce);
+  }
+  .maps-filter-pill.active{ background:var(--coral); border-color:var(--coral); color:#fff; }
+  .maps-map-wrap{
+    width:100%; aspect-ratio:4/3; border-radius:16px; overflow:hidden;
+    background:rgba(var(--shadow-rgb),0.06);
+  }
+  #maps-map{ width:100%; height:100%; }
+  .maps-legend{ display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:12px; }
+  .maps-legend-item{ display:flex; align-items:center; gap:6px; font-size:0.8rem; opacity:0.8; }
+  .maps-legend-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .maps-empty{ text-align:center; opacity:0.6; font-size:0.88rem; padding:24px 0; }
+  .maps-empty[hidden]{ display:none; }
   #adventure-progress-map{ width:100%; height:100%; }
   .progress-map-hint{
     position:absolute; left:0; right:0; bottom:0; padding:10px 14px;
@@ -1517,7 +1500,7 @@
 </div>
 
 <nav>
-  <a href="#" onclick="event.preventDefault(); showView('home');" aria-label="MUSO Adventures home">
+  <a href="#" onclick="event.preventDefault(); showView('adventures');" aria-label="MUSO Adventures home">
     <img class="logo-img" src="../assets/MUSO-ADVENTURES-LOGO.png" alt="MUSO Adventures">
   </a>
 </nav>
@@ -1547,28 +1530,14 @@
      wired up in this file, so this is client-side hash routing rather than
      a physically separate page. Only one .app-view is ever visible
      (display:none/block toggled by .active) at a time. -->
-<div class="app-view active" data-view="home" id="view-home">
+<!-- Adventures is the home view now — hero lives at its top, no separate
+     launch-pad screen or Home tab in between (see showView()). -->
+<div class="app-view active" data-view="adventures" id="view-adventures">
   <header class="hero reveal-on-scroll">
     <h1>Real venues. Real choices. Real adventure.</h1>
     <p>Every stop offers you three real, contrasting nearby venues, pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral, just choose your own adventure.</p>
   </header>
 
-  <div class="landing-cards reveal-on-scroll">
-    <button type="button" class="landing-card start-adventure-card" onclick="showView('adventures')">
-      <div class="landing-card-emoji">🧭</div>
-      <div class="landing-card-title">Start a MUSO Adventure</div>
-      <div class="landing-card-desc">Real venues, real choices, three picks at every stop.</div>
-    </button>
-    <button type="button" class="landing-card games-card" onclick="showView('games')">
-      <div class="landing-card-emoji">🎮</div>
-      <div class="landing-card-title">Games</div>
-      <div class="landing-card-desc">Quick bonus games that pair with any adventure for extra XP and coins.</div>
-      <div class="landing-game-teasers" id="landing-game-teasers"></div>
-    </button>
-  </div>
-</div>
-
-<div class="app-view" data-view="adventures" id="view-adventures">
   <section class="adventure-section">
     <div class="adventure-inner">
       <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
@@ -1588,6 +1557,17 @@
       </div>
     </div>
   </section>
+
+  <!-- Past adventures: roster, ratings, badges, venues, photos — see
+       renderPastAdventures() below. Independent of the active-adventure
+       engine above; loads once per view, not tied to realtime. -->
+  <section class="adventure-section past-adventures-section">
+    <div class="adventure-inner">
+      <h2>🗂️ Past Adventures</h2>
+      <p class="adventure-sub">Everywhere you've been, who you went with, and what you found.</p>
+      <div id="past-adventures-list"></div>
+    </div>
+  </section>
 </div>
 
 <!-- Mini Games: quick, optional play elements droppable into any adventure,
@@ -1601,6 +1581,28 @@
       <h2>🎮 Games</h2>
       <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
       <div class="minigames-grid" id="minigames-grid"></div>
+    </div>
+  </section>
+</div>
+
+<!-- Maps: color-coded pins per past adventure, a "Master View" aggregating
+     all of them, and a default filter to just the active adventure while
+     one's in progress — see renderMapsView()/setMapsFilter() below. Scoped
+     to the signed-in player's own adventure history, not a global map of
+     every player — see conversation for why. -->
+<div class="app-view" data-view="maps" id="view-maps">
+  <section class="adventure-section">
+    <div class="adventure-inner">
+      <h2>🗺️ Maps</h2>
+      <p class="adventure-sub" id="maps-sub">Every adventure you've taken, mapped out.</p>
+      <div class="maps-filter-row" id="maps-filter-row">
+        <button type="button" class="maps-filter-pill active" data-filter="current" onclick="setMapsFilter('current')">📍 Current Adventure</button>
+        <button type="button" class="maps-filter-pill" data-filter="all" onclick="setMapsFilter('all')">🗂️ All My Adventures</button>
+        <button type="button" class="maps-filter-pill" data-filter="master" onclick="setMapsFilter('master')">🌎 Master View</button>
+      </div>
+      <div class="maps-map-wrap"><div id="maps-map"></div></div>
+      <div class="maps-legend" id="maps-legend"></div>
+      <div class="maps-empty" id="maps-empty" hidden></div>
     </div>
   </section>
 </div>
@@ -1660,13 +1662,17 @@
     <iframe id="profile-sheet-iframe" class="profile-sheet-iframe" title="Profile"></iframe>
   </div>
   <div class="tabbar">
-    <div class="tab-item active" data-view="home" onclick="showView('home')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
-      <span>Home</span>
-    </div>
-    <div class="tab-item" data-view="adventures" onclick="showView('adventures')">
+    <div class="tab-item active" data-view="adventures" onclick="showView('adventures')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
       <span>Adventures</span>
+    </div>
+    <div class="tab-item" data-view="games" onclick="showView('games')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/><path d="M10 9l4.5 3-4.5 3z" fill="currentColor" stroke="none"/></svg>
+      <span>Games</span>
+    </div>
+    <div class="tab-item" data-view="maps" onclick="showView('maps')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3 3 5v16l6-2 6 2 6-2V3l-6 2-6-2Z"/><path d="M9 3v16"/><path d="M15 5v16"/></svg>
+      <span>Maps</span>
     </div>
     <div class="tab-item raised" id="nav-avatar-btn">
       <div class="nav-avatar-disc">
@@ -1674,10 +1680,6 @@
         <button type="button" class="nav-avatar-close" id="nav-avatar-close" aria-label="Close profile" hidden>&times;</button>
       </div>
       <span>Profile</span>
-    </div>
-    <div class="tab-item" data-view="games" onclick="showView('games')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/><path d="M10 9l4.5 3-4.5 3z" fill="currentColor" stroke="none"/></svg>
-      <span>Games</span>
     </div>
     <a class="tab-item" href="/shop/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 16V8"/><path d="M8 12l4-4 4 4"/></svg>
@@ -2423,28 +2425,16 @@
   let unlockedMinigameKeys = new Set();
 
   async function refreshMinigameUnlocks() {
-    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); renderLandingGameTeasers(); return; }
+    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); return; }
     const { res, data } = await postEdgeFunction('minigames', { action: 'listUnlocks' });
     if (res.ok) unlockedMinigameKeys = new Set((data.unlocks || []).map((u) => u.minigame_key));
     renderMinigames();
-    renderLandingGameTeasers();
   }
 
-  // Compact "little teasers" inside the Games landing card — tapping one
-  // scales it up into the full detail overlay (openMinigameDetail) rather
-  // than immediately navigating anywhere, so a player can preview a game
-  // without leaving the launch pad.
-  function renderLandingGameTeasers() {
-    const wrap = document.getElementById('landing-game-teasers');
-    if (!wrap) return;
-    wrap.innerHTML = MINIGAMES_CONFIG.map((g) => `
-      <button type="button" class="landing-teaser-chip" onclick="event.stopPropagation(); openMinigameDetail('${g.key}')">
-        <span class="landing-teaser-emoji">${g.emoji}</span>
-        <span>${g.title}</span>
-      </button>
-    `).join('');
-  }
-
+  // Tapping a card on the Games page "scales up" into this detail overlay
+  // (icon, description, Play/Unlock) rather than acting immediately —
+  // event.stopPropagation() on the card's own Play/Unlock button lets that
+  // button still act directly without also popping this open.
   window.openMinigameDetail = function (key) {
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);
     if (!g) return;
@@ -2468,6 +2458,148 @@
     document.getElementById('minigame-detail-overlay').setAttribute('hidden', '');
   };
 
+  // ---------- MAPS ----------
+  // Scoped to the signed-in player's own adventure history, not every
+  // player's — a public map of everywhere every player has physically
+  // been is a real privacy question, not something to default into
+  // silently. "Master View" here means "everywhere I've been, unified,"
+  // not "the whole app's global map." Revisit explicitly if a true
+  // cross-player world map is wanted later.
+  const MAPS_COLOR_PALETTE = ['#e8503f', '#0ea5a0', '#5b4b8a', '#f2994a', '#2f8f5b', '#1d6fa3', '#c9622f', '#7a3b69'];
+  let mapsMapInstance = null;
+  let mapsMarkers = [];
+  let mapsInfoWindow = null;
+  let mapsFilter = 'current';
+  let mapsAdventuresCache = null; // [{ id, title, status, stops:[{lat,lng,name}] }], own adventures only
+
+  async function fetchOwnAdventuresWithStops() {
+    if (mapsAdventuresCache) return mapsAdventuresCache;
+    if (!currentSession) return [];
+    const { data: partyRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', currentSession.user.id);
+    const partyIds = [...new Set((partyRows || []).map((r) => r.party_id))];
+    if (!partyIds.length) return [];
+    const { data: advRows } = await supabaseClient
+      .from('adventures')
+      .select('id, party_id, route_id, status, created_at, routes(title)')
+      .in('party_id', partyIds)
+      .order('created_at', { ascending: false });
+    const adventures = advRows || [];
+    if (!adventures.length) return [];
+    const routeIds = [...new Set(adventures.map((a) => a.route_id).filter(Boolean))];
+    const { data: stopRows } = await supabaseClient
+      .from('route_stops')
+      .select('id, route_id, stop_order, name, venue_id, venues(lat, lng, name)')
+      .in('route_id', routeIds);
+    const stopsByRoute = new Map();
+    for (const s of stopRows || []) {
+      if (!stopsByRoute.has(s.route_id)) stopsByRoute.set(s.route_id, []);
+      stopsByRoute.get(s.route_id).push(s);
+    }
+    mapsAdventuresCache = adventures
+      .map((a) => ({
+        id: a.id,
+        title: a.routes?.title || 'Adventure',
+        status: a.status,
+        stops: (stopsByRoute.get(a.route_id) || [])
+          .filter((s) => typeof s.venues?.lat === 'number' && typeof s.venues?.lng === 'number')
+          .map((s) => ({ lat: s.venues.lat, lng: s.venues.lng, name: s.venues.name || s.name })),
+      }))
+      .filter((a) => a.stops.length);
+    return mapsAdventuresCache;
+  }
+
+  function clearMapsMarkers() {
+    mapsMarkers.forEach((m) => m.setMap(null));
+    mapsMarkers = [];
+  }
+
+  function mapsMarkerIcon(color) {
+    return {
+      path: 'M0,0 C-2,-20 -10,-22 -10,-32 A10,10 0 1,1 10,-32 C10,-22 2,-20 0,0 Z',
+      fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5,
+      scale: 1, anchor: new google.maps.Point(0, 0),
+    };
+  }
+
+  async function renderMapsView(retriesLeft) {
+    const wrap = document.getElementById('maps-map');
+    const emptyEl = document.getElementById('maps-empty');
+    const legendEl = document.getElementById('maps-legend');
+    if (!wrap) return;
+    if (typeof google === 'undefined' || !google.maps) {
+      if ((retriesLeft ?? 6) <= 0) { emptyEl.hidden = false; emptyEl.textContent = 'Could not load the map right now. Try again in a moment.'; return; }
+      setTimeout(() => renderMapsView((retriesLeft ?? 6) - 1), 400);
+      return;
+    }
+    if (!currentSession) {
+      emptyEl.hidden = false; emptyEl.textContent = 'Sign in to see your adventure maps.';
+      legendEl.innerHTML = ''; clearMapsMarkers();
+      return;
+    }
+    if (!mapsMapInstance) {
+      mapsMapInstance = new google.maps.Map(wrap, { center: { lat: 37.6819, lng: -121.9 }, zoom: 9, disableDefaultUI: true, zoomControl: true });
+      mapsInfoWindow = new google.maps.InfoWindow();
+    }
+    clearMapsMarkers();
+    emptyEl.hidden = true;
+    legendEl.innerHTML = '';
+
+    let toShow = [];
+    if (mapsFilter === 'current' && activeAdventure) {
+      const own = await fetchOwnAdventuresWithStops();
+      const cur = own.find((a) => a.id === activeAdventure.adventureId);
+      toShow = cur ? [cur] : [];
+      document.getElementById('maps-sub').textContent = cur ? `Your current adventure: ${cur.title}` : 'No stops to show for your current adventure yet.';
+    } else if (mapsFilter === 'current') {
+      toShow = [];
+      document.getElementById('maps-sub').textContent = 'No adventure in progress right now, start one from the Adventures tab.';
+    } else {
+      toShow = await fetchOwnAdventuresWithStops();
+      document.getElementById('maps-sub').textContent = mapsFilter === 'master'
+        ? "Every stop you've ever visited, all in one view."
+        : "Every adventure you've taken, color-coded.";
+    }
+
+    if (!toShow.length) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = mapsFilter === 'current' ? emptyEl.textContent || 'Nothing to show yet.' : 'No adventures with mapped stops yet. Once you check in somewhere, it shows up here.';
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    toShow.forEach((adv, advIndex) => {
+      // Master View: one color for everything (a true "everywhere I've
+      // been" overview). All My Adventures / Current: one color per trip
+      // so trip boundaries stay readable.
+      const color = mapsFilter === 'master' ? MAPS_COLOR_PALETTE[0] : MAPS_COLOR_PALETTE[advIndex % MAPS_COLOR_PALETTE.length];
+      if (mapsFilter === 'all') {
+        legendEl.insertAdjacentHTML('beforeend', `<div class="maps-legend-item"><span class="maps-legend-dot" style="background:${color}"></span>${adv.title}</div>`);
+      }
+      adv.stops.forEach((stop) => {
+        const pos = { lat: stop.lat, lng: stop.lng };
+        const marker = new google.maps.Marker({ position: pos, map: mapsMapInstance, icon: mapsMarkerIcon(color), title: stop.name });
+        marker.addListener('click', () => {
+          mapsInfoWindow.setContent(`<div style="font-family:'Fredoka',sans-serif; font-weight:700; padding:2px 4px;">${stop.name}</div><div style="font-size:0.78rem; opacity:0.7; padding:0 4px 2px;">${adv.title}</div>`);
+          mapsInfoWindow.open(mapsMapInstance, marker);
+        });
+        mapsMarkers.push(marker);
+        bounds.extend(pos);
+      });
+    });
+    if (!bounds.isEmpty()) {
+      mapsMapInstance.fitBounds(bounds, 40);
+      google.maps.event.addListenerOnce(mapsMapInstance, 'bounds_changed', () => {
+        if (mapsMapInstance.getZoom() > 15) mapsMapInstance.setZoom(15);
+      });
+    }
+  }
+
+  window.setMapsFilter = function (filter) {
+    mapsFilter = filter;
+    document.querySelectorAll('.maps-filter-pill').forEach((p) => p.classList.toggle('active', p.dataset.filter === filter));
+    renderMapsView();
+  };
+
   function renderMinigames() {
     const grid = document.getElementById('minigames-grid');
     if (!grid) return;
@@ -2475,19 +2607,19 @@
       const unlocked = unlockedMinigameKeys.has(g.key);
       if (unlocked) {
         return `
-          <div class="minigame-card">
+          <div class="minigame-card" onclick="openMinigameDetail('${g.key}')">
             <div class="minigame-emoji">${g.emoji}</div>
             <div class="minigame-title">${g.title}</div>
-            <button type="button" class="minigame-play-btn" onclick="playMinigame('${g.key}')">▶ Play</button>
+            <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')">▶ Play</button>
           </div>
         `;
       }
       return `
-        <div class="minigame-card locked">
+        <div class="minigame-card locked" onclick="openMinigameDetail('${g.key}')">
           <div class="minigame-emoji">${g.emoji}</div>
           <div class="minigame-title">${g.title}</div>
           <div class="minigame-status">🔒 ${g.lockedHint}</div>
-          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
+          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
         </div>
       `;
     }).join('');
@@ -5302,9 +5434,10 @@
   // even though all three still live in this one file. Profile/Upgrades
   // stay their own real pages (the sheet overlay, and /shop/, respectively)
   // — unaffected by this router.
-  const VALID_VIEWS = ['home', 'adventures', 'games'];
+  // Adventures is the default/home view now — no separate 'home'.
+  const VALID_VIEWS = ['adventures', 'games', 'maps'];
   window.showView = function (name, opts) {
-    const view = VALID_VIEWS.includes(name) ? name : 'home';
+    const view = VALID_VIEWS.includes(name) ? name : 'adventures';
     if (document.getElementById('tabbar-wrap').dataset.profileOpen === '1') {
       closeProfile();
     }
@@ -5312,8 +5445,9 @@
     document.querySelectorAll('.tabbar .tab-item').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
     window.scrollTo(0, 0);
     if (!(opts && opts.skipHistory) && location.hash.slice(1) !== view) {
-      history.pushState(null, '', view === 'home' ? location.pathname : `#${view}`);
+      history.pushState(null, '', view === 'adventures' ? location.pathname : `#${view}`);
     }
+    if (view === 'maps') renderMapsView();
     // Newly-visible content's reveal-on-scroll entries are already
     // observed from page load, so IntersectionObserver fires them on its
     // own once display flips to block — this just covers anything added
@@ -5322,7 +5456,7 @@
   };
 
   window.addEventListener('popstate', () => {
-    showView(location.hash.slice(1) || 'home', { skipHistory: true });
+    showView(location.hash.slice(1) || 'adventures', { skipHistory: true });
   });
 
   const tabbarWrap = document.getElementById('tabbar-wrap');
@@ -5455,8 +5589,8 @@
   }
 
   // Cold load: land directly on whatever view the URL hash says (e.g. a
-  // profile.html/shop tab link to /preview/#adventures), defaulting home.
-  showView(location.hash.slice(1) || 'home', { skipHistory: true });
+  // profile.html/shop tab link to /preview/#games), defaulting Adventures.
+  showView(location.hash.slice(1) || 'adventures', { skipHistory: true });
   initAuth();
   initScrollReveal();
 </script>
