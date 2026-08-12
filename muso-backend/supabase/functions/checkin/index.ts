@@ -469,6 +469,17 @@ Deno.serve(async (req) => {
   if (xpResult.leveledUp && (xpResult.newLevel ?? 0) >= 5) badgeKeysToAward.push("level_5");
   if (xpResult.leveledUp && (xpResult.newLevel ?? 0) >= 10) badgeKeysToAward.push("level_10");
 
+  // Trivia is the one mini game that's never bought or level-gated (see
+  // minigames/index.ts) — it unlocks the instant a player's first check-in
+  // lands, so there's always something to play right away. Best-effort:
+  // an odd insert failure here shouldn't fail the check-in itself, it just
+  // means the picker shows it locked a beat longer than it should.
+  if (isFirstCheckin) {
+    await admin
+      .from("profile_minigames")
+      .insert({ profile_id: userId, minigame_key: "trivia", unlocked_via: "first_checkin" });
+  }
+
   const { data: currentStop, error: stopErr } = await admin
     .from("route_stops")
     .select("id, route_id, venue_id, stop_order, name, is_mystery, game_prep_notes")
