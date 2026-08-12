@@ -407,7 +407,7 @@
 
   /* ---------- ACCOUNT / GAMIFICATION ---------- */
   .account-bar{
-    max-width:1200px; margin:0 auto; padding:0 6vw 2vh;
+    max-width:1200px; margin:0 auto; padding:20px 6vw 2vh;
     display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap;
     /* Pulls the parallax band (.sky-band, next in flow) up underneath so
        the level/coin chip floats half over it — position+z-index needed
@@ -505,6 +505,16 @@
   }
   .adventure-inner h2{ font-size:1.3rem; margin-bottom:6px; }
   .adventure-sub{ opacity:0.7; font-size:0.9rem; margin-bottom:18px; }
+  .minigames-section{ max-width:1080px; margin:20px auto 0; padding:0 6vw 4vh; }
+  .minigames-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:14px; }
+  .minigame-card{
+    background:var(--cream); border-radius:16px; padding:20px 14px; text-align:center;
+    transition:transform .3s var(--ease-bounce);
+  }
+  .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
+  .minigame-emoji{ font-size:2rem; margin-bottom:8px; }
+  .minigame-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; margin-bottom:4px; }
+  .minigame-status{ font-size:0.75rem; opacity:0.55; }
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
@@ -1412,7 +1422,9 @@
 </div>
 
 <nav>
-  <img class="logo-img" src="../assets/MUSO-ADVENTURES-LOGO.png" alt="MUSO Adventures">
+  <a href="#" onclick="event.preventDefault(); navScrollTo('home');" aria-label="MUSO Adventures home">
+    <img class="logo-img" src="../assets/MUSO-ADVENTURES-LOGO.png" alt="MUSO Adventures">
+  </a>
 </nav>
 
 <div class="account-bar" id="account-bar">
@@ -1453,6 +1465,33 @@
       </div>
       <div class="party-roster-list" id="party-roster-list"></div>
       <div class="party-feed" id="party-feed"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Mini Games: quick, optional play elements droppable into any adventure
+     for bonus XP/coins. Structural placeholder for now — none of these are
+     wired to real gameplay yet, see conversation for what ships first. -->
+<section class="minigames-section reveal-on-scroll" id="minigames-section">
+  <div class="adventure-inner">
+    <h2>🎮 Mini Games</h2>
+    <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins. More on the way.</p>
+    <div class="minigames-grid">
+      <div class="minigame-card">
+        <div class="minigame-emoji">❓</div>
+        <div class="minigame-title">Trivia Break</div>
+        <div class="minigame-status">Coming soon</div>
+      </div>
+      <div class="minigame-card">
+        <div class="minigame-emoji">📸</div>
+        <div class="minigame-title">Photo Challenge</div>
+        <div class="minigame-status">Coming soon</div>
+      </div>
+      <div class="minigame-card">
+        <div class="minigame-emoji">🔍</div>
+        <div class="minigame-title">Scavenger Clue</div>
+        <div class="minigame-status">Coming soon</div>
+      </div>
     </div>
   </div>
 </section>
@@ -1505,9 +1544,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
       <span>Home</span>
     </div>
-    <div class="tab-item" onclick="navScrollTo('adventure-section')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>
-      <span>Explore</span>
+    <div class="tab-item" onclick="navScrollTo('minigames-section')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="10" rx="4"/><line x1="7" y1="10" x2="7" y2="14"/><line x1="5" y1="12" x2="9" y2="12"/><circle cx="15" cy="10.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="17.5" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>
+      <span>Mini Games</span>
     </div>
     <div class="tab-item raised" id="nav-avatar-btn">
       <div class="nav-avatar-disc">
@@ -2198,12 +2237,13 @@
       return;
     }
     if (!currentSession) {
+      // Shop access lives in the bottom tabbar now, not duplicated up here
+      // too (same reasoning as dropping the top "My Profile" link earlier).
       el.innerHTML = `
         <form class="signin-form" onsubmit="event.preventDefault(); sendMagicLink();">
           <input type="email" id="signin-email" placeholder="you@example.com" required>
           <button type="submit" class="signin-btn" id="signin-submit-btn">Sign in</button>
         </form>
-        <a href="/shop/" class="buy-coins-btn" style="text-decoration:none; display:inline-block;">Shop</a>
         <span class="signin-msg" id="signin-msg"></span>
       `;
       return;
