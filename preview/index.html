@@ -918,6 +918,39 @@
   .maps-legend-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
   .maps-empty{ text-align:center; opacity:0.6; font-size:0.88rem; padding:24px 0; }
   .maps-empty[hidden]{ display:none; }
+
+  /* ---------- PAST ADVENTURES ----------
+     Each entry reuses the .adv-acc-item/.adv-acc-header/.adv-acc-body-wrap
+     shape from the picker's accordion (same collapse/expand animation),
+     just toggled with a plain classList.toggle() instead of the auto-
+     cycling controller — a history list has no reason to auto-advance. */
+  .past-adventures-section{ margin-top:20px; }
+  .past-adv-list{ display:flex; flex-direction:column; gap:8px; }
+  .past-adv-date{ font-size:0.75rem; opacity:0.85; flex-shrink:0; font-weight:600; }
+  .past-adv-roster{ display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; }
+  .past-adv-roster-item{ display:flex; flex-direction:column; align-items:center; gap:3px; width:64px; }
+  .past-adv-roster-avatar{
+    width:42px; height:42px; border-radius:50%; overflow:hidden; background:var(--plum);
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700;
+  }
+  .past-adv-roster-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .past-adv-roster-name{ font-size:0.68rem; font-weight:700; text-align:center; max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .past-adv-roster-score{ font-size:0.62rem; opacity:0.6; }
+  .past-adv-venues, .past-adv-badges{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .past-adv-venue-chip{
+    background:rgba(var(--shadow-rgb),0.06); border-radius:999px; padding:4px 10px; font-size:0.75rem;
+  }
+  .past-adv-badge-chip{
+    background:#fdeee0; color:#8a5b1f; border-radius:999px;
+    padding:4px 10px; font-size:0.75rem; font-weight:700;
+  }
+  .past-adv-reviews{ margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+  .past-adv-review-item{ background:rgba(var(--shadow-rgb),0.04); border-radius:12px; padding:10px 12px; }
+  .past-adv-review-stop{ font-weight:700; font-size:0.82rem; margin-right:8px; }
+  .past-adv-review-rating{ font-size:0.8rem; opacity:0.8; }
+  .past-adv-review-text{ font-size:0.8rem; opacity:0.75; margin-top:4px; }
+  .past-adv-photos{ margin-top:4px; }
+
   #adventure-progress-map{ width:100%; height:100%; }
   .progress-map-hint{
     position:absolute; left:0; right:0; bottom:0; padding:10px 14px;
@@ -2392,7 +2425,7 @@
   // after sign-in, after any unlock, and after every check-in, since any of
   // those can change xp/level/coins and/or award a badge.
   async function refreshProfileAndBadges() {
-    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); renderProfileSheetHeader(); refreshMinigameUnlocks(); return; }
+    if (!currentSession) { currentProfile = null; currentBadgeKeys = new Set(); renderProfileSheetHeader(); refreshMinigameUnlocks(); renderPastAdventures(); return; }
     currentProfile = await fetchOrCreateProfile(currentSession.user.id, currentSession.user.email);
     const { data } = await supabaseClient
       .from('profile_badges')
@@ -2401,6 +2434,7 @@
     currentBadgeKeys = new Set((data || []).map(r => r.badge_key));
     renderProfileSheetHeader();
     refreshMinigameUnlocks();
+    renderPastAdventures();
   }
 
   // ---------- MINI GAMES ----------
@@ -2457,6 +2491,145 @@
   window.closeMinigameDetail = function () {
     document.getElementById('minigame-detail-overlay').setAttribute('hidden', '');
   };
+
+  // ---------- PAST ADVENTURES ----------
+  // Deliberately a different angle than profile.html's own trophy case
+  // (which is "my badges/coins/photos across every adventure I've done") —
+  // this is the group/social view: who else was there, what the whole
+  // party rated, and what everyone (not just the signed-in player)
+  // checked in on. "Score" has no single stored value anywhere in the
+  // schema (XP isn't attributed per-adventure the way coins/badges are —
+  // see 0018_adventure_attribution.sql), so it's approximated here as each
+  // person's own check-in count for that adventure, labeled honestly
+  // rather than presented as a real point total.
+  async function renderPastAdventures() {
+    const el = document.getElementById('past-adventures-list');
+    if (!el) return;
+    if (!currentSession) { el.innerHTML = '<div class="empty-state">Sign in to see your past adventures.</div>'; return; }
+
+    const { data: memberRows } = await supabaseClient.from('party_members').select('party_id').eq('profile_id', currentSession.user.id);
+    const myPartyIds = [...new Set((memberRows || []).map((r) => r.party_id))];
+    if (!myPartyIds.length) { el.innerHTML = '<div class="empty-state">No adventures yet. Finish one to see it here.</div>'; return; }
+
+    const { data: adventures, error } = await supabaseClient
+      .from('adventures')
+      .select('id, party_id, completed_at, routes(title)')
+      .in('party_id', myPartyIds)
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(20);
+    if (error) { el.innerHTML = '<div class="empty-state">Could not load past adventures right now.</div>'; return; }
+    if (!adventures || !adventures.length) { el.innerHTML = '<div class="empty-state">No completed adventures yet. Finish one to see it here.</div>'; return; }
+
+    const adventureIds = adventures.map((a) => a.id);
+    const partyIds = [...new Set(adventures.map((a) => a.party_id))];
+
+    const [{ data: rosterRows }, { data: checkinRows }, { data: reviewRows }, { data: badgeRows }, { data: photoRows }] = await Promise.all([
+      supabaseClient.from('party_members').select('party_id, profile_id, profiles(display_name, avatar_url)').in('party_id', partyIds),
+      supabaseClient.from('check_ins').select('adventure_id, checked_in_by').in('adventure_id', adventureIds),
+      // Not filtered to any one person — this is the whole party's ratings,
+      // unlike profile.html's trophy case which only shows the signed-in
+      // player's own reviews.
+      supabaseClient.from('check_ins').select('adventure_id, checked_in_by, route_stops(name), venue_reviews(rating, review_text)').in('adventure_id', adventureIds),
+      supabaseClient.from('profile_badges').select('adventure_id, profile_id, badge_key, badges(name, emoji)').in('adventure_id', adventureIds),
+      supabaseClient.from('check_ins').select('adventure_id, photo_url, route_stops(name)').in('adventure_id', adventureIds).not('photo_url', 'is', null),
+    ]);
+
+    const rosterByParty = new Map();
+    (rosterRows || []).forEach((r) => { if (!rosterByParty.has(r.party_id)) rosterByParty.set(r.party_id, []); rosterByParty.get(r.party_id).push(r); });
+    const checkinCountByAdvAndProfile = new Map(); // "advId|profileId" -> count
+    const venuesByAdventure = new Map(); // advId -> Set of stop names
+    (checkinRows || []).forEach((c) => {
+      const key = `${c.adventure_id}|${c.checked_in_by}`;
+      checkinCountByAdvAndProfile.set(key, (checkinCountByAdvAndProfile.get(key) || 0) + 1);
+    });
+    const reviewsByAdventure = new Map();
+    (reviewRows || []).forEach((r) => {
+      const review = Array.isArray(r.venue_reviews) ? r.venue_reviews[0] : r.venue_reviews;
+      const stopName = (r.route_stops && r.route_stops.name) || 'Stop';
+      if (!venuesByAdventure.has(r.adventure_id)) venuesByAdventure.set(r.adventure_id, new Set());
+      venuesByAdventure.get(r.adventure_id).add(stopName);
+      if (!review) return;
+      if (!reviewsByAdventure.has(r.adventure_id)) reviewsByAdventure.set(r.adventure_id, []);
+      reviewsByAdventure.get(r.adventure_id).push({ stopName, ...review });
+    });
+    const badgesByAdventure = new Map();
+    (badgeRows || []).forEach((b) => { if (!badgesByAdventure.has(b.adventure_id)) badgesByAdventure.set(b.adventure_id, []); badgesByAdventure.get(b.adventure_id).push(b); });
+    const photosByAdventure = new Map();
+    (photoRows || []).forEach((p) => { if (!photosByAdventure.has(p.adventure_id)) photosByAdventure.set(p.adventure_id, []); photosByAdventure.get(p.adventure_id).push(p); });
+
+    const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+    el.innerHTML = `<div class="past-adv-list">${adventures.map((a) => {
+      const title = (a.routes && a.routes.title) || 'Adventure';
+      const date = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
+      const roster = rosterByParty.get(a.party_id) || [];
+      const venues = [...(venuesByAdventure.get(a.id) || [])];
+      const badges = badgesByAdventure.get(a.id) || [];
+      const photos = (photosByAdventure.get(a.id) || []).slice(0, 8);
+      const reviews = reviewsByAdventure.get(a.id) || [];
+
+      const rosterHtml = roster.map((m) => {
+        const name = esc(m.profiles?.display_name || 'Explorer');
+        const score = checkinCountByAdvAndProfile.get(`${a.id}|${m.profile_id}`) || 0;
+        const avatarHtml = m.profiles?.avatar_url
+          ? `<img src="${m.profiles.avatar_url}" alt="${name}">`
+          : `<span>${name.charAt(0).toUpperCase()}</span>`;
+        return `
+          <div class="past-adv-roster-item">
+            <div class="past-adv-roster-avatar">${avatarHtml}</div>
+            <div class="past-adv-roster-name">${name}</div>
+            <div class="past-adv-roster-score">${score} stop${score === 1 ? '' : 's'}</div>
+          </div>
+        `;
+      }).join('');
+
+      const venuesHtml = venues.length
+        ? `<div class="past-adv-venues">${venues.map((v) => `<span class="past-adv-venue-chip">📍 ${esc(v)}</span>`).join('')}</div>`
+        : '';
+
+      const badgesHtml = badges.length
+        ? `<div class="past-adv-badges">${badges.map((b) => `<span class="past-adv-badge-chip">${b.badges?.emoji || '🏅'} ${esc(b.badges?.name || b.badge_key)}</span>`).join('')}</div>`
+        : '';
+
+      const reviewsHtml = reviews.length
+        ? `<div class="past-adv-reviews">${reviews.map((r) => `
+            <div class="past-adv-review-item">
+              <span class="past-adv-review-stop">${esc(r.stopName)}</span>
+              <span class="past-adv-review-rating">🎯 ${r.rating}/10</span>
+              ${r.review_text ? `<div class="past-adv-review-text">${esc(r.review_text)}</div>` : ''}
+            </div>
+          `).join('')}</div>`
+        : '';
+
+      const photosHtml = photos.length
+        ? `<div class="photo-grid past-adv-photos">${photos.map((p) => `
+            <div class="photo-item">
+              <img src="${p.photo_url}" loading="lazy">
+              <div class="cap">${esc((p.route_stops && p.route_stops.name) || 'Stop')}</div>
+            </div>
+          `).join('')}</div>`
+        : '';
+
+      return `
+        <div class="past-adv-item adv-acc-item">
+          <button type="button" class="adv-acc-header past-adv-header" onclick="this.closest('.past-adv-item').classList.toggle('open')">
+            <span class="adv-acc-emoji">🏁</span>
+            <span class="adv-acc-name">${esc(title)}</span>
+            <span class="past-adv-date">${date}</span>
+            <span class="adv-acc-chevron">›</span>
+          </button>
+          <div class="adv-acc-body-wrap"><div class="adv-acc-body">
+            <div class="past-adv-roster">${rosterHtml}</div>
+            ${venuesHtml}
+            ${badgesHtml}
+            ${reviewsHtml}
+            ${photosHtml}
+          </div></div>
+        </div>
+      `;
+    }).join('')}</div>`;
+  }
 
   // ---------- MAPS ----------
   // Scoped to the signed-in player's own adventure history, not every
