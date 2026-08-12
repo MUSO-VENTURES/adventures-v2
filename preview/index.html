@@ -40,11 +40,13 @@
     --card-bg:rgba(255,255,255,0.07); --card-border:rgba(255,255,255,0.12);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  html{scroll-behavior:smooth; font-size:106.25%;}
-  html, body{
-    width:100%;
-    overflow-x:hidden;
-  }
+  /* overflow-x:hidden lives on html ONLY, not body too — putting it on
+     both makes body its own independent scroll container (overflow-y
+     auto-computes to "auto" once overflow-x isn't "visible"), which broke
+     position:sticky for nav below: sticky is computed against the nearest
+     scrolling ancestor, and with html and body both claiming that role,
+     the sticky nav tracked scroll 1:1 instead of pinning at top:0. */
+  html{ scroll-behavior:smooth; font-size:106.25%; width:100%; overflow-x:hidden; }
   body{
     font-family:'Nunito', sans-serif;
     background:var(--cream);
@@ -1488,7 +1490,7 @@
      (playMinigame()) until each game is ready to wire in. -->
 <section class="minigames-section reveal-on-scroll" id="minigames-section">
   <div class="adventure-inner">
-    <h2>🎮 Mini Games</h2>
+    <h2>🎮 Games</h2>
     <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
     <div class="minigames-grid" id="minigames-grid"></div>
   </div>
@@ -1544,7 +1546,7 @@
     </div>
     <div class="tab-item" onclick="navScrollTo('minigames-section')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/><path d="M10 9l4.5 3-4.5 3z" fill="currentColor" stroke="none"/></svg>
-      <span>Mini Games</span>
+      <span>Games</span>
     </div>
     <div class="tab-item raised" id="nav-avatar-btn">
       <div class="nav-avatar-disc">
