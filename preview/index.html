@@ -409,13 +409,16 @@
   .account-bar{
     max-width:1200px; margin:0 auto; padding:20px 6vw;
     display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap;
-    /* Pulls the parallax band (.sky-band, next in flow) up underneath so
-       the level/coin chip floats half over it — position+z-index needed
-       since .sky-band establishes its own stacking context (z-index:1)
-       and would otherwise paint over an unpositioned overlapping sibling
-       regardless of DOM order. */
-    position:relative; z-index:10; margin-bottom:-22px;
+    position:relative; z-index:10;
   }
+  /* Only the signed-in level/coin chip floats half over the parallax band
+     below — added as a class (see renderAccountBar()) rather than a base
+     rule, so the signed-out sign-in field/button instead sits fully clear
+     of it, centered in the account-bar's own padding box. z-index needed
+     since .sky-band establishes its own stacking context (z-index:1) and
+     would otherwise paint over an unpositioned overlapping sibling
+     regardless of DOM order. */
+  .account-bar.has-chip{ margin-bottom:-22px; }
   .signin-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .signin-form input{
     background:var(--card); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
@@ -2234,6 +2237,8 @@
     if (!currentSession) {
       // Shop access lives in the bottom tabbar now, not duplicated up here
       // too (same reasoning as dropping the top "My Profile" link earlier).
+      // No overlap here — that's chip-only, see the has-chip toggle below.
+      el.classList.remove('has-chip');
       el.innerHTML = `
         <form class="signin-form" onsubmit="event.preventDefault(); sendMagicLink();">
           <input type="email" id="signin-email" placeholder="you@example.com" required>
@@ -2248,6 +2253,7 @@
     const coins = p?.adventure_coins ?? 0;
     // Profile access lives in the bottom tabbar's avatar button now (see
     // #nav-avatar-btn/openProfile()), not duplicated up here too.
+    el.classList.add('has-chip'); // only the chip floats half over the parallax band
     el.innerHTML = `
       <div class="account-chip">
         <span class="level-pill">Lv ${level}</span>
