@@ -624,13 +624,23 @@
   }
   .adv-acc-item.open .adv-acc-body{ padding:16px 18px; opacity:1; transform:translateY(0); }
   .adv-acc-body .rvc-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
-  .adv-acc-body .rvc-stopcount{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  /* One "Stops" label plus a row of number-only bubbles, instead of each
+     pill spelling out "N stops" — the repeated word was what forced 4
+     pills onto two lines in a narrow card; bare numbers are short enough
+     that label + all 4 fit on one line (flex-wrap:nowrap enforces it). */
+  .adv-acc-body .rvc-stopcount{ display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:nowrap; }
+  .adv-acc-body .rvc-stopcount-label{
+    font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+    opacity:0.55; flex-shrink:0;
+  }
+  .adv-acc-body .rvc-sc-pills{ display:flex; gap:6px; flex-wrap:nowrap; }
   .adv-acc-body .rvc-sc-pill{
     background:rgba(var(--shadow-rgb),0.08); border:1.5px solid rgba(var(--shadow-rgb),0.15); color:var(--ink);
-    padding:5px 12px; border-radius:999px; font-weight:700; font-size:0.75rem; cursor:pointer;
+    min-width:28px; height:28px; padding:0 7px; border-radius:999px; font-weight:700; font-size:0.78rem;
+    cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
   }
   .adv-acc-body .rvc-sc-pill.active{ background:var(--coral); color:#fff; border-color:var(--coral); }
-  .adv-acc-body .rvc-sc-pill.locked{ background:transparent; border-style:dashed; opacity:0.6; }
+  .adv-acc-body .rvc-sc-pill.locked{ background:transparent; border-style:dashed; opacity:0.6; font-size:0.68rem; }
   .adv-acc-body .rvc-sc-pill.locked:hover{ opacity:0.85; }
   .adv-acc-body .rvc-btn, .adv-acc-body .start-adv-btn{
     display:block; width:100%; margin-top:14px; background:var(--coral); color:#fff; border:none;
@@ -3099,7 +3109,8 @@
         bodyHtml: `
           <div class="rvc-desc">${t.desc}</div>
           <div class="rvc-stopcount" data-stopkey="${stopKey}" data-container="${containerId || ''}">
-            ${stopCountPillsHtml(stopKey, containerId)}
+            <span class="rvc-stopcount-label">Stops</span>
+            <div class="rvc-sc-pills">${stopCountPillsHtml(stopKey, containerId)}</div>
           </div>
           <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
         `,
@@ -3330,24 +3341,29 @@
   // already gates bonus stops on curated routes — see unlock-feature/index.ts.
   // A standalone function (not nested in renderRoutePicker) so it can be
   // re-run on demand after an unlock without a full picker re-render.
+  // Bubbles show bare numbers now (a single "Stops" label covers the word
+  // for all four — see themeToItem's bodyHtml) — title carries the unlock
+  // cost for locked ones since it's no longer spelled out in the pill text.
   function stopCountPillsHtml(key, containerId) {
     const unlockedStopCount = currentProfile?.unlocked_stop_count ?? FREE_STOP_COUNT;
     const chosen = stopCountChoices[key] ?? 3;
     const cIdArg = containerId ? `'${containerId}'` : 'null';
     return [2, 3, 4, 5].map((n) => {
       if (n > unlockedStopCount) {
-        return `<button type="button" class="rvc-sc-pill locked" onclick="handleLockedStopPill('${key}', ${n}, ${cIdArg})" title="Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock up to ${EXTRA_STOPS_STOP_COUNT} stops">🔒 ${n} stops</button>`;
+        return `<button type="button" class="rvc-sc-pill locked" onclick="handleLockedStopPill('${key}', ${n}, ${cIdArg})" title="Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock up to ${EXTRA_STOPS_STOP_COUNT} stops">🔒${n}</button>`;
       }
-      return `<button type="button" class="rvc-sc-pill${chosen === n ? ' active' : ''}" onclick="setStopCountChoice('${key}', ${n}, this, ${cIdArg})">${n} stops</button>`;
+      return `<button type="button" class="rvc-sc-pill${chosen === n ? ' active' : ''}" onclick="setStopCountChoice('${key}', ${n}, this, ${cIdArg})" title="${n} stops">${n}</button>`;
     }).join('');
   }
 
-  // Re-renders just the pill rows in place (not the whole picker), so an
-  // unlock triggered from deep in an auto-cycling accordion doesn't reset
-  // scroll position, open card, or timers — see handleLockedStopPill().
+  // Re-renders just the pill bubbles in place (not the whole picker, not the
+  // "Stops" label), so an unlock triggered from deep in an auto-cycling
+  // accordion doesn't reset scroll position, open card, or timers — see
+  // handleLockedStopPill().
   function refreshStopCountPills() {
     document.querySelectorAll('.rvc-stopcount[data-stopkey]').forEach((el) => {
-      el.innerHTML = stopCountPillsHtml(el.getAttribute('data-stopkey'), el.getAttribute('data-container') || null);
+      const pills = el.querySelector('.rvc-sc-pills');
+      if (pills) pills.innerHTML = stopCountPillsHtml(el.getAttribute('data-stopkey'), el.getAttribute('data-container') || null);
     });
   }
 
