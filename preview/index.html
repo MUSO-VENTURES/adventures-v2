@@ -5708,7 +5708,8 @@
     if (!profileOpen || profileAnimating) return;
     profileAnimating = true;
     document.querySelectorAll('.tab-item').forEach((t) => t.classList.remove('active'));
-    document.querySelector('.tab-item[data-view="home"]')?.classList.add('active');
+    const currentView = location.hash.slice(1) || 'adventures';
+    document.querySelector('.tab-item[data-view="' + currentView + '"]')?.classList.add('active');
 
     const collapsedH = navCollapsedHeight();
     tabbarWrap.style.transition = 'height .35s cubic-bezier(.4,0,.2,1)';
