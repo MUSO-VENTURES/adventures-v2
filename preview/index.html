@@ -538,6 +538,60 @@
   .minigame-play-btn:hover, .minigame-unlock-btn:hover{ transform:scale(1.05); }
   .minigame-play-btn{ background:var(--coral); color:#fff; }
   .minigame-unlock-btn{ background:var(--tangerine); color:var(--ink); }
+
+  /* ---------- ROUTED VIEWS (Home / Adventures / Games) ----------
+     See showView() near the bottom of body. Adventures/Games are full-
+     page destinations, not sections you scroll past — only one is ever
+     shown at a time, everything else display:none. */
+  .app-view{ display:none; }
+  .app-view.active{ display:block; }
+
+  /* ---------- HOME: LANDING CARDS ----------
+     The whole "just a launching ground" ask — two big colored CTAs and
+     nothing else below the hero. Each is a real <button>, not a link, so
+     the whole card is tappable, not just its text. */
+  .landing-cards{
+    max-width:720px; margin:0 auto; padding:0 6vw 6vh;
+    display:grid; grid-template-columns:1fr 1fr; gap:16px;
+  }
+  @media (max-width:640px){ .landing-cards{ grid-template-columns:1fr; } }
+  .landing-card{
+    border:none; border-radius:20px; padding:26px 22px; text-align:left; cursor:pointer;
+    display:flex; flex-direction:column; gap:6px; font-family:'Nunito',sans-serif;
+    box-shadow:0 8px 24px rgba(var(--shadow-rgb),0.12); transition:transform .25s var(--ease-bounce);
+  }
+  .landing-card:hover{ transform:translateY(-4px) scale(1.02); }
+  .landing-card-emoji{ font-size:1.8rem; }
+  .landing-card-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.15rem; }
+  .landing-card-desc{ font-size:0.85rem; opacity:0.92; line-height:1.4; }
+  /* Green, matching the ask exactly — reuses the same green already
+     established for the Dog Friendly/Outdoor adventure themes. */
+  .start-adventure-card{ background:linear-gradient(135deg, #2f8f5b, #4fbf7f); color:#fff; }
+  /* Coral: complements the green (roughly opposite on the color wheel)
+     and is already this app's own primary brand gradient. */
+  .games-card{ background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff; }
+
+  /* Compact teaser chips inside the Games card — "little teasers that make
+     the viewer want to click." stopPropagation() on each keeps a chip tap
+     from also triggering the parent card's own onclick (which navigates to
+     the full Games page instead of opening a single game's detail). */
+  .landing-game-teasers{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .landing-teaser-chip{
+    display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.35);
+    border-radius:999px; padding:5px 12px 5px 8px; color:#fff; font-family:'Nunito',sans-serif;
+    font-size:0.75rem; font-weight:700; cursor:pointer; transition:transform .2s var(--ease-bounce), background .2s ease;
+  }
+  .landing-teaser-chip:hover{ background:rgba(255,255,255,0.34); transform:scale(1.05); }
+  .landing-teaser-emoji{ font-size:0.95rem; }
+
+  /* A teaser chip "scales to full size" into this — reuses the existing
+     .photobooth-overlay/.photobooth-card pop-in, just centered text. */
+  .minigame-detail-card{ text-align:center; max-width:360px; }
+  .minigame-detail-close{ position:absolute; top:14px; right:14px; }
+  .minigame-detail-emoji{ font-size:3.4rem; margin-bottom:6px; }
+  #minigame-detail-title{ font-family:'Fredoka',sans-serif; margin-bottom:8px; }
+  #minigame-detail-desc{ opacity:0.75; margin-bottom:20px; line-height:1.5; }
+
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
@@ -1463,7 +1517,7 @@
 </div>
 
 <nav>
-  <a href="#" onclick="event.preventDefault(); navScrollTo('home');" aria-label="MUSO Adventures home">
+  <a href="#" onclick="event.preventDefault(); showView('home');" aria-label="MUSO Adventures home">
     <img class="logo-img" src="../assets/MUSO-ADVENTURES-LOGO.png" alt="MUSO Adventures">
   </a>
 </nav>
@@ -1486,43 +1540,81 @@
   <div class="sky-band-scrim-top"></div>
 </div>
 
-<header class="hero reveal-on-scroll">
-  <h1>Real venues. Real choices. Real adventure.</h1>
-  <p>Every stop offers you three real, contrasting nearby venues, pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral, just choose your own adventure.</p>
-</header>
+<!-- Three routed "pages" sharing one file (see showView() near the bottom
+     of body) — Adventures/Games are full-page destinations you transition
+     to, not sections you scroll past, but everything they need (auth
+     state, the whole adventure/party-realtime engine, overlays) is already
+     wired up in this file, so this is client-side hash routing rather than
+     a physically separate page. Only one .app-view is ever visible
+     (display:none/block toggled by .active) at a time. -->
+<div class="app-view active" data-view="home" id="view-home">
+  <header class="hero reveal-on-scroll">
+    <h1>Real venues. Real choices. Real adventure.</h1>
+    <p>Every stop offers you three real, contrasting nearby venues, pulled live from Yelp. Pick your path, or reroll for three new ones. No manual searching, no planning spiral, just choose your own adventure.</p>
+  </header>
 
-<section class="adventure-section reveal-on-scroll" id="adventure-section">
-  <div class="adventure-inner">
-    <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
-    <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
-    <div id="adventure-body"></div>
-    <div class="progress-map-wrap" id="adventure-progress-map-wrap" hidden>
-      <div id="adventure-progress-map"></div>
-      <div class="progress-map-hint" id="adventure-progress-hint"></div>
-    </div>
-    <div class="party-roster-wrap" id="party-roster-wrap" hidden>
-      <div class="party-roster-header">
-        <span class="party-roster-title">🎉 Who's Playing</span>
-        <button type="button" class="party-invite-btn" onclick="openInviteModal()">+ Invite</button>
-      </div>
-      <div class="party-roster-list" id="party-roster-list"></div>
-      <div class="party-feed" id="party-feed"></div>
-    </div>
+  <div class="landing-cards reveal-on-scroll">
+    <button type="button" class="landing-card start-adventure-card" onclick="showView('adventures')">
+      <div class="landing-card-emoji">🧭</div>
+      <div class="landing-card-title">Start a MUSO Adventure</div>
+      <div class="landing-card-desc">Real venues, real choices, three picks at every stop.</div>
+    </button>
+    <button type="button" class="landing-card games-card" onclick="showView('games')">
+      <div class="landing-card-emoji">🎮</div>
+      <div class="landing-card-title">Games</div>
+      <div class="landing-card-desc">Quick bonus games that pair with any adventure for extra XP and coins.</div>
+      <div class="landing-game-teasers" id="landing-game-teasers"></div>
+    </button>
   </div>
-</section>
+</div>
+
+<div class="app-view" data-view="adventures" id="view-adventures">
+  <section class="adventure-section">
+    <div class="adventure-inner">
+      <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
+      <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
+      <div id="adventure-body"></div>
+      <div class="progress-map-wrap" id="adventure-progress-map-wrap" hidden>
+        <div id="adventure-progress-map"></div>
+        <div class="progress-map-hint" id="adventure-progress-hint"></div>
+      </div>
+      <div class="party-roster-wrap" id="party-roster-wrap" hidden>
+        <div class="party-roster-header">
+          <span class="party-roster-title">🎉 Who's Playing</span>
+          <button type="button" class="party-invite-btn" onclick="openInviteModal()">+ Invite</button>
+        </div>
+        <div class="party-roster-list" id="party-roster-list"></div>
+        <div class="party-feed" id="party-feed"></div>
+      </div>
+    </div>
+  </section>
+</div>
 
 <!-- Mini Games: quick, optional play elements droppable into any adventure,
      unlocked via gameplay milestones or bought with Adventure Coins. Real
      game content ships separately — this renders unlock state (Play vs
      Locked) via renderMinigames() below; gameplay itself is a stub
      (playMinigame()) until each game is ready to wire in. -->
-<section class="minigames-section reveal-on-scroll" id="minigames-section">
-  <div class="adventure-inner">
-    <h2>🎮 Games</h2>
-    <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
-    <div class="minigames-grid" id="minigames-grid"></div>
+<div class="app-view" data-view="games" id="view-games">
+  <section class="minigames-section">
+    <div class="adventure-inner">
+      <h2>🎮 Games</h2>
+      <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
+      <div class="minigames-grid" id="minigames-grid"></div>
+    </div>
+  </section>
+</div>
+
+<!-- A teaser chip's "scale to full size" — see openMinigameDetail() below. -->
+<div class="photobooth-overlay" id="minigame-detail-overlay" hidden>
+  <div class="photobooth-card minigame-detail-card">
+    <span class="pb-close minigame-detail-close" onclick="closeMinigameDetail()">&times;</span>
+    <div class="minigame-detail-emoji" id="minigame-detail-emoji"></div>
+    <h2 id="minigame-detail-title"></h2>
+    <p id="minigame-detail-desc"></p>
+    <div id="minigame-detail-cta"></div>
   </div>
-</section>
+</div>
 
 <div class="party-invite-overlay" id="party-invite-overlay" hidden>
   <div class="party-invite-card">
@@ -1568,11 +1660,11 @@
     <iframe id="profile-sheet-iframe" class="profile-sheet-iframe" title="Profile"></iframe>
   </div>
   <div class="tabbar">
-    <div class="tab-item active" data-view="home" onclick="navScrollTo('home')">
+    <div class="tab-item active" data-view="home" onclick="showView('home')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
       <span>Home</span>
     </div>
-    <div class="tab-item" onclick="navScrollTo('adventure-section')">
+    <div class="tab-item" data-view="adventures" onclick="showView('adventures')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
       <span>Adventures</span>
     </div>
@@ -1583,7 +1675,7 @@
       </div>
       <span>Profile</span>
     </div>
-    <div class="tab-item" onclick="navScrollTo('minigames-section')">
+    <div class="tab-item" data-view="games" onclick="showView('games')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/><path d="M10 9l4.5 3-4.5 3z" fill="currentColor" stroke="none"/></svg>
       <span>Games</span>
     </div>
@@ -2315,18 +2407,66 @@
   // happens server-side, this is just copy. 'trivia' unlocks automatically
   // on a player's first check-in (checkin/index.ts), never bought here.
   const MINIGAMES_CONFIG = [
-    { key: 'trivia', emoji: '❓', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in' },
-    { key: 'photo_challenge', emoji: '📸', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150 },
-    { key: 'scavenger_clue', emoji: '🔍', title: 'Scavenger Clue', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250 },
+    {
+      key: 'trivia', emoji: '❓', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in',
+      desc: 'A quick round of adventure and venue trivia between stops. Answer fast for bonus XP.',
+    },
+    {
+      key: 'photo_challenge', emoji: '📸', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
+      desc: 'A themed photo prompt at your current stop. Snap it, submit it, earn bonus coins.',
+    },
+    {
+      key: 'scavenger_clue', emoji: '🔍', title: 'Scavenger Clue', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250,
+      desc: 'A riddle-style clue hidden somewhere near your route. Solve it for a coin payout.',
+    },
   ];
   let unlockedMinigameKeys = new Set();
 
   async function refreshMinigameUnlocks() {
-    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); return; }
+    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); renderLandingGameTeasers(); return; }
     const { res, data } = await postEdgeFunction('minigames', { action: 'listUnlocks' });
     if (res.ok) unlockedMinigameKeys = new Set((data.unlocks || []).map((u) => u.minigame_key));
     renderMinigames();
+    renderLandingGameTeasers();
   }
+
+  // Compact "little teasers" inside the Games landing card — tapping one
+  // scales it up into the full detail overlay (openMinigameDetail) rather
+  // than immediately navigating anywhere, so a player can preview a game
+  // without leaving the launch pad.
+  function renderLandingGameTeasers() {
+    const wrap = document.getElementById('landing-game-teasers');
+    if (!wrap) return;
+    wrap.innerHTML = MINIGAMES_CONFIG.map((g) => `
+      <button type="button" class="landing-teaser-chip" onclick="event.stopPropagation(); openMinigameDetail('${g.key}')">
+        <span class="landing-teaser-emoji">${g.emoji}</span>
+        <span>${g.title}</span>
+      </button>
+    `).join('');
+  }
+
+  window.openMinigameDetail = function (key) {
+    const g = MINIGAMES_CONFIG.find((m) => m.key === key);
+    if (!g) return;
+    const unlocked = unlockedMinigameKeys.has(key);
+    document.getElementById('minigame-detail-emoji').textContent = g.emoji;
+    document.getElementById('minigame-detail-title').textContent = g.title;
+    document.getElementById('minigame-detail-desc').textContent = g.desc;
+    const ctaEl = document.getElementById('minigame-detail-cta');
+    if (unlocked) {
+      ctaEl.innerHTML = `<button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); playMinigame('${key}');">▶ Play ${g.title}</button>`;
+    } else {
+      ctaEl.innerHTML = `
+        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 ${g.lockedHint}</div>
+        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');">🪙 Unlock for ${g.cost}</button>` : ''}
+      `;
+    }
+    document.getElementById('minigame-detail-overlay').removeAttribute('hidden');
+  };
+
+  window.closeMinigameDetail = function () {
+    document.getElementById('minigame-detail-overlay').setAttribute('hidden', '');
+  };
 
   function renderMinigames() {
     const grid = document.getElementById('minigames-grid');
@@ -5154,20 +5294,36 @@
     });
   })();
 
-  // ---------- BOTTOM NAV: SCROLL + PROFILE SHEET ----------
-  window.navScrollTo = function (target) {
+  // ---------- BOTTOM NAV: ROUTED VIEWS + PROFILE SHEET ----------
+  // Home/Adventures/Games are full-page destinations (see .app-view CSS)
+  // rather than sections you scroll past — showView() swaps which one is
+  // visible and reflects it in the URL hash, so the bottom nav genuinely
+  // "transitions" between them (real history entries, back button works),
+  // even though all three still live in this one file. Profile/Upgrades
+  // stay their own real pages (the sheet overlay, and /shop/, respectively)
+  // — unaffected by this router.
+  const VALID_VIEWS = ['home', 'adventures', 'games'];
+  window.showView = function (name, opts) {
+    const view = VALID_VIEWS.includes(name) ? name : 'home';
     if (document.getElementById('tabbar-wrap').dataset.profileOpen === '1') {
       closeProfile();
     }
-    document.querySelectorAll('.tabbar .tab-item').forEach((t) => t.classList.remove('active'));
-    if (target === 'home') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      document.querySelector('.tab-item[data-view="home"]')?.classList.add('active');
-      return;
+    document.querySelectorAll('.app-view').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
+    document.querySelectorAll('.tabbar .tab-item').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+    window.scrollTo(0, 0);
+    if (!(opts && opts.skipHistory) && location.hash.slice(1) !== view) {
+      history.pushState(null, '', view === 'home' ? location.pathname : `#${view}`);
     }
-    const el = document.getElementById(target);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Newly-visible content's reveal-on-scroll entries are already
+    // observed from page load, so IntersectionObserver fires them on its
+    // own once display flips to block — this just covers anything added
+    // to the DOM since (e.g. a dynamic re-render).
+    initScrollReveal();
   };
+
+  window.addEventListener('popstate', () => {
+    showView(location.hash.slice(1) || 'home', { skipHistory: true });
+  });
 
   const tabbarWrap = document.getElementById('tabbar-wrap');
   const tabbarEl = document.querySelector('.tabbar');
@@ -5298,6 +5454,9 @@
     });
   }
 
+  // Cold load: land directly on whatever view the URL hash says (e.g. a
+  // profile.html/shop tab link to /preview/#adventures), defaulting home.
+  showView(location.hash.slice(1) || 'home', { skipHistory: true });
   initAuth();
   initScrollReveal();
 </script>
