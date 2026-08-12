@@ -59,9 +59,12 @@
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:center; gap:10px;
     padding:16px 6vw;
-    background:var(--cream);
-    backdrop-filter:blur(8px);
-    border-bottom:2px solid rgba(var(--shadow-rgb),0.06);
+    /* Frosted glass, matching .tabbar's own --card-bg/--card-border/blur
+       exactly, so the locked header and footer read as one consistent
+       chrome treatment. */
+    background:var(--card-bg);
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    border-bottom:1px solid var(--card-border);
   }
   .logo-img{ height:120px; width:auto; display:block; flex-shrink:0; }
   .back-link{ font-size:0.88rem; opacity:0.7; text-decoration:none; font-weight:500; flex-shrink:0; white-space:nowrap; }
@@ -615,6 +618,24 @@
   .oddities-cta .adv-acc-body .rvc-sc-pill.active, .oddities-cta .adv-acc-body .rvc-btn{ background:#5b3b8a; }
   .foodie-cta .adv-acc-header{ background:linear-gradient(135deg, #c9622f, #e08a4f); }
   .foodie-cta .adv-acc-body .rvc-sc-pill.active, .foodie-cta .adv-acc-body .rvc-btn{ background:#c9622f; }
+
+  /* Group labels + the permanently-expanded featured card leading each
+     group — same .adv-acc-item/.adv-acc-header/.adv-acc-body shape as a
+     collapsible row (see renderRoutePicker()'s featuredCardHtml()), just
+     with .open baked into the static HTML and no click handler, so it
+     never collapses and isn't part of any accordion's auto-cycle timer. */
+  .picker-group-label{
+    font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.8rem; text-transform:uppercase;
+    letter-spacing:0.04em; opacity:0.55; text-align:center; margin:18px 0 8px;
+  }
+  .adv-acc-item.featured{ margin-bottom:8px; }
+  .featured-header{ cursor:default; }
+  .featured-badge{
+    margin-left:auto; flex-shrink:0; background:rgba(255,255,255,0.25); color:#fff;
+    padding:3px 10px; border-radius:999px; font-size:0.65rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.03em;
+  }
+  .adv-acc-item.featured.curated .featured-badge{ background:rgba(var(--shadow-rgb),0.12); color:var(--ink); }
 
   .reroll-btn{
     background:transparent; border:2px solid var(--coral); color:var(--coral);
@@ -2583,47 +2604,62 @@
         <div class="rvc-desc">Explore together, or go solo, your call.</div>
       </div>
     `;
-    // Every "adventure type" (the themed real-venue picks above) and every
-    // curated route renders through the same collapsed-row/accordion shape
-    // — see advAccordionStep() below for the auto-cycle behavior. Building
-    // one flat items[] array (rather than two separately-styled sections)
-    // is what lets the accordion cycle through all of them as a single list.
-    const items = [
-      ...REAL_VENUE_ADVENTURE_THEMES.map((t) => ({
-        emoji: t.emoji,
-        name: t.title,
-        colorClass: t.colorClass,
-        kindClass: '',
+    // Both groups (the themed real-venue picks above, and curated routes)
+    // render the same way: whichever entry leads its array becomes a
+    // permanently-expanded "featured" card (no click needed, no auto-cycle
+    // — the .open class is just baked into its static HTML), and the rest
+    // of that group renders into its own collapsed/auto-cycling accordion
+    // below it — see advAccordionStep() below. Two independent accordion
+    // instances (keyed by container id) rather than one shared list, so
+    // "Choose Your Own" and "Curated" each cycle on their own.
+    // containerId identifies which accordion (if any) this card's pills
+    // should hold open on interaction — null for the featured card, which
+    // isn't part of any accordion/auto-cycle timer at all.
+    const themeToItem = (t, containerId) => ({
+      emoji: t.emoji,
+      name: t.title,
+      colorClass: t.colorClass,
+      kindClass: '',
+      bodyHtml: `
+        <div class="rvc-desc">${t.desc}</div>
+        <div class="rvc-stopcount">
+          <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 3, this, ${containerId ? `'${containerId}'` : 'null'})">3 stops</button>
+          <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 2, this, ${containerId ? `'${containerId}'` : 'null'})">2 stops</button>
+        </div>
+        <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
+      `,
+    });
+    const routeToItem = (r) => {
+      const total = counts[r.id];
+      const capped = total > unlockedStopCount;
+      return {
+        emoji: '🗺️',
+        name: r.title,
+        colorClass: '',
+        kindClass: 'curated',
         bodyHtml: `
-          <div class="rvc-desc">${t.desc}</div>
-          <div class="rvc-stopcount">
-            <button type="button" class="rvc-sc-pill active" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 3, this)">3 stops</button>
-            <button type="button" class="rvc-sc-pill" onclick="setStopCountChoice('${t.venueTheme || 'default'}', 2, this)">2 stops</button>
-          </div>
-          <button type="button" class="rvc-btn" onclick="beginAdventureCountdown(${t.venueTheme ? `'${t.venueTheme}'` : 'undefined'})">${t.startLabel}</button>
+          <div class="rp-desc">${r.description || ''}</div>
+          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
+          <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
         `,
-      })),
-      ...routes.map((r) => {
-        const total = counts[r.id];
-        const capped = total > unlockedStopCount;
-        return {
-          emoji: '🗺️',
-          name: r.title,
-          colorClass: '',
-          kindClass: 'curated',
-          bodyHtml: `
-            <div class="rp-desc">${r.description || ''}</div>
-            <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
-            <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
-          `,
-        };
-      }),
-    ];
-    const accordionHtml = `
-      <div class="adv-accordion" id="adv-accordion">
+      };
+    };
+
+    const featuredCardHtml = (item, delayMs) => `
+      <div class="adv-acc-item featured ${item.colorClass} ${item.kindClass} open" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${delayMs}ms;">
+        <div class="adv-acc-header featured-header">
+          <span class="adv-acc-emoji">${item.emoji}</span>
+          <span class="adv-acc-name">${item.name}</span>
+          <span class="featured-badge">⭐ Featured</span>
+        </div>
+        <div class="adv-acc-body-wrap"><div class="adv-acc-body">${item.bodyHtml}</div></div>
+      </div>
+    `;
+    const accordionHtml = (containerId, items) => items.length ? `
+      <div class="adv-accordion" id="${containerId}">
         ${items.map((item, i) => `
           <div class="adv-acc-item ${item.colorClass} ${item.kindClass}" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${Math.min(i, 6) * 70}ms;">
-            <button type="button" class="adv-acc-header" onclick="toggleAdvAccordion(${i})">
+            <button type="button" class="adv-acc-header" onclick="toggleAdvAccordion('${containerId}', ${i})">
               <span class="adv-acc-emoji">${item.emoji}</span>
               <span class="adv-acc-name">${item.name}</span>
               <span class="adv-acc-chevron">›</span>
@@ -2632,9 +2668,22 @@
           </div>
         `).join('')}
       </div>
+    ` : '';
+
+    const [featuredTheme, ...otherThemes] = REAL_VENUE_ADVENTURE_THEMES;
+    const [featuredRoute, ...otherRoutes] = routes;
+
+    body.innerHTML = `
+      ${inviteFriendsCta}
+      <div class="picker-group-label">Choose Your Own Adventure</div>
+      ${featuredCardHtml(themeToItem(featuredTheme, null), 0)}
+      ${accordionHtml('adv-accordion-themes', otherThemes.map((t) => themeToItem(t, 'adv-accordion-themes')))}
+      <div class="picker-group-label">Curated Adventures</div>
+      ${featuredCardHtml(routeToItem(featuredRoute), 70)}
+      ${accordionHtml('adv-accordion-routes', otherRoutes.map(routeToItem))}
     `;
-    body.innerHTML = `${inviteFriendsCta}${accordionHtml}`;
-    initAdvAccordion(items.length);
+    initAdvAccordion('adv-accordion-themes', otherThemes.length);
+    initAdvAccordion('adv-accordion-routes', otherRoutes.length);
   }
 
   // ---------- ADVENTURE PICKER ACCORDION: AUTO-CYCLE ----------
@@ -2644,19 +2693,27 @@
   // wherever the cycle was) and holds it open for the same 3s beat before
   // resuming from there — clicking doesn't stop the cycle for good, it just
   // re-centers it on whatever the player is looking at right now.
-  const advAccordion = { count: 0, openIndex: -1, idleTimer: null, stepTimer: null };
+  // Keyed by container id (there are now two independent accordions,
+  // "Choose Your Own" and "Curated" — see renderRoutePicker()) rather than
+  // one shared global, so each cycles on its own timer without one
+  // resetting the other.
+  const advAccordions = new Map();
 
-  function advAccordionClearTimers() {
-    clearTimeout(advAccordion.idleTimer);
-    clearTimeout(advAccordion.stepTimer);
-    advAccordion.idleTimer = null;
-    advAccordion.stepTimer = null;
+  function advAccordionClearTimers(containerId) {
+    const state = advAccordions.get(containerId);
+    if (!state) return;
+    clearTimeout(state.idleTimer);
+    clearTimeout(state.stepTimer);
+    state.idleTimer = null;
+    state.stepTimer = null;
   }
 
-  function advAccordionSetOpen(index) {
-    const container = document.getElementById('adv-accordion');
+  function advAccordionSetOpen(containerId, index) {
+    const container = document.getElementById(containerId);
     if (!container) return; // picker no longer on screen — nothing to do
-    advAccordion.openIndex = index;
+    const state = advAccordions.get(containerId);
+    if (!state) return;
+    state.openIndex = index;
     // Visibility/animation is entirely CSS-driven (.adv-acc-item.open, see
     // the grid-rows trick above) — this just flips the class, no direct
     // style/attribute manipulation needed.
@@ -2665,33 +2722,37 @@
     });
   }
 
-  function advAccordionStep(index) {
-    if (!document.getElementById('adv-accordion')) return; // picker torn down mid-timer (adventure started, tab changed) — stop the chain
-    advAccordionSetOpen(index);
-    advAccordion.stepTimer = setTimeout(() => advAccordionStep((index + 1) % advAccordion.count), 3000);
+  function advAccordionStep(containerId, index) {
+    const state = advAccordions.get(containerId);
+    if (!state || !document.getElementById(containerId)) return; // picker torn down mid-timer (adventure started, tab changed) — stop the chain
+    advAccordionSetOpen(containerId, index);
+    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (index + 1) % state.count), 3000);
   }
 
-  function initAdvAccordion(count) {
-    advAccordionClearTimers();
-    advAccordion.count = count;
-    advAccordion.openIndex = -1;
+  function initAdvAccordion(containerId, count) {
+    advAccordionClearTimers(containerId);
+    const state = { count, openIndex: -1, idleTimer: null, stepTimer: null };
+    advAccordions.set(containerId, state);
     if (!count) return;
-    advAccordion.idleTimer = setTimeout(() => advAccordionStep(0), 5000);
+    state.idleTimer = setTimeout(() => advAccordionStep(containerId, 0), 5000);
   }
 
-  window.toggleAdvAccordion = function (index) {
-    advAccordionClearTimers();
-    advAccordionStep(index);
+  window.toggleAdvAccordion = function (containerId, index) {
+    advAccordionClearTimers(containerId);
+    advAccordionStep(containerId, index);
   };
 
   // Interacting with the stop-count pills inside the currently-open card
   // shouldn't get yanked away mid-decision by the 3s auto-advance — this
   // just restarts that card's 3s hold rather than clearing it outright, so
   // the cycle still resumes on its own once the player stops touching it.
-  function advAccordionHoldCurrent() {
-    if (advAccordion.openIndex < 0 || !document.getElementById('adv-accordion')) return;
-    clearTimeout(advAccordion.stepTimer);
-    advAccordion.stepTimer = setTimeout(() => advAccordionStep((advAccordion.openIndex + 1) % advAccordion.count), 3000);
+  // containerId is undefined for the featured cards' own pills (they're not
+  // part of any accordion/timer), in which case this is a no-op.
+  function advAccordionHoldCurrent(containerId) {
+    const state = containerId ? advAccordions.get(containerId) : null;
+    if (!state || state.openIndex < 0 || !document.getElementById(containerId)) return;
+    clearTimeout(state.stepTimer);
+    state.stepTimer = setTimeout(() => advAccordionStep(containerId, (state.openIndex + 1) % state.count), 3000);
   }
 
   // ---------- START A REAL-VENUE ADVENTURE ----------
@@ -2707,11 +2768,11 @@
   // player's unlocked_stop_count regardless of what's sent here.
   let stopCountChoices = { default: 3 };
   for (const t of REAL_VENUE_ADVENTURE_THEMES) if (t.venueTheme) stopCountChoices[t.venueTheme] = 3;
-  window.setStopCountChoice = function (key, n, btnEl) {
+  window.setStopCountChoice = function (key, n, btnEl, containerId) {
     stopCountChoices[key] = n;
     btnEl.parentElement.querySelectorAll('.rvc-sc-pill').forEach((el) => el.classList.remove('active'));
     btnEl.classList.add('active');
-    advAccordionHoldCurrent();
+    advAccordionHoldCurrent(containerId);
   };
 
   // Canonical entry point for starting a real-venue adventure — called both
