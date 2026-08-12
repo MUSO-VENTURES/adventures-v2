@@ -20,6 +20,7 @@
     --card-border:rgba(255,255,255,0.5);
     --shadow-rgb:42,36,56;
     --ease-bounce:cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-smooth:cubic-bezier(0.22, 1, 0.36, 1);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -64,6 +65,17 @@
   }
 
   .wrap{ max-width:920px; margin:0 auto; padding:4vh 6vw 8vh; }
+  /* Plays once on load — every visit to this page (a real navigation, or a
+     fresh iframe load inside index.html's profile sheet) is a "content
+     build in" moment, matching the same treatment on the other two pages. */
+  @keyframes pageContentIn{
+    from{ opacity:0; transform:translateY(14px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  .wrap{ animation:pageContentIn .5s var(--ease-smooth) both; }
+  @media (prefers-reduced-motion:reduce){
+    .wrap{ animation:none; }
+  }
 
   .signin-prompt{
     max-width:420px; margin:8vh auto; background:var(--card); border-radius:18px;

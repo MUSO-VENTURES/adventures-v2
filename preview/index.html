@@ -29,6 +29,10 @@
        feel tapped/alive rather than mechanical: accordion open/close, card
        deals, button presses, modal pop-ins, scroll reveals. */
     --ease-bounce:cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Plain decelerate, no overshoot — used for whole-page/whole-view
+       content builds (see .app-view.active), where a large block visibly
+       overshooting would read as janky rather than alive. */
+    --ease-smooth:cubic-bezier(0.22, 1, 0.36, 1);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -98,6 +102,17 @@
   .reveal-on-scroll.revealed{ opacity:1; transform:translateY(0); }
   @media (prefers-reduced-motion:reduce){
     .reveal-on-scroll{ opacity:1; transform:none; transition:none; }
+    .app-view.active{ animation:none; }
+  }
+
+  /* ---------- PAGE/VIEW CONTENT BUILD ----------
+     Plays whenever a view becomes the active one (see showView()) — display
+     flipping from none to block re-triggers it every time, so switching
+     Adventures/Games/Maps always "builds" the new content in rather than
+     snapping to it. */
+  @keyframes pageContentIn{
+    from{ opacity:0; transform:translateY(14px); }
+    to{ opacity:1; transform:translateY(0); }
   }
 
   /* ---------- ROKU-STYLE PARALLAX HEADER ----------
@@ -549,7 +564,7 @@
      page destinations, not sections you scroll past — only one is ever
      shown at a time, everything else display:none. */
   .app-view{ display:none; }
-  .app-view.active{ display:block; }
+  .app-view.active{ display:block; animation:pageContentIn .5s var(--ease-smooth) both; }
 
   /* Clicking a .minigame-card on the Games page "scales to full size" into
      this — reuses the existing .photobooth-overlay/.photobooth-card
@@ -5715,6 +5730,12 @@
     }
     document.querySelectorAll('.app-view').forEach((el) => el.classList.toggle('active', el.dataset.view === view));
     document.querySelectorAll('.tabbar .tab-item').forEach((t) => t.classList.toggle('active', t.dataset.view === view));
+    // Parallax header is Adventures-only — hiding it on Games/Maps also
+    // takes it out of the viewport, so the existing IntersectionObserver
+    // that drives the auto-drift rAF loop (see the sky-band IIFE) naturally
+    // stops running while it's not shown, no extra pause logic needed here.
+    const skyBandEl = document.getElementById('sky-band');
+    if (skyBandEl) skyBandEl.hidden = view !== 'adventures';
     window.scrollTo(0, 0);
     if (!(opts && opts.skipHistory) && location.hash.slice(1) !== view) {
       history.pushState(null, '', view === 'adventures' ? location.pathname : `#${view}`);

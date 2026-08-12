@@ -19,6 +19,7 @@
     --card-bg:rgba(255,255,255,0.6);
     --card-border:rgba(255,255,255,0.5);
     --shadow-rgb:42,36,56;
+    --ease-smooth:cubic-bezier(0.22, 1, 0.36, 1);
   }
   /* Binary day/night (see the shared detector script near the bottom of
      body) — light by day, dark by night, no gradual transition. Card/ink/
@@ -108,6 +109,19 @@
   .coin-pill{
     display:inline-flex; align-items:center; gap:4px; background:var(--cream); border-radius:999px;
     padding:6px 14px; font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; color:var(--deep-teal);
+  }
+
+  /* Plays once per page load on the hero + each top-level section/footer —
+     this page is a flat sequence of full-page destinations (no client-side
+     router like preview/index.html), so "content builds on page access"
+     here just means "on load", same as profile.html's #wrap. */
+  @keyframes pageContentIn{
+    from{ opacity:0; transform:translateY(14px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  header.hero, section, footer{ animation:pageContentIn .5s var(--ease-smooth) both; }
+  @media (prefers-reduced-motion: reduce){
+    header.hero, section, footer{ animation:none; }
   }
 
   header.hero{
