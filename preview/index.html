@@ -547,9 +547,13 @@
   }
   .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
   .minigame-card.locked{ opacity:0.75; }
-  .minigame-card.locked .minigame-emoji{ filter:grayscale(1); }
-  .minigame-emoji{ font-size:2rem; margin-bottom:8px; }
+  .minigame-card.locked .minigame-icon{ filter:grayscale(1); }
+  /* 64px is the "legible at a glance" floor for this badge art's level of
+     detail (postcards/dials/faces) — the old 2rem emoji glyph read fine at
+     a fraction of this size, but these icons need real room. */
+  .minigame-icon{ width:64px; height:64px; object-fit:contain; margin:0 auto 8px; display:block; }
   .minigame-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; margin-bottom:4px; }
+  .minigame-desc{ font-size:0.72rem; opacity:0.6; line-height:1.35; margin-bottom:8px; }
   .minigame-status{ font-size:0.75rem; opacity:0.55; margin-bottom:10px; }
   .minigame-play-btn, .minigame-unlock-btn{
     border:none; border-radius:999px; padding:8px 16px; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -572,7 +576,7 @@
   .minigame-card{ cursor:pointer; }
   .minigame-detail-card{ text-align:center; max-width:360px; }
   .minigame-detail-close{ position:absolute; top:14px; right:14px; }
-  .minigame-detail-emoji{ font-size:3.4rem; margin-bottom:6px; }
+  .minigame-detail-icon{ width:100px; height:100px; object-fit:contain; margin:0 auto 10px; display:block; }
   #minigame-detail-title{ font-family:'Fredoka',sans-serif; margin-bottom:8px; }
   #minigame-detail-desc{ opacity:0.75; margin-bottom:20px; line-height:1.5; }
 
@@ -1676,7 +1680,7 @@
 <div class="photobooth-overlay" id="minigame-detail-overlay" hidden>
   <div class="photobooth-card minigame-detail-card">
     <span class="pb-close minigame-detail-close" onclick="closeMinigameDetail()">&times;</span>
-    <div class="minigame-detail-emoji" id="minigame-detail-emoji"></div>
+    <img class="minigame-detail-icon" id="minigame-detail-icon" src="" alt="">
     <h2 id="minigame-detail-title"></h2>
     <p id="minigame-detail-desc"></p>
     <div id="minigame-detail-cta"></div>
@@ -2474,18 +2478,47 @@
   // display purposes only — the actual free-at-level/coin-cost enforcement
   // happens server-side, this is just copy. 'trivia' unlocks automatically
   // on a player's first check-in (checkin/index.ts), never bought here.
+  // icon paths point at the real badge art (assets/minigames/) — swapped in
+  // for the emoji placeholders. The last 6 have no backend registry entry
+  // yet (real gameplay for each ships separately from this app — see
+  // conversation), so they're always shown locked with no cost/unlock CTA
+  // rather than wired to invented unlock economics.
   const MINIGAMES_CONFIG = [
     {
-      key: 'trivia', emoji: '❓', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in',
+      key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in',
       desc: 'A quick round of adventure and venue trivia between stops. Answer fast for bonus XP.',
     },
     {
-      key: 'photo_challenge', emoji: '📸', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
+      key: 'photo_challenge', icon: 'photo_challenge.png', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
       desc: 'A themed photo prompt at your current stop. Snap it, submit it, earn bonus coins.',
     },
     {
-      key: 'scavenger_clue', emoji: '🔍', title: 'Scavenger Clue', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250,
+      key: 'scavenger_clue', icon: 'scavenger_hunt.png', title: 'Scavenger Hunt', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250,
       desc: 'A riddle-style clue hidden somewhere near your route. Solve it for a coin payout.',
+    },
+    {
+      key: 'postcard_trail', icon: 'postcard_trail.png', title: 'Postcard Trail', lockedHint: 'Coming soon',
+      desc: 'Collect a postcard-worthy snapshot at every stop along the way.',
+    },
+    {
+      key: 'highway_radio', icon: 'highway_radio.png', title: 'Highway Radio', lockedHint: 'Coming soon',
+      desc: 'Tune in for an audio challenge between stops.',
+    },
+    {
+      key: 'spot_it', icon: 'spot_it.png', title: 'Spot It', lockedHint: 'Coming soon',
+      desc: 'Spot the hidden detail before anyone else in your party does.',
+    },
+    {
+      key: 'would_you', icon: 'would_you.png', title: 'Would You?!', lockedHint: 'Coming soon',
+      desc: 'Bold this-or-that dares for the whole party to answer.',
+    },
+    {
+      key: 'wtf', icon: 'wtf.png', title: 'WTF?!?!', lockedHint: 'Coming soon',
+      desc: 'Wild reactions and surprise twists mid-adventure.',
+    },
+    {
+      key: 'style_my', icon: 'style_my.png', title: 'Style My', lockedHint: 'Coming soon',
+      desc: 'A quick-fire styling challenge for your party.',
     },
   ];
   let unlockedMinigameKeys = new Set();
@@ -2505,7 +2538,9 @@
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);
     if (!g) return;
     const unlocked = unlockedMinigameKeys.has(key);
-    document.getElementById('minigame-detail-emoji').textContent = g.emoji;
+    const detailIconEl = document.getElementById('minigame-detail-icon');
+    detailIconEl.src = `../assets/minigames/${g.icon}`;
+    detailIconEl.alt = g.title;
     document.getElementById('minigame-detail-title').textContent = g.title;
     document.getElementById('minigame-detail-desc').textContent = g.desc;
     const ctaEl = document.getElementById('minigame-detail-cta');
@@ -2813,16 +2848,18 @@
       if (unlocked) {
         return `
           <div class="minigame-card" onclick="openMinigameDetail('${g.key}')">
-            <div class="minigame-emoji">${g.emoji}</div>
+            <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
             <div class="minigame-title">${g.title}</div>
+            <div class="minigame-desc">${g.desc}</div>
             <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')">▶ Play</button>
           </div>
         `;
       }
       return `
         <div class="minigame-card locked" onclick="openMinigameDetail('${g.key}')">
-          <div class="minigame-emoji">${g.emoji}</div>
+          <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
           <div class="minigame-title">${g.title}</div>
+          <div class="minigame-desc">${g.desc}</div>
           <div class="minigame-status">🔒 ${g.lockedHint}</div>
           ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
         </div>
