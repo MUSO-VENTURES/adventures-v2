@@ -550,6 +550,27 @@ const FOODIE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const FOODIE_GENERAL_THEME: Theme = { key: "food_spot", label: "Tasty Find", emoji: "🍽️", color: "#c9622f" };
 
+const AFTER_HOURS_YELP_CATEGORIES = ["bars", "lounges", "cocktailbars", "musicvenues", "pubs", "wine_bars"];
+const AFTER_HOURS_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "craft_cocktails", label: "Craft Cocktails", emoji: "🍸", color: "#5b4b8a",
+    keywords: ["cocktail", "mixology", "speakeasy", "craft bar", "martini"],
+  },
+  {
+    key: "live_music", label: "Live Music", emoji: "🎶", color: "#8a3b5b",
+    keywords: ["live music", "music venue", "concert", "band", "jazz", "karaoke"],
+  },
+  {
+    key: "late_night_bites", label: "Late-Night Bites", emoji: "🌮", color: "#c9622f",
+    keywords: ["late night", "24 hour", "diner", "food truck", "pizza"],
+  },
+  {
+    key: "chill_lounge", label: "Chill Lounge", emoji: "🛋️", color: "#0b6e68",
+    keywords: ["lounge", "wine bar", "rooftop", "hookah", "beer garden"],
+  },
+];
+const AFTER_HOURS_GENERAL_THEME: Theme = { key: "night_spot", label: "Night Out Pick", emoji: "🌙", color: "#2a3a63" };
+
 // A sparse market can genuinely only have 2 distinct themes worth of open,
 // rated candidates — in that case pickContrastingChoices()'s last-resort
 // backfill has to repeat one, which used to mean two cards showing the
@@ -650,6 +671,7 @@ const THEME_SET_META = new Map<(Theme & { keywords: string[] })[], ThemeSetMeta>
   [OUTDOOR_THEME_BUCKETS, { generalTheme: OUTDOOR_GENERAL_THEME }],
   [ODDITIES_THEME_BUCKETS, { generalTheme: ODDITIES_GENERAL_THEME }],
   [FOODIE_THEME_BUCKETS, { generalTheme: FOODIE_GENERAL_THEME }],
+  [AFTER_HOURS_THEME_BUCKETS, { generalTheme: AFTER_HOURS_GENERAL_THEME }],
 ]);
 
 // Keyed by routes.venue_theme — the single source of truth for every
@@ -694,6 +716,12 @@ const THEME_REGISTRY: Record<string, ThemeRegistryEntry> = {
     yelpCategories: FOODIE_YELP_CATEGORIES,
     title: "Foodies Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby food spots.",
+  },
+  after_hours: {
+    buckets: AFTER_HOURS_THEME_BUCKETS,
+    yelpCategories: AFTER_HOURS_YELP_CATEGORIES,
+    title: "After Hours Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby bars, lounges, and late-night spots.",
   },
 };
 
