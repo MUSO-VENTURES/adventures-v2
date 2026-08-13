@@ -63,7 +63,7 @@ function getSupabaseAdmin() {
 // granted directly by checkin/index.ts on a player's first check-in).
 const MINIGAME_REGISTRY: Record<string, { label: string; freeAtLevel: number; cost: number }> = {
   photo_challenge: { label: "Photo Challenge", freeAtLevel: 4, cost: 150 },
-  scavenger_clue: { label: "Scavenger Clue", freeAtLevel: 7, cost: 250 },
+  scavenger_clue: { label: "Scavenger Hunt", freeAtLevel: 7, cost: 250 },
 };
 
 Deno.serve(async (req) => {
