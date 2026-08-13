@@ -574,7 +574,11 @@
      this — reuses the existing .photobooth-overlay/.photobooth-card
      pop-in, just centered text. */
   .minigame-card{ cursor:pointer; }
-  .minigame-detail-card{ text-align:center; max-width:360px; }
+  /* position:relative so .minigame-detail-close's position:absolute anchors
+     to this card, not to the overlay behind it — without it the close X
+     was positioning off the top-right of the whole screen instead of the
+     card, since .photobooth-card itself sets no position. */
+  .minigame-detail-card{ text-align:center; max-width:360px; position:relative; }
   .minigame-detail-close{ position:absolute; top:14px; right:14px; }
   .minigame-detail-icon{ width:100px; height:100px; object-fit:contain; margin:0 auto 10px; display:block; }
   #minigame-detail-title{ font-family:'Fredoka',sans-serif; margin-bottom:8px; }
