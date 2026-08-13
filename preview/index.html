@@ -612,6 +612,11 @@
   .adv-acc-item.curated .adv-acc-header{ background:rgba(var(--shadow-rgb),0.07); color:var(--ink); }
   .adv-acc-emoji{ font-size:1.15rem; flex-shrink:0; transition:transform .4s var(--ease-bounce); }
   .adv-acc-item.open .adv-acc-emoji{ transform:scale(1.2) rotate(-6deg); }
+  /* Badge-style artwork reads as detail (a mini scene + wordmark), not a
+     glyph — sized well past emoji scale so the wordmark stays legible in
+     the header row instead of shrinking into a smudge. */
+  .adv-acc-icon{ width:60px; height:60px; object-fit:contain; flex-shrink:0; margin:-6px 0; transition:transform .4s var(--ease-bounce); }
+  .adv-acc-item.open .adv-acc-icon{ transform:scale(1.08) rotate(-4deg); }
   .adv-acc-name{ flex:1; }
   .adv-acc-chevron{ transition:transform .4s var(--ease-bounce); opacity:0.85; flex-shrink:0; }
   .adv-acc-item.open .adv-acc-chevron{ transform:rotate(90deg); }
@@ -3067,17 +3072,17 @@
   // colorClass hooks the CSS gradient/accent defined next to .wine-cta etc.
   const REAL_VENUE_ADVENTURE_THEMES = [
     {
-      venueTheme: null, emoji: '🍀', title: 'Fork in the Road: Real Venue Adventure', colorClass: '',
+      venueTheme: null, emoji: '🍀', icon: '../assets/adventure-icons/fork-in-the-road.png', title: 'Fork in the Road: Real Venue Adventure', colorClass: '',
       desc: 'Every stop gives you 3 real, contrasting picks near you. Choose your own path, or reroll for 3 new options (3 free rolls per stop).',
       startLabel: 'Start a Real Adventure', countdownHeading: '🍀 Start your MUSO Real Venues Adventure',
     },
     {
-      venueTheme: 'wine_country', emoji: '🍷', title: 'Wine Country Adventure', colorClass: 'wine-cta',
+      venueTheme: 'wine_country', emoji: '🍷', icon: '../assets/adventure-icons/wine-country.png', title: 'Wine Country Adventure', colorClass: 'wine-cta',
       desc: "Every stop is a real, nearby winery or tasting room. Not open yet? No problem, fuel up with coffee, breakfast, or a scenic stop nearby, then the adventure shifts to real wineries as they open. Works wherever you're standing, from the Tri-Valley to Napa, Mendocino, or Lake County.",
       startLabel: 'Start a Wine Country Adventure', countdownHeading: '🍷 Start your MUSO Wine Country Adventure',
     },
     {
-      venueTheme: 'dog_friendly', emoji: '🐾', title: 'Dog Friendly Adventure', colorClass: 'dog-cta',
+      venueTheme: 'dog_friendly', emoji: '🐾', icon: '../assets/adventure-icons/dog-friendly.png', title: 'Dog Friendly Adventure', colorClass: 'dog-cta',
       desc: 'Every stop welcomes your pup. Dog parks, pet-friendly patios, and trail walks near you, real and nearby.',
       startLabel: 'Start a Dog Friendly Adventure', countdownHeading: '🐾 Start your MUSO Dog Friendly Adventure',
     },
@@ -3087,12 +3092,12 @@
       startLabel: 'Start an Outdoor Adventure', countdownHeading: '🏞️ Start your MUSO Outdoor Adventure',
     },
     {
-      venueTheme: 'oddities', emoji: '🔮', title: 'Oddities Adventure', colorClass: 'oddities-cta',
+      venueTheme: 'oddities', emoji: '🔮', icon: '../assets/adventure-icons/oddities.png', title: 'Oddities Adventure', colorClass: 'oddities-cta',
       desc: 'Every stop is a little strange, in a good way. Curiosity shops, weird museums, and vintage finds near you.',
       startLabel: 'Start an Oddities Adventure', countdownHeading: '🔮 Start your MUSO Oddities Adventure',
     },
     {
-      venueTheme: 'foodie_tour', emoji: '🍽️', title: 'Foodies Adventure', colorClass: 'foodie-cta',
+      venueTheme: 'foodie_tour', emoji: '🍽️', icon: '../assets/adventure-icons/foodies.png', title: 'Foodies Adventure', colorClass: 'foodie-cta',
       desc: 'Every stop is a real bite worth trying. Street eats, sit-down spots, and sweets near you, real and nearby.',
       startLabel: 'Start a Foodies Adventure', countdownHeading: '🍽️ Start your MUSO Foodies Adventure',
     },
@@ -3144,6 +3149,7 @@
       const stopKey = t.venueTheme || 'default';
       return {
         emoji: t.emoji,
+        icon: t.icon,
         name: t.title,
         colorClass: t.colorClass,
         kindClass: '',
@@ -3173,10 +3179,16 @@
       };
     };
 
+    // Real icon art (see REAL_VENUE_ADVENTURE_THEMES) beats the emoji when a
+    // theme has it; curated routes and the Outdoor theme still fall back to
+    // their emoji since no badge art exists for them.
+    const advIconOrEmoji = (item) => item.icon
+      ? `<img class="adv-acc-icon" src="${item.icon}" alt="">`
+      : `<span class="adv-acc-emoji">${item.emoji}</span>`;
     const featuredCardHtml = (item, delayMs) => `
       <div class="adv-acc-item featured ${item.colorClass} ${item.kindClass} open" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${delayMs}ms;">
         <div class="adv-acc-header featured-header">
-          <span class="adv-acc-emoji">${item.emoji}</span>
+          ${advIconOrEmoji(item)}
           <span class="adv-acc-name">${item.name}</span>
           <span class="featured-badge">⭐ Featured</span>
         </div>
@@ -3188,7 +3200,7 @@
         ${items.map((item, i) => `
           <div class="adv-acc-item ${item.colorClass} ${item.kindClass}" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${Math.min(i, 6) * 70}ms;">
             <button type="button" class="adv-acc-header" onclick="toggleAdvAccordion('${containerId}', ${i})">
-              <span class="adv-acc-emoji">${item.emoji}</span>
+              ${advIconOrEmoji(item)}
               <span class="adv-acc-name">${item.name}</span>
               <span class="adv-acc-chevron">›</span>
             </button>
