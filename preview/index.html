@@ -550,6 +550,23 @@
   .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
   .minigame-card.locked{ opacity:0.75; }
   .minigame-card.locked .minigame-icon{ filter:grayscale(1); }
+  /* The Flip is always free and playable the instant you sign in (see
+     ALWAYS_FREE_MINIGAME_KEYS) — spans the full grid row and gets a
+     gradient card so it reads as the game to try first, not just another
+     tile in the grid. */
+  .minigame-card.featured{
+    grid-column:1/-1; position:relative;
+    background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff;
+  }
+  .minigame-card.featured .minigame-desc{ opacity:0.85; }
+  /* Coral-on-coral would nearly vanish against the featured card's own
+     gradient background, so it flips to white-on-coral instead. */
+  .minigame-card.featured .minigame-play-btn{ background:#fff; color:var(--coral); }
+  .minigame-featured-badge{
+    position:absolute; top:14px; right:14px; background:rgba(255,255,255,0.25); color:#fff;
+    padding:3px 10px; border-radius:999px; font-size:0.65rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.03em;
+  }
   /* 150% larger than the original 64px floor — the badge art already
      carries the game's name as part of its own artwork, so it's the
      primary identifier on the card now rather than a supporting glyph
@@ -1054,6 +1071,15 @@
     font-size:1.3rem; opacity:0.5; border:2px dashed rgba(var(--shadow-rgb),0.25);
   }
   .party-member-pending .party-member-name{ opacity:0.55; }
+  .party-member-challenge-btn{
+    position:absolute; right:-3px; bottom:-3px; width:20px; height:20px; border-radius:50%;
+    background:var(--coral); color:#fff; border:2px solid var(--card); font-size:0.68rem;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+    line-height:1; box-shadow:0 2px 6px rgba(var(--shadow-rgb),0.25);
+  }
+  .party-member-challenge-btn:active{ transform:scale(0.9); }
+  .party-member-challenge-btn.pending{ background:var(--tangerine); animation:challengePendingPulse 1.6s ease-in-out infinite; }
+  @keyframes challengePendingPulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.55; } }
   .party-feed{ border-top:1px solid rgba(var(--shadow-rgb),0.08); padding-top:10px; max-height:160px; overflow-y:auto; }
   .party-feed-empty{ font-size:0.78rem; opacity:0.5; text-align:center; padding:6px 0; }
   .party-feed-item{
@@ -1717,6 +1743,41 @@
   </div>
 </div>
 
+<!-- Head-to-head coin flip challenge — send side. Opened from the ⚔️ badge
+     on a party member's avatar (renderPartyRoster()); see challengePlayer()/
+     sendChallenge() below. Reuses the same photobooth-overlay/-card shell
+     as minigame-detail-overlay above rather than inventing new modal chrome. -->
+<div class="photobooth-overlay" id="challenge-send-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center; position:relative;">
+    <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeChallengeSend()">&times;</span>
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>⚔️ Challenge <span id="challenge-send-name"></span></span>
+    </div>
+    <p style="opacity:0.75; font-size:0.9rem; margin:0 0 18px;">Call it, win and you both know it, plus +20 XP.</p>
+    <div style="display:flex; gap:10px;">
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="sendChallenge('heads')">Heads</button>
+      <button type="button" class="pb-btn secondary" style="flex:1;" onclick="sendChallenge('tails')">Tails</button>
+    </div>
+  </div>
+</div>
+
+<!-- Head-to-head coin flip challenge — receive side. Populated and shown by
+     handleIncomingChallenge() when a realtime INSERT lands on
+     coin_flip_challenges with me as opponent_id (or by checkPendingChallenges()
+     on load, for one that arrived while I wasn't subscribed). -->
+<div class="photobooth-overlay" id="challenge-incoming-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center;">
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>⚔️ Coin Flip Challenge</span>
+    </div>
+    <p id="challenge-incoming-text" style="font-size:0.95rem; margin:0 0 18px;"></p>
+    <div style="display:flex; gap:10px;">
+      <button type="button" class="pb-btn secondary" style="flex:1;" onclick="respondToIncomingChallenge('decline')">Decline</button>
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="respondToIncomingChallenge('accept')">Accept</button>
+    </div>
+  </div>
+</div>
+
 <div class="party-invite-overlay" id="party-invite-overlay" hidden>
   <div class="party-invite-card">
     <button type="button" class="party-invite-close" onclick="closeInviteModal()" aria-label="Close">&times;</button>
@@ -1795,6 +1856,13 @@
      build step. -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<!-- Adventure Coin flip: self-contained widget (assets/coin-flip.js), no
+     build step, same pattern as the qrcode/jsQR includes above. Wired into
+     the Games grid below (MINIGAMES_CONFIG 'heads_or_tails' + playMinigame),
+     but window.MusoCoinFlip.flip() is a global utility any other view can
+     call too — it doesn't touch the backend unlock economy, see comment
+     by ALWAYS_FREE_MINIGAME_KEYS. -->
+<script src="../assets/coin-flip.js"></script>
 <script>
   // Restores a query string (e.g. ?test=1&lat=..&lng=..) that
   // sendMagicLink() deliberately stripped off the magic-link redirect URL
@@ -2117,6 +2185,10 @@
     return postEdgeFunction('party-social', { action, ...(extra || {}) });
   }
 
+  async function postMinigames(action, extra) {
+    return postEdgeFunction('minigames', { action, ...(extra || {}) });
+  }
+
   function stopNameById(routeStopId) {
     const stop = (activeAdventure?.stops || []).find((s) => s.id === routeStopId);
     return stop?.name || 'a stop';
@@ -2136,12 +2208,26 @@
 
     const memberHtml = roster.members.map((m) => {
       const esc = String(m.displayName || 'Explorer').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const nameAttr = esc.replace(/"/g, '&quot;'); // esc alone isn't attribute-safe — a name with a " would break out of data-name="..."
       const img = m.avatarUrl
         ? `<img src="${String(m.avatarUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" alt="">`
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">${esc.charAt(0).toUpperCase()}</div>`;
+      // Can't challenge yourself — everyone else in the party gets the ⚔️
+      // badge, which flips to a ⏳ (cancel) state while I have a pending
+      // challenge sent to them — see myPendingChallenges below.
+      // profileId is a UUID (safe as-is); the name still goes through the
+      // same attribute-escaped nameAttr as above.
+      const canChallenge = m.profileId !== currentSession?.user?.id;
+      const pendingChallengeId = myPendingChallenges.get(m.profileId);
+      let challengeBtn = '';
+      if (pendingChallengeId) {
+        challengeBtn = `<button type="button" class="party-member-challenge-btn pending" data-challenge-id="${pendingChallengeId}" data-profile-id="${m.profileId}" onclick="event.stopPropagation(); cancelSentChallenge(this.dataset.challengeId, this.dataset.profileId)" title="Cancel challenge">⏳</button>`;
+      } else if (canChallenge) {
+        challengeBtn = `<button type="button" class="party-member-challenge-btn" data-profile-id="${m.profileId}" data-name="${nameAttr}" onclick="event.stopPropagation(); challengePlayer(this.dataset.profileId, this.dataset.name)" title="Challenge to a coin flip">⚔️</button>`;
+      }
       return `
         <div class="party-member">
-          <div class="party-member-avatar" data-level="${m.level}">${img}</div>
+          <div class="party-member-avatar" data-level="${m.level}">${img}${challengeBtn}</div>
           <div class="party-member-name">${esc}</div>
           <div class="party-member-meta">Lv ${m.level} · 🏅${m.badgeCount}</div>
         </div>
@@ -2169,6 +2255,161 @@
     if (!activeAdventure?.partyId) return;
     const { res, data } = await postPartySocial('partyRoster', { partyId: activeAdventure.partyId });
     if (res.ok) renderPartyRoster(data);
+  }
+
+  // ---------- COIN FLIP CHALLENGES ----------
+  // Head-to-head sibling of the solo flip (playMinigame('heads_or_tails'))
+  // — any party member can challenge any other at any time during an
+  // active adventure, from the ⚔️ badge on their roster avatar (see
+  // renderPartyRoster() above). The flip result is always decided
+  // server-side in respondToChallenge (minigames/index.ts) the instant the
+  // opponent accepts; both clients just animate the shared MusoCoinFlip
+  // widget toward that one result via its { result } option (see
+  // assets/coin-flip.js), so the two devices can't disagree on who won.
+  // Both the challenger and the opponent learn the outcome the same way —
+  // through the realtime UPDATE handled in handleResolvedChallenge() below
+  // — rather than the accepting player short-circuiting on their own
+  // respondToChallenge response, so there's exactly one code path instead
+  // of two slightly-different ones.
+  let challengeSendTarget = null; // { profileId, name }
+  let incomingChallenge = null; // normalized (camelCase) challenge row currently shown in the incoming modal
+  let myPendingChallenges = new Map(); // opponentId -> challengeId, for challenges *I've* sent that are still pending
+
+  function opponentCallOf(challengerCall) {
+    return challengerCall === 'heads' ? 'tails' : 'heads';
+  }
+
+  // Realtime postgres_changes payloads are raw table rows (snake_case);
+  // edge-function responses are already camelCase (serializeChallenge() in
+  // minigames/index.ts). Normalizing once here means every handler below
+  // only ever deals with one shape.
+  function normalizeChallengeRow(row) {
+    if ('challengerId' in row) return row;
+    return {
+      id: row.id,
+      partyId: row.party_id,
+      adventureId: row.adventure_id,
+      challengerId: row.challenger_id,
+      opponentId: row.opponent_id,
+      challengerCall: row.challenger_call,
+      status: row.status,
+      result: row.result,
+      winnerId: row.winner_id,
+      xpAwarded: row.xp_awarded,
+    };
+  }
+
+  window.challengePlayer = function (profileId, name) {
+    if (!activeAdventure?.partyId || !activeAdventure?.adventureId) return;
+    challengeSendTarget = { profileId, name };
+    document.getElementById('challenge-send-name').textContent = name;
+    document.getElementById('challenge-send-overlay').removeAttribute('hidden');
+  };
+
+  window.closeChallengeSend = function () {
+    document.getElementById('challenge-send-overlay').setAttribute('hidden', '');
+    challengeSendTarget = null;
+  };
+
+  window.sendChallenge = async function (call) {
+    if (!challengeSendTarget) return;
+    const { profileId, name } = challengeSendTarget;
+    closeChallengeSend();
+    const { res, data } = await postMinigames('challenge', {
+      partyId: activeAdventure.partyId,
+      adventureId: activeAdventure.adventureId,
+      opponentId: profileId,
+      call,
+    });
+    if (!res.ok) { alert(data.error || 'Could not send that challenge.'); return; }
+    myPendingChallenges.set(profileId, data.challenge.id);
+    renderPartyRoster(partyRosterCache); // swap that member's ⚔️ badge to ⏳ without a full roster refetch
+    showToast(`⚔️ Challenge sent to ${name}, waiting for them to respond…`);
+  };
+
+  window.cancelSentChallenge = async function (challengeId, opponentId) {
+    const { res, data } = await postMinigames('cancelChallenge', { challengeId });
+    if (!res.ok) { alert(data.error || 'Could not cancel that challenge.'); return; }
+    myPendingChallenges.delete(opponentId);
+    renderPartyRoster(partyRosterCache);
+    showToast('Challenge cancelled.');
+  };
+
+  function handleIncomingChallenge(rawRow) {
+    const row = normalizeChallengeRow(rawRow);
+    if (row.status !== 'pending' || row.opponentId !== currentSession?.user?.id) return;
+    incomingChallenge = row;
+    const challengerName = memberNameById(row.challengerId);
+    const myCall = opponentCallOf(row.challengerCall);
+    document.getElementById('challenge-incoming-text').innerHTML =
+      `<strong>${challengerName}</strong> challenges you to a coin flip!<br>They called <strong>${row.challengerCall}</strong>, you get <strong>${myCall}</strong>.`;
+    document.getElementById('challenge-incoming-overlay').removeAttribute('hidden');
+  }
+
+  window.respondToIncomingChallenge = async function (response) {
+    if (!incomingChallenge) return;
+    const challengeId = incomingChallenge.id;
+    document.getElementById('challenge-incoming-overlay').setAttribute('hidden', '');
+    incomingChallenge = null;
+    const { res, data } = await postMinigames('respondToChallenge', { challengeId, response });
+    if (!res.ok) { alert(data.error || 'Could not respond to that challenge.'); return; }
+    if (response === 'decline') showToast('Challenge declined.');
+    // 'accept' plays out via the realtime 'resolved' update, same as it
+    // does for the challenger — see handleResolvedChallenge().
+  };
+
+  function handleResolvedChallenge(rawRow) {
+    const row = normalizeChallengeRow(rawRow);
+    const myId = currentSession?.user?.id;
+    if (!myId || (row.challengerId !== myId && row.opponentId !== myId)) return;
+
+    const amChallenger = row.challengerId === myId;
+    if (amChallenger && myPendingChallenges.get(row.opponentId) === row.id) {
+      myPendingChallenges.delete(row.opponentId);
+      renderPartyRoster(partyRosterCache); // swap the ⏳ badge back now that it's resolved
+    }
+    const myName = memberNameById(myId);
+    const opponentName = memberNameById(amChallenger ? row.opponentId : row.challengerId);
+    const iWon = row.winnerId === myId;
+    const resultMessage = iWon ? `You win! +${row.xpAwarded ?? 0} XP 🎉` : `${memberNameById(row.winnerId)} wins!`;
+
+    window.MusoCoinFlip.flip({
+      prompt: `${myName} vs ${opponentName}`,
+      result: row.result,
+      headsLabel: resultMessage,
+      tailsLabel: resultMessage,
+      onResult: () => {
+        // Only the winner's XP actually changed server-side — refresh
+        // their own header/level display to match.
+        if (iWon) refreshProfileAndBadges();
+      },
+    });
+  }
+
+  // Catches a challenge that arrived while this device wasn't subscribed
+  // to the realtime channel yet (e.g. the app was just opened) — called
+  // once, right after ensurePartyRealtime() subscribes.
+  async function checkPendingChallenges() {
+    if (!activeAdventure?.partyId || !activeAdventure?.adventureId) return;
+    const { res, data } = await postMinigames('listChallenges', {
+      partyId: activeAdventure.partyId,
+      adventureId: activeAdventure.adventureId,
+    });
+    if (!res.ok) return;
+    const myId = currentSession?.user?.id;
+    const pendingForMe = (data.challenges || []).find((c) => c.status === 'pending' && c.opponentId === myId);
+    if (pendingForMe) handleIncomingChallenge(pendingForMe);
+
+    // Also re-hydrate any challenges *I* sent that are still pending — a
+    // page reload would otherwise lose myPendingChallenges and show the
+    // ⚔️ badge again for someone I've already challenged.
+    const myOutgoingPending = (data.challenges || []).filter((c) => c.status === 'pending' && c.challengerId === myId);
+    if (myOutgoingPending.length) myOutgoingPending.forEach((c) => myPendingChallenges.set(c.opponentId, c.id));
+    // ensurePartyRealtime() fires this right alongside its own
+    // loadPartyRoster() call, which races this one — only force a re-render
+    // here if the roster is already loaded, so this never briefly flashes
+    // an empty list on the loadPartyRoster() call that hasn't landed yet.
+    if (myOutgoingPending.length && partyRosterCache.members.length) renderPartyRoster(partyRosterCache);
   }
 
   function addPartyFeedItem(html) {
@@ -2214,7 +2455,36 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'party_invites', filter: `party_id=eq.${partyId}` }, () => {
         loadPartyRoster();
       })
+      // coin_flip_challenges rows only ever move pending -> {declined,
+      // cancelled, resolved} (see 0032_coin_flip_challenges.sql /
+      // minigames/index.ts) — a row is never set back to 'pending' after
+      // creation, so checking row.status alone (regardless of INSERT vs
+      // UPDATE) is enough to tell "this just became a fresh incoming
+      // challenge" from "this challenge just got resolved."
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coin_flip_challenges', filter: `party_id=eq.${partyId}` }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        const myId = currentSession?.user?.id;
+        if (row.status === 'pending') {
+          handleIncomingChallenge(row);
+        } else if (row.status === 'resolved') {
+          handleResolvedChallenge(row);
+        } else if (row.status === 'declined' && row.challenger_id === myId) {
+          if (myPendingChallenges.get(row.opponent_id) === row.id) {
+            myPendingChallenges.delete(row.opponent_id);
+            renderPartyRoster(partyRosterCache);
+          }
+          showToast(`${memberNameById(row.opponent_id)} declined your challenge.`);
+        } else if (row.status === 'cancelled' && row.opponent_id === myId) {
+          if (incomingChallenge?.id === row.id) {
+            document.getElementById('challenge-incoming-overlay').setAttribute('hidden', '');
+            incomingChallenge = null;
+          }
+        }
+      })
       .subscribe();
+
+    checkPendingChallenges();
   }
 
   function teardownPartyRealtime() {
@@ -2227,6 +2497,9 @@
     const feed = document.getElementById('party-feed');
     if (feed) feed.innerHTML = '<div class="party-feed-empty">No activity yet</div>';
     document.getElementById('party-roster-wrap')?.setAttribute('hidden', '');
+    document.getElementById('challenge-incoming-overlay')?.setAttribute('hidden', '');
+    incomingChallenge = null;
+    myPendingChallenges = new Map();
   }
 
   // ---------- INVITE MODAL: SHOW MY QR / SCAN A QR ----------
@@ -2514,6 +2787,13 @@
   // conversation), so they're always shown locked with no cost/unlock CTA
   // rather than wired to invented unlock economics.
   const MINIGAMES_CONFIG = [
+    // Featured, first in the grid, and playable the moment you sign in —
+    // no check-in, level, or coins required (see ALWAYS_FREE_MINIGAME_KEYS
+    // below). Everything else in this array unlocks progressively.
+    {
+      key: 'heads_or_tails', icon: 'the_flip.png', title: 'The Flip', tagline: 'Flip the Adventure Coin', lockedHint: 'Always free', featured: true,
+      desc: 'Flip the official Adventure Coin to make the call: who goes first, what you eat, which turn to take. No coins, no waiting, always ready.',
+    },
     {
       key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', tagline: 'Quick trivia, bonus XP', lockedHint: 'Unlocks after your first check-in',
       desc: 'A quick round of adventure and venue trivia between stops. Answer fast for bonus XP.',
@@ -2551,12 +2831,17 @@
       desc: 'A quick-fire styling challenge for your party.',
     },
   ];
-  let unlockedMinigameKeys = new Set();
+  // heads_or_tails has real gameplay (playMinigame() below, via
+  // window.MusoCoinFlip) but no backend registry entry — it doesn't touch
+  // XP/coins, so it's just always unlocked rather than round-tripping the
+  // 'minigames' edge function for something that has no server-side state.
+  const ALWAYS_FREE_MINIGAME_KEYS = new Set(['heads_or_tails']);
+  let unlockedMinigameKeys = new Set(ALWAYS_FREE_MINIGAME_KEYS);
 
   async function refreshMinigameUnlocks() {
-    if (!currentSession) { unlockedMinigameKeys = new Set(); renderMinigames(); return; }
+    if (!currentSession) { unlockedMinigameKeys = new Set(ALWAYS_FREE_MINIGAME_KEYS); renderMinigames(); return; }
     const { res, data } = await postEdgeFunction('minigames', { action: 'listUnlocks' });
-    if (res.ok) unlockedMinigameKeys = new Set((data.unlocks || []).map((u) => u.minigame_key));
+    if (res.ok) unlockedMinigameKeys = new Set([...ALWAYS_FREE_MINIGAME_KEYS, ...(data.unlocks || []).map((u) => u.minigame_key)]);
     renderMinigames();
   }
 
@@ -2875,9 +3160,12 @@
     if (!grid) return;
     grid.innerHTML = MINIGAMES_CONFIG.map((g) => {
       const unlocked = unlockedMinigameKeys.has(g.key);
+      const featuredCls = g.featured ? ' featured' : '';
+      const featuredBadge = g.featured ? '<div class="minigame-featured-badge">⭐ Featured</div>' : '';
       if (unlocked) {
         return `
-          <div class="minigame-card" onclick="openMinigameDetail('${g.key}')">
+          <div class="minigame-card${featuredCls}" onclick="openMinigameDetail('${g.key}')">
+            ${featuredBadge}
             <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
             <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
@@ -2886,7 +3174,8 @@
         `;
       }
       return `
-        <div class="minigame-card locked" onclick="openMinigameDetail('${g.key}')">
+        <div class="minigame-card locked${featuredCls}" onclick="openMinigameDetail('${g.key}')">
+          ${featuredBadge}
           <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
           <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
@@ -2909,8 +3198,13 @@
   // Real gameplay for each mini game ships separately from this app (see
   // conversation) — this is the integration point it plugs into once
   // ready, one function per game keyed the same as MINIGAMES_CONFIG/the
-  // backend registry.
+  // backend registry. heads_or_tails is the first one wired up for real,
+  // via the standalone assets/coin-flip.js widget loaded above.
   window.playMinigame = function (key) {
+    if (key === 'heads_or_tails') {
+      window.MusoCoinFlip.flip({ prompt: 'Flip to make the call' });
+      return;
+    }
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);
     alert(`${g?.title || 'This mini game'} is launching soon!`);
   };
