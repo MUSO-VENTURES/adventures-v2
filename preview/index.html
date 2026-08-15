@@ -540,7 +540,9 @@
   .adventure-inner h2{ font-size:1.3rem; margin-bottom:6px; }
   .adventure-sub{ opacity:0.7; font-size:0.9rem; margin-bottom:18px; }
   .minigames-section{ max-width:1080px; margin:20px auto 0; padding:0 6vw 4vh; }
-  .minigames-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:14px; }
+  /* 200px floor (was 140px) so the enlarged icon below always has real
+     room — at 140px a 160px-wide icon would have overflowed the card. */
+  .minigames-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; }
   .minigame-card{
     background:var(--cream); border-radius:16px; padding:20px 14px; text-align:center;
     transition:transform .3s var(--ease-bounce);
@@ -548,10 +550,11 @@
   .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
   .minigame-card.locked{ opacity:0.75; }
   .minigame-card.locked .minigame-icon{ filter:grayscale(1); }
-  /* 64px is the "legible at a glance" floor for this badge art's level of
-     detail (postcards/dials/faces) — the old 2rem emoji glyph read fine at
-     a fraction of this size, but these icons need real room. */
-  .minigame-icon{ width:64px; height:64px; object-fit:contain; margin:0 auto 8px; display:block; }
+  /* 150% larger than the original 64px floor — the badge art already
+     carries the game's name as part of its own artwork, so it's the
+     primary identifier on the card now rather than a supporting glyph
+     next to a text title (see .minigame-title below). */
+  .minigame-icon{ width:160px; height:160px; object-fit:contain; margin:0 auto 8px; display:block; }
   .minigame-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; margin-bottom:4px; }
   .minigame-desc{ font-size:0.72rem; opacity:0.6; line-height:1.35; margin-bottom:8px; }
   .minigame-status{ font-size:0.75rem; opacity:0.55; margin-bottom:10px; }
@@ -612,14 +615,36 @@
   .adv-acc-item.curated .adv-acc-header{ background:rgba(var(--shadow-rgb),0.07); color:var(--ink); }
   .adv-acc-emoji{ font-size:1.15rem; flex-shrink:0; transition:transform .4s var(--ease-bounce); }
   .adv-acc-item.open .adv-acc-emoji{ transform:scale(1.2) rotate(-6deg); }
-  /* Badge-style artwork reads as detail (a mini scene + wordmark), not a
-     glyph — sized well past emoji scale so the wordmark stays legible in
-     the header row instead of shrinking into a smudge. */
-  .adv-acc-icon{ width:60px; height:60px; object-fit:contain; flex-shrink:0; margin:-6px 0; transition:transform .4s var(--ease-bounce); }
-  .adv-acc-item.open .adv-acc-icon{ transform:scale(1.08) rotate(-4deg); }
-  .adv-acc-name{ flex:1; }
+  .adv-acc-name{ flex:1; transition:text-align .3s ease; }
+  /* Cards with real badge art (see REAL_VENUE_ADVENTURE_THEMES) center
+     their title once open, since the icon that used to sit beside it in
+     the header has moved into the body instead — see .adv-acc-body-icon.
+     Curated route cards (kindClass "curated") keep their emoji in the
+     header and stay left-aligned, unaffected. */
+  .adv-acc-item:not(.curated).open .adv-acc-name{ text-align:center; }
   .adv-acc-chevron{ transition:transform .4s var(--ease-bounce); opacity:0.85; flex-shrink:0; }
   .adv-acc-item.open .adv-acc-chevron{ transform:rotate(90deg); }
+  /* Badge-style artwork reads as detail (a mini scene + wordmark), not a
+     glyph — rather than sitting small in the header next to the title, it
+     lives at the top of the revealed body instead, hidden while collapsed
+     ("shrink out of sight") and popping in past its resting size before
+     settling, once the card opens — see the animation below. 110% larger
+     than the old 60px header treatment. */
+  .adv-acc-body-icon{
+    display:block; width:126px; height:126px; object-fit:contain; margin:0 auto 12px;
+    transform:scale(0); opacity:0;
+  }
+  @keyframes advBodyIconPopIn{
+    0%{ transform:scale(0); opacity:0; }
+    60%{ transform:scale(1.5); opacity:1; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+  .adv-acc-item.open .adv-acc-body-icon{
+    animation:advBodyIconPopIn .6s var(--ease-smooth) .15s both;
+  }
+  @media (prefers-reduced-motion:reduce){
+    .adv-acc-item.open .adv-acc-body-icon{ animation:none; transform:scale(1); opacity:1; }
+  }
   /* Real animated reveal via the CSS grid 0fr/1fr trick — handles
      arbitrary/dynamic body content height without a hardcoded max-height,
      and (unlike max-height) settles exactly at its natural height with no
@@ -2496,39 +2521,39 @@
   // rather than wired to invented unlock economics.
   const MINIGAMES_CONFIG = [
     {
-      key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', lockedHint: 'Unlocks after your first check-in',
+      key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', tagline: 'Quick trivia, bonus XP', lockedHint: 'Unlocks after your first check-in',
       desc: 'A quick round of adventure and venue trivia between stops. Answer fast for bonus XP.',
     },
     {
-      key: 'photo_challenge', icon: 'photo_challenge.png', title: 'Photo Challenge', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
+      key: 'photo_challenge', icon: 'photo_challenge.png', title: 'Photo Challenge', tagline: 'Snap the prompt, earn coins', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
       desc: 'A themed photo prompt at your current stop. Snap it, submit it, earn bonus coins.',
     },
     {
-      key: 'scavenger_clue', icon: 'scavenger_hunt.png', title: 'Scavenger Hunt', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250,
+      key: 'scavenger_clue', icon: 'scavenger_hunt.png', title: 'Scavenger Hunt', tagline: 'Solve the clue, cash in', lockedHint: 'Free at Level 7, or unlock for coins', cost: 250,
       desc: 'A riddle-style clue hidden somewhere near your route. Solve it for a coin payout.',
     },
     {
-      key: 'postcard_trail', icon: 'postcard_trail.png', title: 'Postcard Trail', lockedHint: 'Coming soon',
+      key: 'postcard_trail', icon: 'postcard_trail.png', title: 'Postcard Trail', tagline: 'A snapshot at every stop', lockedHint: 'Coming soon',
       desc: 'Collect a postcard-worthy snapshot at every stop along the way.',
     },
     {
-      key: 'highway_radio', icon: 'highway_radio.png', title: 'Highway Radio', lockedHint: 'Coming soon',
+      key: 'highway_radio', icon: 'highway_radio.png', title: 'Highway Radio', tagline: 'An audio challenge en route', lockedHint: 'Coming soon',
       desc: 'Tune in for an audio challenge between stops.',
     },
     {
-      key: 'spot_it', icon: 'spot_it.png', title: 'Spot It', lockedHint: 'Coming soon',
+      key: 'spot_it', icon: 'spot_it.png', title: 'Spot It', tagline: 'Spot it before your party does', lockedHint: 'Coming soon',
       desc: 'Spot the hidden detail before anyone else in your party does.',
     },
     {
-      key: 'would_you', icon: 'would_you.png', title: 'Would You?!', lockedHint: 'Coming soon',
+      key: 'would_you', icon: 'would_you.png', title: 'Would You?!', tagline: 'Bold this-or-that for the party', lockedHint: 'Coming soon',
       desc: 'Bold this-or-that dares for the whole party to answer.',
     },
     {
-      key: 'wtf', icon: 'wtf.png', title: 'WTF?!?!', lockedHint: 'Coming soon',
+      key: 'wtf', icon: 'wtf.png', title: 'WTF?!?!', tagline: 'Wild twists, wilder reactions', lockedHint: 'Coming soon',
       desc: 'Wild reactions and surprise twists mid-adventure.',
     },
     {
-      key: 'style_my', icon: 'style_my.png', title: 'Style My', lockedHint: 'Coming soon',
+      key: 'style_my', icon: 'style_my.png', title: 'Style My', tagline: 'Quick-fire styling challenge', lockedHint: 'Coming soon',
       desc: 'A quick-fire styling challenge for your party.',
     },
   ];
@@ -2860,7 +2885,7 @@
         return `
           <div class="minigame-card" onclick="openMinigameDetail('${g.key}')">
             <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
-            <div class="minigame-title">${g.title}</div>
+            <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
             <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')">▶ Play</button>
           </div>
@@ -2869,7 +2894,7 @@
       return `
         <div class="minigame-card locked" onclick="openMinigameDetail('${g.key}')">
           <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
-          <div class="minigame-title">${g.title}</div>
+          <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
           <div class="minigame-status">🔒 ${g.lockedHint}</div>
           ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
@@ -3161,6 +3186,7 @@
         colorClass: t.colorClass,
         kindClass: '',
         bodyHtml: `
+          ${t.icon ? `<img class="adv-acc-body-icon" src="${t.icon}" alt="">` : ''}
           <div class="rvc-desc">${t.desc}</div>
           <div class="rvc-stopcount" data-stopkey="${stopKey}" data-container="${containerId || ''}">
             <span class="rvc-stopcount-label">Stops</span>
@@ -3186,11 +3212,13 @@
       };
     };
 
-    // Real icon art (see REAL_VENUE_ADVENTURE_THEMES) beats the emoji when a
-    // theme has it; curated routes and the Outdoor theme still fall back to
-    // their emoji since no badge art exists for them.
+    // Cards with real icon art (see REAL_VENUE_ADVENTURE_THEMES) render it
+    // big, inside the body instead — see themeToItem's bodyHtml and
+    // .adv-acc-body-icon — so the header shows nothing here for them at
+    // all. Curated routes and the Outdoor theme still fall back to their
+    // emoji in the header since no badge art exists for them.
     const advIconOrEmoji = (item) => item.icon
-      ? `<img class="adv-acc-icon" src="${item.icon}" alt="">`
+      ? ''
       : `<span class="adv-acc-emoji">${item.emoji}</span>`;
     const featuredCardHtml = (item, delayMs) => `
       <div class="adv-acc-item featured ${item.colorClass} ${item.kindClass} open" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${delayMs}ms;">
