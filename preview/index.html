@@ -617,33 +617,27 @@
   .adv-acc-item.open .adv-acc-emoji{ transform:scale(1.2) rotate(-6deg); }
   .adv-acc-name{ flex:1; transition:text-align .3s ease; }
   /* Cards with real badge art (see REAL_VENUE_ADVENTURE_THEMES) center
-     their title once open, since the icon that used to sit beside it in
-     the header has moved into the body instead — see .adv-acc-body-icon.
-     Curated route cards (kindClass "curated") keep their emoji in the
-     header and stay left-aligned, unaffected. */
+     their title once the icon beside it has shrunk away (see .adv-acc-icon
+     below) — the extra room left behind is what the title moves into.
+     Curated route cards (kindClass "curated") keep their emoji at a fixed
+     size and stay left-aligned, unaffected. */
   .adv-acc-item:not(.curated).open .adv-acc-name{ text-align:center; }
   .adv-acc-chevron{ transition:transform .4s var(--ease-bounce); opacity:0.85; flex-shrink:0; }
   .adv-acc-item.open .adv-acc-chevron{ transform:rotate(90deg); }
-  /* Badge-style artwork reads as detail (a mini scene + wordmark), not a
-     glyph — rather than sitting small in the header next to the title, it
-     lives at the top of the revealed body instead, hidden while collapsed
-     ("shrink out of sight") and popping in past its resting size before
-     settling, once the card opens — see the animation below. 110% larger
-     than the old 60px header treatment. */
-  .adv-acc-body-icon{
-    display:block; width:126px; height:126px; object-fit:contain; margin:0 auto 12px;
-    transform:scale(0); opacity:0;
+  /* Badge-style artwork sits at full size next to the title while the card
+     is collapsed (legible at a glance, no need to open the card to see
+     it), then shrinks away to nothing as the card expands — width+height
+     both collapse to 0 (not just a transform:scale) so the header actually
+     reflows and hands that space to the title, rather than leaving a
+     blank gap. Reverses cleanly on collapse, including when a different
+     card in the accordion opens and this one closes back to its default. */
+  .adv-acc-icon{
+    width:126px; height:126px; object-fit:contain; flex-shrink:0; opacity:1;
+    transition:width .45s var(--ease-smooth), height .45s var(--ease-smooth), opacity .3s ease;
   }
-  @keyframes advBodyIconPopIn{
-    0%{ transform:scale(0); opacity:0; }
-    60%{ transform:scale(1.5); opacity:1; }
-    100%{ transform:scale(1); opacity:1; }
-  }
-  .adv-acc-item.open .adv-acc-body-icon{
-    animation:advBodyIconPopIn .6s var(--ease-smooth) .15s both;
-  }
+  .adv-acc-item.open .adv-acc-icon{ width:0; height:0; opacity:0; }
   @media (prefers-reduced-motion:reduce){
-    .adv-acc-item.open .adv-acc-body-icon{ animation:none; transform:scale(1); opacity:1; }
+    .adv-acc-icon{ transition:opacity .2s ease; }
   }
   /* Real animated reveal via the CSS grid 0fr/1fr trick — handles
      arbitrary/dynamic body content height without a hardcoded max-height,
@@ -3186,7 +3180,6 @@
         colorClass: t.colorClass,
         kindClass: '',
         bodyHtml: `
-          ${t.icon ? `<img class="adv-acc-body-icon" src="${t.icon}" alt="">` : ''}
           <div class="rvc-desc">${t.desc}</div>
           <div class="rvc-stopcount" data-stopkey="${stopKey}" data-container="${containerId || ''}">
             <span class="rvc-stopcount-label">Stops</span>
@@ -3212,13 +3205,12 @@
       };
     };
 
-    // Cards with real icon art (see REAL_VENUE_ADVENTURE_THEMES) render it
-    // big, inside the body instead — see themeToItem's bodyHtml and
-    // .adv-acc-body-icon — so the header shows nothing here for them at
-    // all. Curated routes and the Outdoor theme still fall back to their
-    // emoji in the header since no badge art exists for them.
+    // Cards with real icon art (see REAL_VENUE_ADVENTURE_THEMES) show it in
+    // the header at full size while collapsed, shrinking away as the card
+    // opens (see .adv-acc-icon). Curated routes fall back to their emoji,
+    // which stays a fixed size regardless of open/collapsed state.
     const advIconOrEmoji = (item) => item.icon
-      ? ''
+      ? `<img class="adv-acc-icon" src="${item.icon}" alt="">`
       : `<span class="adv-acc-emoji">${item.emoji}</span>`;
     const featuredCardHtml = (item, delayMs) => `
       <div class="adv-acc-item featured ${item.colorClass} ${item.kindClass} open" style="animation:forkCardDeal .5s var(--ease-bounce) backwards; animation-delay:${delayMs}ms;">
