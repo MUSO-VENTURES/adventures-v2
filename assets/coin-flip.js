@@ -56,6 +56,14 @@
       '.mca-eyebrow{color:var(--tangerine,#f2994a); font-weight:700; letter-spacing:0.06em; text-transform:uppercase;',
       '  font-size:0.72rem; margin-bottom:6px;}',
       '.mca-heading{font-family:"Fredoka",sans-serif; font-size:1.25rem; font-weight:700; margin:0 0 20px;}',
+      '.mca-names-row{display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:4px;}',
+      '.mca-name{font-family:"Fredoka",sans-serif; font-weight:700; font-size:0.95rem; color:var(--ink,#2a2438);',
+      '  opacity:0.55; transition:opacity .3s, transform .3s; transform:scale(1); max-width:34%;',
+      '  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}',
+      '.mca-name.mca-name-winner{opacity:1; color:var(--coral,#e8503f);',
+      '  animation:mcaNameWin .5s var(--ease-bounce,cubic-bezier(0.34,1.56,0.64,1)) forwards;}',
+      '.mca-name.mca-name-loser{opacity:0.4; transform:scale(0.88);}',
+      '@keyframes mcaNameWin{0%{transform:scale(1);} 55%{transform:scale(1.35);} 100%{transform:scale(1.18);}}',
       '.mca-stage{position:relative; width:190px; height:190px; margin:0 auto 8px; perspective:900px;}',
       '.mca-shadow{position:absolute; left:50%; bottom:2px; width:130px; height:22px; margin-left:-65px;',
       '  background:radial-gradient(ellipse at center, rgba(0,0,0,0.35), rgba(0,0,0,0) 70%); border-radius:50%;',
@@ -164,6 +172,10 @@
     } catch (e) { /* audio not available — silent landing is fine */ }
   }
 
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   /**
    * Opens the coin-flip overlay. Returns a Promise that resolves with
    * 'heads' | 'tails' once the player has flipped and dismissed the
@@ -174,9 +186,20 @@
    *   title         small eyebrow label above the heading
    *   headsLabel    text shown on a heads result (default "HEADS!")
    *   tailsLabel    text shown on a tails result (default "TAILS!")
+   *   headsName     player name bookending the left/heads side of the coin
+   *                 (omit both headsName/tailsName for the plain solo look)
+   *   tailsName     player name bookending the right/tails side of the coin
    *   result        force 'heads' | 'tails' (mainly for testing)
    *   sound         false to mute the synthesized whoosh/tink
    *   closeOnResult auto-close ~1.4s after landing instead of waiting on Done
+   *   beforeFlip()  optional, called when the flip button is pressed, before
+   *                 the animation starts. May return a Promise. Returning/
+   *                 resolving false cancels the flip without animating (the
+   *                 caller is expected to show its own message — a paywall,
+   *                 an error — instead); anything else lets the flip proceed.
+   *                 This is the only hook a caller needs to gate flips
+   *                 behind a budget/purchase without this widget knowing
+   *                 anything about coins, XP, or a backend.
    *   onResult(face) called the instant the coin lands, before close
    */
   function flip(options) {
@@ -184,6 +207,7 @@
     injectStyles();
 
     return new Promise(function (resolvePromise) {
+      var showNames = !!(opts.headsName || opts.tailsName);
       var overlay = document.createElement('div');
       overlay.className = 'mca-overlay';
       overlay.innerHTML =
@@ -191,6 +215,12 @@
         '  <button type="button" class="mca-close" aria-label="Close">&times;</button>' +
         '  <div class="mca-eyebrow">' + (opts.title || 'Adventure Coin') + '</div>' +
         '  <h3 class="mca-heading">' + (opts.prompt || 'Flip to decide') + '</h3>' +
+        (showNames
+          ? '  <div class="mca-names-row">' +
+            '    <div class="mca-name mca-name-heads">' + escapeHtml(opts.headsName || 'Heads') + '</div>' +
+            '    <div class="mca-name mca-name-tails">' + escapeHtml(opts.tailsName || 'Tails') + '</div>' +
+            '  </div>'
+          : '') +
         '  <div class="mca-stage">' +
         '    <div class="mca-shadow"></div>' +
         '    <div class="mca-coin">' +
@@ -210,6 +240,8 @@
       var shadow = overlay.querySelector('.mca-shadow');
       var stage = overlay.querySelector('.mca-stage'); // common ancestor of coin+shadow — one custom-property write here, both inherit it
       var resultEl = overlay.querySelector('.mca-result');
+      var headsNameEl = overlay.querySelector('.mca-name-heads');
+      var tailsNameEl = overlay.querySelector('.mca-name-tails');
       var flipBtn = overlay.querySelector('.mca-flip-btn');
       var closeBtn = overlay.querySelector('.mca-close');
       var settled = false;
@@ -227,9 +259,15 @@
         if (e.target === overlay) close(settled ? outcome : null);
       });
 
-      function doFlip() {
+      async function doFlip() {
         if (flipBtn.disabled) return;
         flipBtn.disabled = true;
+
+        if (typeof opts.beforeFlip === 'function') {
+          var allowed = await opts.beforeFlip();
+          if (allowed === false) { flipBtn.disabled = false; return; } // caller already showed its own message
+        }
+
         resultEl.hidden = true;
         resultEl.textContent = '';
         settled = false;
@@ -240,6 +278,8 @@
         // landing set below — left in place, that stale rotateX(...) base
         // value corrupts the next mcaFlip run into rendering as identity.
         coin.style.transform = '';
+        if (headsNameEl) headsNameEl.className = 'mca-name mca-name-heads';
+        if (tailsNameEl) tailsNameEl.className = 'mca-name mca-name-tails';
         void coin.offsetWidth; // restart animation from a clean state on repeat flips
 
         var forced = (opts.result === 'heads' || opts.result === 'tails') ? opts.result : (random01() < 0.5 ? 'heads' : 'tails');
@@ -277,6 +317,13 @@
           resultEl.hidden = false;
           resultEl.textContent = forced === 'heads' ? (opts.headsLabel || 'HEADS!') : (opts.tailsLabel || 'TAILS!');
           resultEl.className = 'mca-result mca-result-' + forced;
+
+          if (headsNameEl && tailsNameEl) {
+            var winnerEl = forced === 'heads' ? headsNameEl : tailsNameEl;
+            var loserEl = forced === 'heads' ? tailsNameEl : headsNameEl;
+            winnerEl.classList.add('mca-name-winner');
+            loserEl.classList.add('mca-name-loser');
+          }
 
           flipBtn.disabled = false;
           flipBtn.textContent = '🔄 Flip Again';

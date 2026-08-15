@@ -550,10 +550,12 @@
   .minigame-card:hover{ transform:translateY(-4px) scale(1.02); }
   .minigame-card.locked{ opacity:0.75; }
   .minigame-card.locked .minigame-icon{ filter:grayscale(1); }
-  /* The Flip is always free and playable the instant you sign in (see
-     ALWAYS_FREE_MINIGAME_KEYS) — spans the full grid row and gets a
-     gradient card so it reads as the game to try first, not just another
-     tile in the grid. */
+  /* The Flip is playable the instant you sign in, no level/coin gate to
+     unlock it (see ALWAYS_FREE_MINIGAME_KEYS below — that's about the card
+     itself being unlocked, not the flips inside it being unlimited; see
+     0034_flip_budget.sql for the per-adventure flip budget) — spans the
+     full grid row and gets a gradient card so it reads as the game to try
+     first, not just another tile in the grid. */
   .minigame-card.featured{
     grid-column:1/-1; position:relative;
     background:linear-gradient(135deg, var(--coral), #ff9776); color:#fff;
@@ -1753,7 +1755,11 @@
     <div class="photobooth-header" style="justify-content:center;">
       <span>⚔️ Challenge <span id="challenge-send-name"></span></span>
     </div>
-    <p style="opacity:0.75; font-size:0.9rem; margin:0 0 18px;">Call it, win and you both know it, plus +20 XP.</p>
+    <p style="opacity:0.75; font-size:0.9rem; margin:0 0 14px;">Call it, win and you both know it, plus +20 XP.</p>
+    <input type="text" id="challenge-send-prompt" maxlength="200" placeholder="Name it (optional) — e.g. &quot;Who gets a back rub?&quot;"
+      style="width:100%; box-sizing:border-box; background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
+      padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.88rem; margin-bottom:6px;">
+    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 16px;">Keep it PG-13 — leave blank for a plain flip.</p>
     <div style="display:flex; gap:10px;">
       <button type="button" class="pb-btn primary" style="flex:1;" onclick="sendChallenge('heads')">Heads</button>
       <button type="button" class="pb-btn secondary" style="flex:1;" onclick="sendChallenge('tails')">Tails</button>
@@ -1774,6 +1780,25 @@
     <div style="display:flex; gap:10px;">
       <button type="button" class="pb-btn secondary" style="flex:1;" onclick="respondToIncomingChallenge('decline')">Decline</button>
       <button type="button" class="pb-btn primary" style="flex:1;" onclick="respondToIncomingChallenge('accept')">Accept</button>
+    </div>
+  </div>
+</div>
+
+<!-- Solo-flip paywall — shown by gateSoloFlip() (playMinigame's beforeFlip
+     hook) when useFlip returns 402, i.e. this adventure's free budget
+     (0034_flip_budget.sql: 5 base + 1 per check-in) is used up. Only the
+     solo flip is metered; the head-to-head challenge above stays free. -->
+<div class="photobooth-overlay" id="flip-paywall-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center;">
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>🪙 Out of Free Flips</span>
+    </div>
+    <p style="opacity:0.75; font-size:0.9rem; margin:0 0 18px;">
+      You've used your free flips for this adventure. Check in at your next stop for another, or buy 5 more right now.
+    </p>
+    <div style="display:flex; gap:10px;">
+      <button type="button" class="pb-btn secondary" style="flex:1;" onclick="closeFlipPaywall()">Not now</button>
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="buyMoreFlips()">🪙 Buy 5 for 50</button>
     </div>
   </div>
 </div>
@@ -2279,6 +2304,14 @@
     return challengerCall === 'heads' ? 'tails' : 'heads';
   }
 
+  // A custom challenge prompt is player-typed free text landing in
+  // innerHTML (challenge-incoming-text) — escape it the same minimal way
+  // renderPartyRoster()/renderPastAdventures() already escape display
+  // names elsewhere in this file.
+  function escapeHtmlLite(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  }
+
   // Realtime postgres_changes payloads are raw table rows (snake_case);
   // edge-function responses are already camelCase (serializeChallenge() in
   // minigames/index.ts). Normalizing once here means every handler below
@@ -2292,6 +2325,7 @@
       challengerId: row.challenger_id,
       opponentId: row.opponent_id,
       challengerCall: row.challenger_call,
+      prompt: row.prompt,
       status: row.status,
       result: row.result,
       winnerId: row.winner_id,
@@ -2299,10 +2333,22 @@
     };
   }
 
+  // Client-side mirror of minigames/index.ts's promptRejectionReason() —
+  // UX only (catches the obvious case before a round trip), NOT the real
+  // gate. The edge function re-checks against its own server-side list
+  // regardless, since a client-side check alone can always be bypassed.
+  const BLOCKED_PROMPT_RE = /\b(kill|murder|suicide|self.?harm|torture|stab|shoot|abuse|sex|porn|nude|naked|fuck|rape|molest|nigger|faggot|retard(ed)?|spic|chink|kike)\b/i;
+  function localPromptRejectionReason(prompt) {
+    if (prompt.length > 200) return 'Keep the prompt under 200 characters.';
+    if (BLOCKED_PROMPT_RE.test(prompt)) return "Keep it PG-13 — no cruelty, violence, or explicit content.";
+    return null;
+  }
+
   window.challengePlayer = function (profileId, name) {
     if (!activeAdventure?.partyId || !activeAdventure?.adventureId) return;
     challengeSendTarget = { profileId, name };
     document.getElementById('challenge-send-name').textContent = name;
+    document.getElementById('challenge-send-prompt').value = '';
     document.getElementById('challenge-send-overlay').removeAttribute('hidden');
   };
 
@@ -2314,12 +2360,18 @@
   window.sendChallenge = async function (call) {
     if (!challengeSendTarget) return;
     const { profileId, name } = challengeSendTarget;
+    const prompt = document.getElementById('challenge-send-prompt').value.trim();
+    if (prompt) {
+      const rejection = localPromptRejectionReason(prompt);
+      if (rejection) { alert(rejection); return; }
+    }
     closeChallengeSend();
     const { res, data } = await postMinigames('challenge', {
       partyId: activeAdventure.partyId,
       adventureId: activeAdventure.adventureId,
       opponentId: profileId,
       call,
+      prompt: prompt || undefined,
     });
     if (!res.ok) { alert(data.error || 'Could not send that challenge.'); return; }
     myPendingChallenges.set(profileId, data.challenge.id);
@@ -2341,8 +2393,9 @@
     incomingChallenge = row;
     const challengerName = memberNameById(row.challengerId);
     const myCall = opponentCallOf(row.challengerCall);
+    const promptLine = row.prompt ? `<br>"<strong>${escapeHtmlLite(row.prompt)}</strong>"` : '';
     document.getElementById('challenge-incoming-text').innerHTML =
-      `<strong>${challengerName}</strong> challenges you to a coin flip!<br>They called <strong>${row.challengerCall}</strong>, you get <strong>${myCall}</strong>.`;
+      `<strong>${challengerName}</strong> challenges you to a coin flip!${promptLine}<br>They called <strong>${row.challengerCall}</strong>, you get <strong>${myCall}</strong>.`;
     document.getElementById('challenge-incoming-overlay').removeAttribute('hidden');
   }
 
@@ -2358,6 +2411,74 @@
     // does for the challenger — see handleResolvedChallenge().
   };
 
+  // ---------- CHALLENGE RESULT MESSAGES ----------
+  // A few PRESET_RESULT_TEMPLATES carry flavor tied to what was actually
+  // being decided (a small library of the built-in prompt suggestions);
+  // everything else — including any custom prompt a player typed in —
+  // falls back to GENERIC_RESULT_TEMPLATES. Each entry has multiple
+  // phrasings and one is picked at random per result, so two challenges
+  // with the same prompt don't read identically every time.
+  const PRESET_RESULT_TEMPLATES = {
+    "who orders first?": [
+      (w) => `${w} gets first crack at the menu!`,
+      (w) => `${w} steps up, order away!`,
+      (w) => `Coin says ${w} goes first.`,
+    ],
+    "who pays?": [
+      (w, l) => `${l}'s buying, enjoy the meal, ${w}!`,
+      (w, l) => `It's on ${l}. Nice work, ${w}.`,
+      (w) => `${w} eats free tonight.`,
+    ],
+    "who's paying?": [
+      (w, l) => `${l}'s buying, enjoy the meal, ${w}!`,
+      (w, l) => `It's on ${l}. Nice work, ${w}.`,
+    ],
+    "what do we eat?": [
+      (w) => `${w} picks the food, no arguments.`,
+      (w) => `${w}'s call on dinner tonight.`,
+    ],
+    "who's on photo duty?": [
+      (w, l) => `${l}, you're on camera duty!`,
+      (w, l) => `Smile, ${l}, you're the photographer now.`,
+    ],
+    "photo duty?": [
+      (w, l) => `${l}, you're on camera duty!`,
+      (w, l) => `Smile, ${l}, you're the photographer now.`,
+    ],
+    "window or aisle?": [
+      (w) => `${w} calls the seat.`,
+      (w) => `${w} gets first pick.`,
+    ],
+    "inside or outside?": [
+      (w) => `${w} picks where you sit.`,
+    ],
+    "who's the next adventure's captain?": [
+      (w) => `⛵ ${w} is captain for the next adventure!`,
+      (w) => `${w} takes the helm next time.`,
+    ],
+    "second date?": [
+      (w) => `${w} decides if there's a second date!`,
+    ],
+    "who gets a back rub?": [
+      (w, l) => `${w} gets the back rub, ${l}, you're on duty.`,
+    ],
+  };
+  const GENERIC_RESULT_TEMPLATES = [
+    (w) => `${w} wins the flip!`,
+    (w) => `Coin's spoken, ${w} takes it.`,
+    (w) => `${w} calls it!`,
+    (w, l) => `Heads or tails, ${w} came out on top. Next time, ${l}!`,
+    (w) => `That's a win for ${w}.`,
+    (w) => `${w} gets the final say.`,
+    (w) => `Flip goes to ${w}!`,
+  ];
+  function buildResultMessage(winnerName, loserName, prompt) {
+    const key = String(prompt || '').trim().toLowerCase();
+    const pool = PRESET_RESULT_TEMPLATES[key] || GENERIC_RESULT_TEMPLATES;
+    const template = pool[Math.floor(Math.random() * pool.length)];
+    return template(winnerName, loserName);
+  }
+
   function handleResolvedChallenge(rawRow) {
     const row = normalizeChallengeRow(rawRow);
     const myId = currentSession?.user?.id;
@@ -2368,13 +2489,19 @@
       myPendingChallenges.delete(row.opponentId);
       renderPartyRoster(partyRosterCache); // swap the ⏳ badge back now that it's resolved
     }
-    const myName = memberNameById(myId);
-    const opponentName = memberNameById(amChallenger ? row.opponentId : row.challengerId);
+    const challengerName = memberNameById(row.challengerId);
+    const opponentName = memberNameById(row.opponentId);
+    const winnerName = memberNameById(row.winnerId);
+    const loserName = row.winnerId === row.challengerId ? opponentName : challengerName;
     const iWon = row.winnerId === myId;
-    const resultMessage = iWon ? `You win! +${row.xpAwarded ?? 0} XP 🎉` : `${memberNameById(row.winnerId)} wins!`;
+    const headsName = row.challengerCall === 'heads' ? challengerName : opponentName;
+    const tailsName = row.challengerCall === 'tails' ? challengerName : opponentName;
+    const resultMessage = buildResultMessage(winnerName, loserName, row.prompt) + (iWon ? ` +${row.xpAwarded ?? 0} XP 🎉` : '');
 
     window.MusoCoinFlip.flip({
-      prompt: `${myName} vs ${opponentName}`,
+      prompt: row.prompt || `${challengerName} vs ${opponentName}`,
+      headsName,
+      tailsName,
       result: row.result,
       headsLabel: resultMessage,
       tailsLabel: resultMessage,
@@ -2788,11 +2915,13 @@
   // rather than wired to invented unlock economics.
   const MINIGAMES_CONFIG = [
     // Featured, first in the grid, and playable the moment you sign in —
-    // no check-in, level, or coins required (see ALWAYS_FREE_MINIGAME_KEYS
-    // below). Everything else in this array unlocks progressively.
+    // no check-in, level, or coins required to unlock the card itself (see
+    // ALWAYS_FREE_MINIGAME_KEYS below). The flips inside it are metered
+    // per-adventure though, not unlimited — see 0034_flip_budget.sql.
+    // Everything else in this array unlocks progressively.
     {
-      key: 'heads_or_tails', icon: 'the_flip.png', title: 'The Flip', tagline: 'Flip the Adventure Coin', lockedHint: 'Always free', featured: true,
-      desc: 'Flip the official Adventure Coin to make the call: who goes first, what you eat, which turn to take. No coins, no waiting, always ready.',
+      key: 'heads_or_tails', icon: 'the_flip.png', title: 'The Flip', tagline: 'Flip the Adventure Coin', lockedHint: 'Free plays', featured: true,
+      desc: 'Flip the official Adventure Coin to make the call: who goes first, what you eat, which turn to take. Free plays each adventure, then keep it going with Adventure Coins.',
     },
     {
       key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', tagline: 'Quick trivia, bonus XP', lockedHint: 'Unlocks after your first check-in',
@@ -3195,6 +3324,57 @@
     showToast(`🎉 Unlocked ${g?.title || 'mini game'}!`);
   };
 
+  // ---------- SOLO FLIP BUDGET (0034_flip_budget.sql) ----------
+  // 5 free flips per adventure + 1 automatic per check-in, then buyable in
+  // packs of 5 for 50 coins — see minigames/index.ts's flipStatus/useFlip/
+  // buyFlips actions. Unmetered outside an active adventure (nothing to
+  // scope a budget against). This only meters the solo flip — the head-to-
+  // head challenge system above stays unlimited on purpose.
+  let flipPaywallResolve = null;
+
+  function showFlipPaywall() {
+    return new Promise((resolve) => {
+      flipPaywallResolve = resolve;
+      document.getElementById('flip-paywall-overlay').removeAttribute('hidden');
+    });
+  }
+
+  window.closeFlipPaywall = function () {
+    document.getElementById('flip-paywall-overlay').setAttribute('hidden', '');
+    if (flipPaywallResolve) { flipPaywallResolve(false); flipPaywallResolve = null; }
+  };
+
+  window.buyMoreFlips = async function () {
+    document.getElementById('flip-paywall-overlay').setAttribute('hidden', '');
+    const { res, data } = await postMinigames('buyFlips', { adventureId: activeAdventure.adventureId });
+    if (!res.ok) {
+      alert(data.error || 'Could not buy more flips right now.');
+      if (flipPaywallResolve) { flipPaywallResolve(false); flipPaywallResolve = null; }
+      return;
+    }
+    await refreshProfileAndBadges(); // coin balance just changed
+    showToast(`🎉 +${data.added} flips added!`);
+    if (flipPaywallResolve) { flipPaywallResolve(true); flipPaywallResolve = null; }
+  };
+
+  // coin-flip.js's beforeFlip hook — returning false cancels the flip
+  // without animating. On a successful purchase, re-runs itself to spend
+  // one of the newly bought flips rather than duplicating the useFlip call.
+  async function gateSoloFlip() {
+    if (!activeAdventure?.adventureId) return true; // no adventure = nothing to meter
+    const { res, data } = await postMinigames('useFlip', { adventureId: activeAdventure.adventureId });
+    if (res.ok) {
+      if (data.remaining <= 1) showToast(`🪙 ${data.remaining} free flip${data.remaining === 1 ? '' : 's'} left this adventure.`);
+      return true;
+    }
+    if (res.status === 402) {
+      const bought = await showFlipPaywall();
+      return bought ? gateSoloFlip() : false;
+    }
+    alert(data.error || 'Could not flip right now.');
+    return false;
+  }
+
   // Real gameplay for each mini game ships separately from this app (see
   // conversation) — this is the integration point it plugs into once
   // ready, one function per game keyed the same as MINIGAMES_CONFIG/the
@@ -3202,7 +3382,7 @@
   // via the standalone assets/coin-flip.js widget loaded above.
   window.playMinigame = function (key) {
     if (key === 'heads_or_tails') {
-      window.MusoCoinFlip.flip({ prompt: 'Flip to make the call' });
+      window.MusoCoinFlip.flip({ prompt: 'Flip to make the call', beforeFlip: gateSoloFlip });
       return;
     }
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);

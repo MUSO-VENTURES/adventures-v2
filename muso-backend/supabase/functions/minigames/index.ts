@@ -1,10 +1,13 @@
 // POST /minigames
 // Body: { action: 'listUnlocks' }
 //     | { action: 'unlock', minigameKey: 'photo_challenge' | 'scavenger_clue' }
-//     | { action: 'challenge', partyId, adventureId, opponentId, call: 'heads' | 'tails' }
+//     | { action: 'challenge', partyId, adventureId, opponentId, call: 'heads' | 'tails', prompt?: string }
 //     | { action: 'respondToChallenge', challengeId, response: 'accept' | 'decline' }
 //     | { action: 'cancelChallenge', challengeId }
 //     | { action: 'listChallenges', partyId, adventureId }
+//     | { action: 'flipStatus', adventureId }
+//     | { action: 'useFlip', adventureId }
+//     | { action: 'buyFlips', adventureId }
 // Requires Authorization: Bearer <user JWT> (Supabase Auth).
 //
 // Mini games are quick, optional play elements droppable into any
@@ -84,8 +87,46 @@ const MINIGAME_REGISTRY: Record<string, { label: string; freeAtLevel: number; co
 // coin-cost side game, not a route milestone.
 const COIN_FLIP_CHALLENGE_XP = 20;
 
+// Solo-flip budget (0034_flip_budget.sql / consume_flip()) — 5 free flips
+// per adventure, +1 automatic per check-in on that adventure, then buyable
+// in packs. Only the solo flip is metered; head-to-head challenges above
+// stay unlimited (see the migration's own comment for why).
+const FREE_FLIPS_BASE = 5;
+const FLIP_PACK_SIZE = 5;
+const FLIP_PACK_COST = 50;
+
 function otherCall(call: "heads" | "tails"): "heads" | "tails" {
   return call === "heads" ? "tails" : "heads";
+}
+
+// Best-effort PG-13 gate on player-typed challenge prompts ("Who gets a
+// back rub?" is fine, cruelty/violence/explicit content isn't). This is
+// the real enforcement point — any client-side check is UX only, since a
+// client can always be bypassed. Not a substitute for a real moderation
+// pipeline (no wordlist is airtight), but prompts here are short single-
+// sentence questions shown to a whole party, so a blocklist covers the
+// realistic abuse cases without false-positiving on ordinary phrasing.
+// No age-verification exists anywhere in this app, so there is no NC-17
+// tier — everything typed here has to clear the PG-13 bar or it's rejected
+// outright.
+const BLOCKED_PROMPT_TERMS = [
+  // violence / cruelty / self-harm
+  "kill", "murder", "suicide", "self.?harm", "cut yourself", "torture",
+  "beat (up|you|him|her|them)", "stab", "shoot", "abuse", "hurt yourself",
+  // sexual/explicit
+  "sex", "porn", "nude", "naked", "blowjob", "handjob", "orgasm", "fuck",
+  "rape", "molest",
+  // hate speech / slurs (representative, not exhaustive)
+  "nigger", "faggot", "retard(ed)?", "spic", "chink", "kike",
+];
+const BLOCKED_PROMPT_RE = new RegExp("\\b(" + BLOCKED_PROMPT_TERMS.join("|") + ")\\b", "i");
+
+function promptRejectionReason(prompt: string): string | null {
+  if (prompt.length > 200) return "Keep the prompt under 200 characters.";
+  if (BLOCKED_PROMPT_RE.test(prompt)) {
+    return "That prompt isn't allowed — keep it PG-13: no cruelty, violence, or explicit content.";
+  }
+  return null;
 }
 
 function serializeChallenge(row: Record<string, unknown>) {
@@ -98,6 +139,7 @@ function serializeChallenge(row: Record<string, unknown>) {
     opponentId: row.opponent_id,
     challengerCall,
     opponentCall: otherCall(challengerCall),
+    prompt: row.prompt ?? null,
     status: row.status,
     result: row.result ?? null,
     winnerId: row.winner_id ?? null,
@@ -211,6 +253,8 @@ Deno.serve(async (req) => {
     const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
     const opponentId = typeof body.opponentId === "string" ? body.opponentId : null;
     const call = body.call === "heads" || body.call === "tails" ? body.call : null;
+    const promptRaw = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    const prompt = promptRaw.length ? promptRaw : null;
 
     if (!partyId || !adventureId || !opponentId || !call) {
       return jsonResponse(
@@ -220,6 +264,10 @@ Deno.serve(async (req) => {
     }
     if (opponentId === userId) {
       return jsonResponse({ error: "You can't challenge yourself." }, 400);
+    }
+    if (prompt) {
+      const rejection = promptRejectionReason(prompt);
+      if (rejection) return jsonResponse({ error: rejection }, 400);
     }
 
     // Service-role writes bypass RLS, so party membership has to be
@@ -248,6 +296,7 @@ Deno.serve(async (req) => {
         challenger_id: userId,
         opponent_id: opponentId,
         challenger_call: call,
+        prompt,
       })
       .select()
       .single();
@@ -367,10 +416,88 @@ Deno.serve(async (req) => {
     return jsonResponse({ challenges: (data ?? []).map(serializeChallenge) });
   }
 
+  if (action === "flipStatus") {
+    const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
+    if (!adventureId) return jsonResponse({ error: "adventureId is required." }, 400);
+
+    const { count: checkinCount, error: checkinErr } = await admin
+      .from("check_ins")
+      .select("id", { count: "exact", head: true })
+      .eq("checked_in_by", userId)
+      .eq("adventure_id", adventureId);
+    if (checkinErr) return jsonResponse({ error: checkinErr.message }, 400);
+
+    const { data: usage, error: usageErr } = await admin
+      .from("minigame_flip_usage")
+      .select("flips_used, bonus_flips_purchased")
+      .eq("profile_id", userId)
+      .eq("adventure_id", adventureId)
+      .maybeSingle();
+    if (usageErr) return jsonResponse({ error: usageErr.message }, 400);
+
+    const used = usage?.flips_used ?? 0;
+    const bonus = usage?.bonus_flips_purchased ?? 0;
+    const allowance = FREE_FLIPS_BASE + (checkinCount ?? 0) + bonus;
+    const remaining = Math.max(0, allowance - used);
+
+    return jsonResponse({ remaining, allowance, used, checkinCount: checkinCount ?? 0, bonusPurchased: bonus });
+  }
+
+  // Spends one flip from the caller's budget for this adventure — call
+  // this right before letting a solo flip animate, not after. consume_flip
+  // (0034_flip_budget.sql) does the same allowance math as flipStatus above
+  // but atomically, under a row lock, so two flips fired back-to-back can't
+  // both slip through on the last flip in the budget.
+  if (action === "useFlip") {
+    const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
+    if (!adventureId) return jsonResponse({ error: "adventureId is required." }, 400);
+
+    const { data, error } = await admin.rpc("consume_flip", {
+      p_profile_id: userId,
+      p_adventure_id: adventureId,
+    });
+    if (error) return jsonResponse({ error: error.message }, 400);
+
+    const result = data as { ok: boolean; remaining: number; allowance: number; used: number };
+    if (!result.ok) {
+      return jsonResponse(
+        { error: "Out of free flips for this adventure.", remaining: 0, allowance: result.allowance },
+        402,
+      );
+    }
+    return jsonResponse({ ok: true, remaining: result.remaining, allowance: result.allowance, used: result.used });
+  }
+
+  if (action === "buyFlips") {
+    const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
+    if (!adventureId) return jsonResponse({ error: "adventureId is required." }, 400);
+
+    const { data: success, error: debitErr } = await admin.rpc("debit_coins", {
+      p_profile_id: userId,
+      p_amount: FLIP_PACK_COST,
+      p_reason: "buy_flips",
+      p_adventure_id: adventureId,
+    });
+    if (debitErr) return jsonResponse({ error: debitErr.message }, 400);
+    if (!success) {
+      return jsonResponse({ error: `Not enough Adventure Coins. Need ${FLIP_PACK_COST}.` }, 402);
+    }
+
+    const { error: bonusErr } = await admin.rpc("add_bonus_flips", {
+      p_profile_id: userId,
+      p_adventure_id: adventureId,
+      p_amount: FLIP_PACK_SIZE,
+    });
+    if (bonusErr) return jsonResponse({ error: bonusErr.message }, 400);
+
+    return jsonResponse({ ok: true, added: FLIP_PACK_SIZE, spent: FLIP_PACK_COST });
+  }
+
   return jsonResponse(
     {
       error:
-        "action must be one of: listUnlocks, unlock, challenge, respondToChallenge, cancelChallenge, listChallenges",
+        "action must be one of: listUnlocks, unlock, challenge, respondToChallenge, cancelChallenge, " +
+        "listChallenges, flipStatus, useFlip, buyFlips",
     },
     400,
   );
