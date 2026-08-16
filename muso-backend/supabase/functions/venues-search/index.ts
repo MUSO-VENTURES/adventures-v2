@@ -1,12 +1,12 @@
 // GET /venues-search?startLat=&startLng=&radiusMiles=15&budget=$$&category=
 //
-// Finds top-rated real venues near a point via the Yelp Fusion API, sorted
-// with featured (partner_tier 'premium'/'sponsor') venues first and rating
-// descending after that, and upserts them into the `venues` table (keyed by
-// yelp_id, via upsert_yelp_venues() in 0007_gamification.sql) so they can be
-// wired into routes later. Returns the matched venues either way, even if
-// the upsert fails for some of them, so the discovery UI always gets usable
-// results.
+// Finds top-rated real venues near a point via Google Places API (New),
+// sorted with featured (partner_tier 'premium'/'sponsor') venues first and
+// rating descending after that, and upserts them into the `venues` table
+// (keyed by google_place_id, via upsert_places_venues() in
+// 0037_google_places_migration.sql) so they can be wired into routes
+// later. Returns the matched venues either way, even if the upsert fails
+// for some of them, so the discovery UI always gets usable results.
 //
 // Gamification gate (0007_gamification.sql): "real" unlocked results only
 // go to signed-in players who are Level 5+ (xp >= 400) or who've spent
@@ -26,16 +26,25 @@
 // disappears the instant a Pass+ subscription lapses, same as any other
 // subscription-only perk.
 //
-// Requires a YELP_API_KEY secret (Supabase dashboard > Edge Functions >
-// Secrets, or `supabase secrets set YELP_API_KEY=...`). Get a free key at
-// https://www.yelp.com/developers/v3/manage_app — the free tier covers a
-// generous number of calls/day, no billing account required.
+// Requires two secrets (Supabase dashboard > Edge Functions > Secrets, or
+// `supabase secrets set NAME=value`):
+//   GOOGLE_PLACES_SERVER_KEY — used for the Nearby Search call itself.
+//     Restrict this key's API access to "Places API (New)" only; leave its
+//     application restriction as "None" (Supabase Edge Functions don't have
+//     a fixed outbound IP on most plans, so IP restriction isn't viable —
+//     the API restriction is the real protection here).
+//   GOOGLE_PLACES_PHOTO_KEY — embedded directly in the image_url values
+//     returned to players (Google's Photo Media endpoint takes the key as
+//     a query param). Restrict this one by HTTP referrer to your own
+//     domain(s), since it's visible in the browser.
+// Requires billing enabled on the Google Cloud project either way — there's
+// no billing-free tier, only free monthly usage credit against a card on
+// file. See console.cloud.google.com/apis/library/places.googleapis.com.
 //
 // startLat/startLng default to the Livermore, CA 94551 pin, same default
 // used by discovery-submit, for callers that don't share geolocation.
-// radiusMiles defaults to 15 and is clamped to Yelp's own hard cap (~24.85
-// miles / 40,000 meters) regardless of what's requested, since Yelp's API
-// won't search wider than that.
+// radiusMiles defaults to 15 and is clamped to Google Places (New)'s own
+// hard cap (50,000 meters / ~31 miles) regardless of what's requested.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -87,18 +96,28 @@ const DEFAULT_LNG = -121.768;
 const DEFAULT_RADIUS_MILES = 15;
 const FREE_RADIUS_MILES = 30;
 const UNLOCK_LEVEL = 5; // xp >= 400, see profiles.level in 0007_gamification.sql
-const YELP_MAX_RADIUS_METERS = 40000; // ~24.85 miles, Yelp's hard cap
+const PLACES_MAX_RADIUS_METERS = 50000; // Google Places (New) Nearby Search hard cap
 const PASS_PLUS_RADIUS_MILES = 100; // live-only bonus, see 0013_muso_pass_subscriptions.sql
 
-const VALID_BUDGETS: Record<string, string> = {
-  "$": "1",
-  "$$": "1,2",
-  "$$$": "1,2,3",
-  "$$$$": "1,2,3,4",
+const VALID_BUDGETS: Record<string, string[]> = {
+  "$": ["PRICE_LEVEL_INEXPENSIVE"],
+  "$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"],
+  "$$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+  "$$$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"],
+};
+
+// Google's priceLevel enum -> the $/$$/$$$/$$$$ display string the (QA-tool)
+// frontend expects. Never persisted to the venues table, display-only.
+const PRICE_LEVEL_DISPLAY: Record<string, string> = {
+  PRICE_LEVEL_FREE: "",
+  PRICE_LEVEL_INEXPENSIVE: "$",
+  PRICE_LEVEL_MODERATE: "$$",
+  PRICE_LEVEL_EXPENSIVE: "$$$",
+  PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
 };
 
 type VenueRow = {
-  yelp_id: string;
+  google_place_id: string;
   name: string;
   category: string | null;
   address: string | null;
@@ -110,12 +129,33 @@ type VenueRow = {
   source_url: string | null;
   price: string | null;
   image_url: string | null;
+  hours: unknown;
   partner_tier: string;
   featured_position: number | null;
 };
 
 function milesToMeters(miles: number): number {
   return Math.round(miles * 1609.34);
+}
+
+// Kept byte-compatible with real-venue-adventure/index.ts's VenueHours
+// shape (day 0=Monday..6=Sunday, "HHMM" strings) — see that file's
+// googleHoursToVenueHours() for the full rationale. Duplicated here rather
+// than shared since this function can't import from a sibling file (see
+// the inlining note above).
+function googleHoursToVenueHours(hours: { openNow?: boolean; periods?: { open: { day: number; hour: number; minute: number }; close?: { day: number; hour: number; minute: number } }[] } | null | undefined) {
+  if (!hours || !Array.isArray(hours.periods)) return null;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const toInternalDay = (googleDay: number) => (googleDay + 6) % 7;
+  const open = hours.periods
+    .filter((p) => p.open && p.close)
+    .map((p) => ({
+      day: toInternalDay(p.open.day),
+      start: `${pad2(p.open.hour)}${pad2(p.open.minute)}`,
+      end: `${pad2(p.close!.hour)}${pad2(p.close!.minute)}`,
+      is_overnight: p.close!.day !== p.open.day,
+    }));
+  return [{ hour_type: "REGULAR", is_open_now: !!hours.openNow, open }];
 }
 
 Deno.serve(async (req) => {
@@ -126,10 +166,17 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  const yelpKey = Deno.env.get("YELP_API_KEY");
-  if (!yelpKey) {
+  const placesServerKey = Deno.env.get("GOOGLE_PLACES_SERVER_KEY");
+  if (!placesServerKey) {
     return jsonResponse(
-      { error: "YELP_API_KEY is not configured for this project yet." },
+      { error: "GOOGLE_PLACES_SERVER_KEY is not configured for this project yet." },
+      501,
+    );
+  }
+  const placesPhotoKey = Deno.env.get("GOOGLE_PLACES_PHOTO_KEY");
+  if (!placesPhotoKey) {
+    return jsonResponse(
+      { error: "GOOGLE_PLACES_PHOTO_KEY is not configured for this project yet." },
       501,
     );
   }
@@ -175,98 +222,117 @@ Deno.serve(async (req) => {
     : DEFAULT_RADIUS_MILES;
   // Hard server-side cap — can't be bypassed by editing the query string.
   const radiusMiles = Math.min(requestedRadiusMiles, unlockedRadiusMiles);
-  const radiusMeters = Math.min(milesToMeters(radiusMiles), YELP_MAX_RADIUS_METERS);
+  const radiusMeters = Math.min(milesToMeters(radiusMiles), PLACES_MAX_RADIUS_METERS);
 
   const budgetParam = url.searchParams.get("budget");
-  const yelpPrice = budgetParam && VALID_BUDGETS[budgetParam] ? VALID_BUDGETS[budgetParam] : undefined;
+  const priceLevels = budgetParam && VALID_BUDGETS[budgetParam] ? VALID_BUDGETS[budgetParam] : undefined;
 
+  // "category" arrives as a single Google place-type string (or comma-
+  // separated list) from the caller — passed straight through as
+  // includedTypes. "term" (free-text search) has no Nearby Search
+  // equivalent in Places API (New); Text Search (New) would be the
+  // provider-side fit if free-text search is needed again later, but
+  // nothing currently sends `term` from the frontend.
   const category = url.searchParams.get("category") ?? undefined;
-  const term = url.searchParams.get("term") ?? undefined;
+  const includedTypes = category ? category.split(",").map((c) => c.trim()).filter(Boolean) : undefined;
 
-  const yelpParams = new URLSearchParams({
-    latitude: String(startLat),
-    longitude: String(startLng),
-    radius: String(radiusMeters),
-    sort_by: "rating",
-    limit: "20",
-  });
-  if (yelpPrice) yelpParams.set("price", yelpPrice);
-  if (category) yelpParams.set("categories", category);
-  if (term) yelpParams.set("term", term);
+  const requestBody: Record<string, unknown> = {
+    locationRestriction: { circle: { center: { latitude: startLat, longitude: startLng }, radius: radiusMeters } },
+    maxResultCount: 20,
+    rankPreference: "POPULARITY", // closest available proxy for Yelp's old sort_by=rating — Places (New) has no literal rating-sort
+  };
+  if (includedTypes?.length) requestBody.includedTypes = includedTypes;
+  if (priceLevels) requestBody.priceLevels = priceLevels;
 
-  let yelpData: Record<string, unknown>;
+  let placesData: Record<string, unknown>;
   try {
-    const yelpRes = await fetch(
-      `https://api.yelp.com/v3/businesses/search?${yelpParams.toString()}`,
-      { headers: { Authorization: `Bearer ${yelpKey}` } },
-    );
-    if (!yelpRes.ok) {
-      const errBody = await yelpRes.text();
+    const placesRes = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": placesServerKey,
+        "X-Goog-FieldMask": [
+          "places.id", "places.displayName", "places.rating", "places.userRatingCount",
+          "places.formattedAddress", "places.location", "places.photos",
+          "places.regularOpeningHours", "places.primaryType", "places.nationalPhoneNumber",
+          "places.googleMapsUri", "places.priceLevel",
+        ].join(","),
+      },
+      body: JSON.stringify(requestBody),
+    });
+    if (!placesRes.ok) {
+      const errBody = await placesRes.text();
       return jsonResponse(
-        { error: `Yelp API error (${yelpRes.status}): ${errBody.slice(0, 300)}` },
+        { error: `Google Places API error (${placesRes.status}): ${errBody.slice(0, 300)}` },
         502,
       );
     }
-    yelpData = await yelpRes.json();
+    placesData = await placesRes.json();
   } catch (e) {
-    return jsonResponse({ error: `Failed to reach Yelp: ${(e as Error).message}` }, 502);
+    return jsonResponse({ error: `Failed to reach Google Places: ${(e as Error).message}` }, 502);
   }
 
-  const businesses = Array.isArray(yelpData.businesses) ? yelpData.businesses : [];
+  const places = Array.isArray(placesData.places) ? placesData.places : [];
 
-  const venues: VenueRow[] = businesses.map((b: Record<string, unknown>) => {
-    const categories = Array.isArray(b.categories) ? b.categories as Record<string, unknown>[] : [];
-    const coordinates = (b.coordinates ?? {}) as Record<string, unknown>;
-    const location = (b.location ?? {}) as Record<string, unknown>;
-    const displayAddress = Array.isArray(location.display_address)
-      ? (location.display_address as string[]).join(", ")
-      : null;
+  const venues: VenueRow[] = places.map((p: Record<string, unknown>) => {
+    const location = (p.location ?? {}) as Record<string, unknown>;
+    const photos = Array.isArray(p.photos) ? p.photos as Record<string, unknown>[] : [];
+    const photoName = photos[0]?.name as string | undefined;
+    const primaryType = p.primaryType as string | undefined;
+    const priceLevel = p.priceLevel as string | undefined;
 
     return {
-      yelp_id: b.id as string,
-      name: b.name as string,
-      category: categories[0]?.title as string | undefined ?? null,
-      address: displayAddress,
-      lat: coordinates.latitude as number | undefined ?? null,
-      lng: coordinates.longitude as number | undefined ?? null,
-      phone: (b.display_phone as string) || null,
-      rating: (b.rating as number) ?? null,
-      rating_count: (b.review_count as number) ?? null,
-      source_url: (b.url as string)?.split("?")[0] ?? null,
-      price: (b.price as string) ?? null,
-      // Yelp's own business-submitted "hero" photo. Real, current photo of
-      // the actual venue — not a stock image, and not guaranteed to show
-      // patrons (Yelp has no "people" filter), but it's the best available
-      // glamour shot without standing up a separate photo pipeline.
-      image_url: (b.image_url as string) || null,
+      google_place_id: p.id as string,
+      name: (p.displayName as Record<string, unknown> | undefined)?.text as string | undefined,
+      // Underscore-to-space, matching real-venue-adventure/index.ts's same
+      // conversion — keeps this display text reading like Yelp's old
+      // space-separated category titles ("wine_bar" -> "wine bar").
+      category: primaryType ? primaryType.replace(/_/g, " ") : null,
+      address: (p.formattedAddress as string) || null,
+      lat: (location.latitude as number | undefined) ?? null,
+      lng: (location.longitude as number | undefined) ?? null,
+      phone: (p.nationalPhoneNumber as string) || null,
+      rating: (p.rating as number) ?? null,
+      rating_count: (p.userRatingCount as number) ?? null,
+      source_url: (p.googleMapsUri as string) || null,
+      price: priceLevel ? (PRICE_LEVEL_DISPLAY[priceLevel] ?? null) : null,
+      // Ready-to-use, no-extra-call image URL — the Photo Media endpoint
+      // redirects straight to the actual image when hit. Uses the
+      // referrer-restricted photo key (not the server key) since this URL
+      // is shown directly in players' browsers.
+      image_url: photoName
+        ? `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${placesPhotoKey}`
+        : null,
+      hours: googleHoursToVenueHours(p.regularOpeningHours as never),
       // Defaults for a brand-new venue; overwritten below from the DB for
       // any venue that already has a curated partner_tier/featured_position.
       partner_tier: "basic",
       featured_position: null,
     };
-  });
+  }).filter((v: VenueRow) => v.google_place_id && v.name);
 
-  // Upsert fresh Yelp data via the DB function, which is written to never
-  // touch partner_tier/featured_position on existing rows — see
-  // upsert_yelp_venues() in 0007_gamification.sql. A Yelp hiccup or a
-  // missing column (pre-migration) shouldn't block returning results.
+  // Upsert fresh Places data via the DB function, which is written to
+  // never touch partner_tier/featured_position on existing rows — see
+  // upsert_places_venues() in 0037_google_places_migration.sql. A Places
+  // hiccup or a missing column (pre-migration) shouldn't block returning
+  // results.
   try {
-    const rows = venues.filter((v) => v.yelp_id && v.lat != null && v.lng != null);
+    const rows = venues.filter((v) => v.google_place_id && v.lat != null && v.lng != null);
     if (rows.length) {
       // Plain array, not JSON.stringify(rows) — the SQL function's
       // `rows jsonb` parameter needs a genuine JSONB array. Stringifying
       // double-encodes it into a JSONB scalar, which fails inside the
       // function's jsonb_array_elements(rows) call. See the matching fix
       // (and full explanation) in real-venue-adventure/index.ts.
-      await admin.rpc("upsert_yelp_venues", { rows });
+      await admin.rpc("upsert_places_venues", { rows });
 
       const { data: existing } = await admin
         .from("venues")
-        .select("yelp_id, partner_tier, featured_position")
-        .in("yelp_id", rows.map((r) => r.yelp_id));
-      const byYelpId = new Map((existing ?? []).map((v) => [v.yelp_id as string, v]));
+        .select("google_place_id, partner_tier, featured_position")
+        .in("google_place_id", rows.map((r) => r.google_place_id));
+      const byPlaceId = new Map((existing ?? []).map((v) => [v.google_place_id as string, v]));
       for (const v of venues) {
-        const match = byYelpId.get(v.yelp_id);
+        const match = byPlaceId.get(v.google_place_id);
         if (match) {
           v.partner_tier = (match.partner_tier as string) ?? "basic";
           v.featured_position = (match.featured_position as number | null) ?? null;

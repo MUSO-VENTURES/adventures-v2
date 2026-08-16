@@ -94,52 +94,72 @@ function getSupabaseAdmin() {
 type Admin = ReturnType<typeof getSupabaseAdmin>;
 
 // ---------------------------------------------------------------
-// Yelp search + preference-driven filtering
+// Google Places (New) search + preference-driven filtering
 // (budget/interest mappings mirror venues-search/index.ts and index.html's
-// INTEREST_YELP_CATEGORIES exactly, so a player sees the same kind of
+// INTEREST_GOOGLE_TYPES exactly, so a player sees the same kind of
 // results here as they would from "Find Real Venues.")
+//
+// Migrated off the Yelp Fusion API (Yelp's free trial expired and the
+// $229/mo plan wasn't viable) — see git history for the prior Yelp-backed
+// version of this file if anything here needs comparing against it. The
+// internal `Candidate`/hours shapes are kept byte-compatible with the old
+// Yelp-derived shape on purpose (see VenueHours below and
+// googleHoursToVenueHours()) so isOpenOrClosingSoon() here, ITS BYTE-FOR-
+// BYTE DUPLICATE IN preview/index.html, and every downstream consumer of
+// the `venues` table (route-detail, checkin, admin dashboard, all
+// frontend rendering) needed zero changes — only this file's own
+// Places-calling code and the DB upsert/lookup RPCs changed provider.
 // ---------------------------------------------------------------
 
 const DEFAULT_RADIUS_MILES = 15;
-const YELP_MAX_RADIUS_METERS = 40000; // ~24.85 miles, Yelp's hard cap
+const PLACES_MAX_RADIUS_METERS = 50000; // Google Places (New) Nearby Search hard cap
 const FREE_REROLLS = 3;
 const EXTRA_ROLL_COST = 20;
-// Quality floor on Yelp's own rating — only 4.0+ star venues are ever
+// Quality floor on Google's own rating — only 4.0+ star venues are ever
 // offered as a fork choice. Applied as a hard filter (not just a
 // weightedRandomPick weighting bump) on searchNearbyVenues()'s return
 // value, so every code path (init/advance/reroll) is covered from one
-// place. A venue with no Yelp rating at all is excluded too — no rating
-// means no way to confirm it clears the bar.
-const MIN_YELP_RATING = 4.0;
+// place. A venue with no rating at all is excluded too — no rating means
+// no way to confirm it clears the bar.
+const MIN_VENUE_RATING = 4.0;
 
-const VALID_BUDGETS: Record<string, string> = {
-  "$": "1",
-  "$$": "1,2",
-  "$$$": "1,2,3",
-  "$$$$": "1,2,3,4",
+// Google Places (New) priceLevels enum — request-side filter equivalent to
+// Yelp's old 1-4 price param. Never actually persisted to the venues table
+// either way (see the Yelp-era comment history), only used to narrow the
+// search itself.
+const VALID_BUDGETS: Record<string, string[]> = {
+  "$": ["PRICE_LEVEL_INEXPENSIVE"],
+  "$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE"],
+  "$$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE"],
+  "$$$$": ["PRICE_LEVEL_INEXPENSIVE", "PRICE_LEVEL_MODERATE", "PRICE_LEVEL_EXPENSIVE", "PRICE_LEVEL_VERY_EXPENSIVE"],
 };
 
-const INTEREST_YELP_CATEGORIES: Record<string, string> = {
-  "Food & Drink": "restaurants,bars",
-  "Outdoors": "parks,hiking",
-  "Arts & Culture": "arts,museums,theater",
-  "Games & Competition": "arcades,bowling,escapegames,minigolf,gokarts,axethrowing",
-  "Live Music": "musicvenues,jazzandblues",
-  "Wellness": "spas,yoga",
-  "Nightlife": "nightlife,cocktailbars",
-  "Shopping": "shopping",
-  "Pet-Friendly": "dog_parks,petstores,zoos,aquariums",
-  "Comedy": "comedyclubs",
-  "Cultured": "opera,theater,artmuseums,galleries",
-  "Oddities & Curiosities": "museums",
-  "Smoke & Cigar": "hookahbars,cigarbars,vapeshops,tobaccoshops",
+// Google Places (New) "Table A" type strings — verified against Google's
+// current place-types docs. A few Yelp categories have no exact Google
+// equivalent (climbing gyms, escape rooms, antique stores specifically,
+// kayaking/outdoor-gear shops); those fall back to the nearest real type
+// noted inline below rather than being silently dropped.
+const INTEREST_GOOGLE_TYPES: Record<string, string[]> = {
+  "Food & Drink": ["restaurant", "bar"],
+  "Outdoors": ["park", "hiking_area"],
+  "Arts & Culture": ["art_gallery", "museum", "performing_arts_theater"],
+  "Games & Competition": ["video_arcade", "bowling_alley", "amusement_center" /* escape rooms — no dedicated type */, "adventure_sports_center" /* go-karts/axe throwing — no dedicated type */],
+  "Live Music": ["live_music_venue", "concert_hall"],
+  "Wellness": ["spa", "yoga_studio"],
+  "Nightlife": ["night_club", "cocktail_bar"],
+  "Shopping": ["shopping_mall"],
+  "Pet-Friendly": ["dog_park", "pet_store", "zoo", "aquarium"],
+  "Comedy": ["comedy_club"],
+  "Cultured": ["opera_house", "performing_arts_theater", "art_museum", "art_gallery"],
+  "Oddities & Curiosities": ["museum"],
+  "Smoke & Cigar": ["hookah_bar" /* cigar/vape/tobacco shops — no dedicated type */],
 };
 
-// Best-effort only — Yelp has no maturity/content field, so this just
+// Best-effort only — Google has no maturity/content field, so this just
 // steers a family-safe profile away from bar-centric categories. Not a
 // substitute for the client-side age gate, which is the real enforcement.
-const NOT_FAMILY_SAFE_CATEGORIES = new Set([
-  "bars", "nightlife", "cocktailbars", "hookahbars", "cigarbars", "vapeshops", "tobaccoshops",
+const NOT_FAMILY_SAFE_TYPES = new Set([
+  "bar", "night_club", "cocktail_bar", "hookah_bar", "pub", "wine_bar",
 ]);
 
 type Preferences = {
@@ -150,25 +170,54 @@ type Preferences = {
   interests?: string[];
 };
 
-function resolveYelpCategories(prefs: Preferences): string[] {
+function resolveGoogleTypes(prefs: Preferences): string[] {
   const interests = prefs.interests ?? [];
-  let categories = [...new Set(
-    interests.flatMap((v) => (INTEREST_YELP_CATEGORIES[v] ?? "").split(",").filter(Boolean)),
+  let types = [...new Set(
+    interests.flatMap((v) => INTEREST_GOOGLE_TYPES[v] ?? []),
   )];
   const familySafe = prefs.alcohol === "Sober / Alcohol-Free"
     || prefs.contentRating === "G-Rated"
     || prefs.contentRating === "PG-Rated";
   if (familySafe) {
-    categories = categories.filter((c) => !NOT_FAMILY_SAFE_CATEGORIES.has(c));
+    types = types.filter((t) => !NOT_FAMILY_SAFE_TYPES.has(t));
   }
-  return categories;
+  return types;
 }
 
 function milesToMeters(miles: number): number {
   return Math.round(miles * 1609.34);
 }
 
-type YelpHours = { hour_type: string; is_open_now: boolean; open: { day: number; start: string; end: string; is_overnight: boolean }[] }[];
+// Kept in this exact Yelp-derived shape deliberately — see the file-header
+// comment above. Populated now from Google's regularOpeningHours via
+// googleHoursToVenueHours() instead of a live Yelp Business Details call.
+type VenueHours = { hour_type: string; is_open_now: boolean; open: { day: number; start: string; end: string; is_overnight: boolean }[] }[];
+
+// Google's OpeningHours.periods[].open/close shape (the subset of fields
+// this file actually reads) — see googleHoursToVenueHours() below.
+type GooglePoint = { day: number; hour: number; minute: number };
+type GoogleOpeningHours = { openNow?: boolean; periods?: { open: GooglePoint; close?: GooglePoint }[] } | null | undefined;
+
+// Google: day 0=Sunday..6=Saturday, hour/minute as separate ints. Yelp
+// (the shape everything downstream still expects): day 0=Monday..6=Sunday,
+// start/end as "HHMM" strings, is_overnight as an explicit per-block flag.
+// Converts once here, at the provider boundary, so isOpenOrClosingSoon()
+// below (and its byte-for-byte duplicate in preview/index.html) never need
+// to know Google's shape exists.
+function googleHoursToVenueHours(hours: GoogleOpeningHours): VenueHours | null {
+  if (!hours || !Array.isArray(hours.periods)) return null;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const toInternalDay = (googleDay: number) => (googleDay + 6) % 7; // Google 0=Sunday -> internal 0=Monday
+  const open = hours.periods
+    .filter((p) => p.open && p.close)
+    .map((p) => ({
+      day: toInternalDay(p.open.day),
+      start: `${pad2(p.open.hour)}${pad2(p.open.minute)}`,
+      end: `${pad2(p.close!.hour)}${pad2(p.close!.minute)}`,
+      is_overnight: p.close!.day !== p.open.day,
+    }));
+  return [{ hour_type: "REGULAR", is_open_now: !!hours.openNow, open }];
+}
 
 type Candidate = {
   id: string;
@@ -183,84 +232,118 @@ type Candidate = {
   distance_miles: number;
   muso_rating: number | null;
   muso_rating_count: number | null;
-  yelp_id: string | null;
-  hours: YelpHours | null;
+  google_place_id: string | null;
+  hours: VenueHours | null;
   hours_fetched_at: string | null;
 };
 
-// Runs a live Yelp search, upserts results into `venues` (via the existing
-// upsert_yelp_venues RPC, same as venues-search), then asks
-// nearby_candidate_venues() (0016_real_venue_adventures.sql) for the
-// distance-sorted, DB-merged (real partner_tier) result set. Returns []
-// (never throws) on any Yelp-side failure — a network hiccup shouldn't
-// crash init/advance, it should just come back with "no venues found."
+// Runs a live Google Places Nearby Search (New), upserts results into
+// `venues` (via the upsert_places_venues RPC, same pattern venues-search
+// uses), then asks nearby_candidate_venues() for the distance-sorted,
+// DB-merged (real partner_tier) result set. Returns [] (never throws) on
+// any Places-side failure — a network hiccup shouldn't crash init/advance,
+// it should just come back with "no venues found."
+//
+// Requests rating, userRatingCount, and regularOpeningHours in the same
+// call as photos/address/location — all four already put the call at
+// Google's "Enterprise" pricing tier (rating alone does), so there's no
+// cost benefit to a separate Place Details call for hours the way Yelp
+// required (its Search endpoint never returned hours at all, only Business
+// Details did) — see the now-removed getVenueHours() in git history.
+// hours are written straight into `venues.hours`/`hours_fetched_at` below,
+// same columns the old 24h Yelp-hours cache used, just populated
+// write-through on every search instead of lazily per offered candidate.
 async function searchNearbyVenues(
   admin: Admin,
-  yelpKey: string,
+  placesServerKey: string,
+  placesPhotoKey: string,
   opts: { lat: number; lng: number; radiusMiles: number; budget?: string; categories: string[] },
 ): Promise<Candidate[]> {
-  const radiusMeters = Math.min(milesToMeters(opts.radiusMiles), YELP_MAX_RADIUS_METERS);
-  const yelpParams = new URLSearchParams({
-    latitude: String(opts.lat),
-    longitude: String(opts.lng),
-    radius: String(radiusMeters),
-    sort_by: "distance",
-    limit: "20",
-  });
-  const yelpPrice = opts.budget && VALID_BUDGETS[opts.budget] ? VALID_BUDGETS[opts.budget] : undefined;
-  if (yelpPrice) yelpParams.set("price", yelpPrice);
-  if (opts.categories.length) yelpParams.set("categories", opts.categories.join(","));
+  const radiusMeters = Math.min(milesToMeters(opts.radiusMiles), PLACES_MAX_RADIUS_METERS);
+  const priceLevels = opts.budget && VALID_BUDGETS[opts.budget] ? VALID_BUDGETS[opts.budget] : undefined;
 
-  let businesses: Record<string, unknown>[];
+  const requestBody: Record<string, unknown> = {
+    locationRestriction: { circle: { center: { latitude: opts.lat, longitude: opts.lng }, radius: radiusMeters } },
+    maxResultCount: 20,
+    rankPreference: "DISTANCE",
+  };
+  if (opts.categories.length) requestBody.includedTypes = opts.categories;
+  if (priceLevels) requestBody.priceLevels = priceLevels;
+
+  let places: Record<string, unknown>[];
   try {
-    const yelpRes = await fetch(
-      `https://api.yelp.com/v3/businesses/search?${yelpParams.toString()}`,
-      { headers: { Authorization: `Bearer ${yelpKey}` } },
-    );
-    if (!yelpRes.ok) {
+    const placesRes = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": placesServerKey,
+        "X-Goog-FieldMask": [
+          "places.id", "places.displayName", "places.rating", "places.userRatingCount",
+          "places.formattedAddress", "places.location", "places.photos",
+          "places.regularOpeningHours", "places.primaryType", "places.nationalPhoneNumber",
+          "places.googleMapsUri",
+        ].join(","),
+      },
+      body: JSON.stringify(requestBody),
+    });
+    if (!placesRes.ok) {
       // Was silently returning [] here — indistinguishable from a genuinely
-      // empty search, so a Yelp-side failure (rate limit, bad/expired key,
-      // etc.) showed players the exact same "No matching venues found
-      // nearby" message as an actual empty result. Logged so the real
-      // cause is visible in this function's Supabase dashboard logs.
-      const errBody = await yelpRes.text().catch(() => "");
-      console.error(`Yelp search failed: ${yelpRes.status} ${yelpRes.statusText} — ${errBody.slice(0, 500)}`);
+      // empty search, so a Places-side failure (rate limit, bad/expired
+      // key, billing not enabled, etc.) showed players the exact same "No
+      // matching venues found nearby" message as an actual empty result.
+      // Logged so the real cause is visible in this function's Supabase
+      // dashboard logs.
+      const errBody = await placesRes.text().catch(() => "");
+      console.error(`Google Places search failed: ${placesRes.status} ${placesRes.statusText} — ${errBody.slice(0, 500)}`);
       return [];
     }
-    const yelpData = await yelpRes.json();
-    businesses = Array.isArray(yelpData.businesses) ? yelpData.businesses : [];
-    if (!businesses.length) {
-      console.log(`Yelp search returned 0 businesses: lat=${opts.lat} lng=${opts.lng} radiusMeters=${radiusMeters} categories=${opts.categories.join(",") || "(none)"} price=${yelpPrice ?? "(any)"}`);
+    const placesData = await placesRes.json();
+    places = Array.isArray(placesData.places) ? placesData.places : [];
+    if (!places.length) {
+      console.log(`Google Places search returned 0 places: lat=${opts.lat} lng=${opts.lng} radiusMeters=${radiusMeters} types=${opts.categories.join(",") || "(none)"} priceLevels=${priceLevels?.join(",") ?? "(any)"}`);
     }
   } catch (e) {
-    console.error("Yelp search threw:", e);
+    console.error("Google Places search threw:", e);
     return [];
   }
 
-  const rows = businesses.map((b) => {
-    const categories = Array.isArray(b.categories) ? b.categories as Record<string, unknown>[] : [];
-    const coordinates = (b.coordinates ?? {}) as Record<string, unknown>;
-    const location = (b.location ?? {}) as Record<string, unknown>;
-    const displayAddress = Array.isArray(location.display_address)
-      ? (location.display_address as string[]).join(", ")
+  const rows = places.map((p) => {
+    const location = (p.location ?? {}) as Record<string, unknown>;
+    const photos = Array.isArray(p.photos) ? p.photos as Record<string, unknown>[] : [];
+    const photoName = photos[0]?.name as string | undefined;
+    // Ready-to-use, no-extra-call image URL — the Photo Media endpoint
+    // redirects straight to the actual image when hit, same "just embed
+    // this URL" ergonomics Yelp's image_url had. Uses the referrer-
+    // restricted photo key (not the server key) since this URL is shown
+    // directly in players' browsers.
+    const imageUrl = photoName
+      ? `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=800&key=${placesPhotoKey}`
       : null;
+    // Google's type strings are snake_case ("wine_bar"); the theme-bucket
+    // keyword lists below were written against Yelp's space-separated
+    // category titles ("Wine Bar", "ice cream" etc.) — swapping
+    // underscores for spaces keeps classifyTheme()'s substring keyword
+    // matching working the same way against either provider's text.
+    const primaryType = p.primaryType as string | undefined;
+    const category = primaryType ? primaryType.replace(/_/g, " ") : null;
     return {
-      yelp_id: b.id as string,
-      name: b.name as string,
-      category: (categories[0]?.title as string | undefined) ?? null,
-      address: displayAddress,
-      lat: (coordinates.latitude as number | undefined) ?? null,
-      lng: (coordinates.longitude as number | undefined) ?? null,
-      phone: (b.display_phone as string) || null,
-      rating: (b.rating as number) ?? null,
-      rating_count: (b.review_count as number) ?? null,
-      source_url: (b.url as string)?.split("?")[0] ?? null,
-      image_url: (b.image_url as string) || null,
+      google_place_id: p.id as string,
+      name: (p.displayName as Record<string, unknown> | undefined)?.text as string | undefined,
+      category,
+      address: (p.formattedAddress as string) || null,
+      lat: (location.latitude as number | undefined) ?? null,
+      lng: (location.longitude as number | undefined) ?? null,
+      phone: (p.nationalPhoneNumber as string) || null,
+      rating: (p.rating as number) ?? null,
+      rating_count: (p.userRatingCount as number) ?? null,
+      source_url: (p.googleMapsUri as string) || null,
+      image_url: imageUrl,
+      hours: googleHoursToVenueHours(p.regularOpeningHours as GoogleOpeningHours),
     };
-  }).filter((r) => r.yelp_id && r.lat != null && r.lng != null);
+  }).filter((r) => r.google_place_id && r.name && r.lat != null && r.lng != null);
 
   if (!rows.length) {
-    console.log(`Yelp returned ${businesses.length} businesses but 0 survived the yelp_id/lat/lng filter`);
+    console.log(`Google Places returned ${places.length} places but 0 survived the id/name/lat/lng filter`);
     return [];
   }
 
@@ -270,16 +353,16 @@ async function searchNearbyVenues(
     // Stringifying it here double-encodes it: PostgREST hands Postgres a
     // JSON *string* whose contents happen to look like an array, which
     // Postgres casts to a JSONB scalar (a string), not a JSONB array — so
-    // jsonb_array_elements(rows) inside the function failed on every call
+    // jsonb_array_elements(rows) inside the function fails on every call
     // with "cannot extract elements from a scalar", silently caught below
     // and surfacing to players as "No matching venues found nearby."
-    const { error: upsertErr } = await admin.rpc("upsert_yelp_venues", { rows });
+    const { error: upsertErr } = await admin.rpc("upsert_places_venues", { rows });
     if (upsertErr) {
-      console.error("upsert_yelp_venues RPC error:", JSON.stringify(upsertErr));
+      console.error("upsert_places_venues RPC error:", JSON.stringify(upsertErr));
       return [];
     }
   } catch (e) {
-    console.error("upsert_yelp_venues threw:", e);
+    console.error("upsert_places_venues threw:", e);
     return [];
   }
 
@@ -287,26 +370,26 @@ async function searchNearbyVenues(
     p_lat: opts.lat,
     p_lng: opts.lng,
     p_radius_miles: opts.radiusMiles,
-    p_yelp_ids: rows.map((r) => r.yelp_id),
+    p_google_place_ids: rows.map((r) => r.google_place_id),
   });
   if (nearbyErr) {
     console.error("nearby_candidate_venues RPC error:", JSON.stringify(nearbyErr));
     return [];
   }
   if (!candidates?.length) {
-    console.log(`nearby_candidate_venues returned 0 rows for ${rows.length} upserted yelp_ids, radius=${opts.radiusMiles}mi, lat=${opts.lat}, lng=${opts.lng}`);
+    console.log(`nearby_candidate_venues returned 0 rows for ${rows.length} upserted place_ids, radius=${opts.radiusMiles}mi, lat=${opts.lat}, lng=${opts.lng}`);
   }
 
   const allCandidates = (candidates ?? []) as Candidate[];
   // "Preferably good photos, but not limited to good photos" — there's no
-  // reliable signal for photo *quality* from the Yelp search response
-  // (just the one representative image_url), so the bar is "has a real
-  // photo at all," not an aesthetic judgment call.
+  // reliable signal for photo *quality* from the Places response (just one
+  // representative photo reference), so the bar is "has a real photo at
+  // all," not an aesthetic judgment call.
   const withPhotoAndRating = allCandidates.filter(
-    (c) => c.rating != null && c.rating >= MIN_YELP_RATING && !!c.image_url,
+    (c) => c.rating != null && c.rating >= MIN_VENUE_RATING && !!c.image_url,
   );
   if (withPhotoAndRating.length < allCandidates.length) {
-    console.log(`Filtered out ${allCandidates.length - withPhotoAndRating.length} of ${allCandidates.length} candidates (below ${MIN_YELP_RATING} stars or missing a photo)`);
+    console.log(`Filtered out ${allCandidates.length - withPhotoAndRating.length} of ${allCandidates.length} candidates (below ${MIN_VENUE_RATING} stars or missing a photo)`);
   }
 
   return withPhotoAndRating;
@@ -399,7 +482,7 @@ const GENERAL_THEME: Theme = { key: "local", label: "Local Pick", emoji: "📍",
 // (cozy/adventurous/social/artsy/foodie) would barely differentiate
 // anything. This parallel bucket set classifies by the *kind* of wine-
 // country stop instead, matched against Yelp's category/name text.
-const WINE_YELP_CATEGORIES = ["wineries", "wine_bars"];
+const WINE_GOOGLE_TYPES = ["winery", "wine_bar", "vineyard"];
 // Most wineries don't open until mid-morning/early-afternoon — searching
 // wineries only meant an early-day player got "no venues found" with
 // nothing to do until they opened. These ride along in the same search so
@@ -408,8 +491,8 @@ const WINE_YELP_CATEGORIES = ["wineries", "wine_bars"];
 // actually open right now: coffee/food/entertainment/sightseeing early,
 // shifting to real wineries as the day goes on and they open — no
 // separate time-of-day logic needed, just a wider net for the same filter.
-const WINE_COMPANION_CATEGORIES = [
-  "coffee", "breakfast_brunch", "bikerentals", "diners", "bakeries", "landmarks", "parks",
+const WINE_COMPANION_TYPES = [
+  "coffee_shop", "brunch_restaurant", "diner", "bakery", "tourist_attraction", "park",
 ];
 const WINE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
@@ -466,7 +549,7 @@ const WINERY_THEME_KEYS = new Set(["boutique", "estate", "tasting_bar", "winery"
 // each bucket set's own fallback theme in without special-casing.
 // ---------------------------------------------------------------
 
-const DOG_YELP_CATEGORIES = ["dogparks", "petstore", "parks", "breweries", "beergardens", "hiking"];
+const DOG_GOOGLE_TYPES = ["dog_park", "pet_store", "park", "brewery", "brewpub", "hiking_area"];
 const DOG_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "dog_park", label: "Dog Park", emoji: "🐕", color: "#4a8f3c",
@@ -487,7 +570,9 @@ const DOG_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const DOG_GENERAL_THEME: Theme = { key: "dog_spot", label: "Dog-Friendly Spot", emoji: "🐾", color: "#4a8f3c" };
 
-const OUTDOOR_YELP_CATEGORIES = ["hiking", "parks", "climbing", "kayaking", "campgrounds", "outdoorgear"];
+// climbing/kayaking-outdoor-gear have no dedicated Google type — substituted
+// with the nearest real matches (sports_activity_location, sporting_goods_store).
+const OUTDOOR_GOOGLE_TYPES = ["hiking_area", "park", "sports_activity_location", "sporting_goods_store", "campground"];
 const OUTDOOR_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "trailhead", label: "Trailhead", emoji: "🥾", color: "#2f8f5b",
@@ -508,7 +593,9 @@ const OUTDOOR_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const OUTDOOR_GENERAL_THEME: Theme = { key: "outdoor_spot", label: "Outdoor Pick", emoji: "🏞️", color: "#2f8f5b" };
 
-const ODDITIES_YELP_CATEGORIES = ["museums", "thriftstores", "arcades", "escapegames", "antiques", "giftshops"];
+// escape rooms/antique stores have no dedicated Google type — substituted
+// with the nearest real matches (amusement_center, thrift_store).
+const ODDITIES_GOOGLE_TYPES = ["museum", "thrift_store", "video_arcade", "amusement_center", "gift_shop"];
 const ODDITIES_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "curiosity_shop", label: "Curiosity Shop", emoji: "🔮", color: "#5b3b8a",
@@ -529,7 +616,7 @@ const ODDITIES_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const ODDITIES_GENERAL_THEME: Theme = { key: "odd_spot", label: "Odd Find", emoji: "🔮", color: "#5b3b8a" };
 
-const FOODIE_YELP_CATEGORIES = ["restaurants", "foodtrucks", "bakeries", "desserts", "specialtyfood", "icecream"];
+const FOODIE_GOOGLE_TYPES = ["restaurant", "bakery", "dessert_shop", "ice_cream_shop"];
 const FOODIE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "street_eats", label: "Street Eats", emoji: "🌮", color: "#c9622f",
@@ -550,7 +637,7 @@ const FOODIE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const FOODIE_GENERAL_THEME: Theme = { key: "food_spot", label: "Tasty Find", emoji: "🍽️", color: "#c9622f" };
 
-const AFTER_HOURS_YELP_CATEGORIES = ["bars", "lounges", "cocktailbars", "musicvenues", "pubs", "wine_bars"];
+const AFTER_HOURS_GOOGLE_TYPES = ["bar", "cocktail_bar", "night_club", "live_music_venue", "pub", "wine_bar"];
 const AFTER_HOURS_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
   {
     key: "craft_cocktails", label: "Craft Cocktails", emoji: "🍸", color: "#5b4b8a",
@@ -677,49 +764,49 @@ const THEME_SET_META = new Map<(Theme & { keywords: string[] })[], ThemeSetMeta>
 // Keyed by routes.venue_theme — the single source of truth for every
 // locked themed adventure (init/reroll/advance below all look a route's
 // venueTheme up here instead of a per-theme boolean). Adding a new themed
-// adventure is just adding an entry here (plus a bucket set + Yelp
-// categories above and a picker CTA card in preview/index.html) — nothing
-// in the choose/commit/checkin state machine needs to know it exists.
+// adventure is just adding an entry here (plus a bucket set + Google
+// types above and a picker CTA card in preview/index.html) — nothing in
+// the choose/commit/checkin state machine needs to know it exists.
 type ThemeRegistryEntry = {
   buckets: (Theme & { keywords: string[] })[];
-  yelpCategories: string[];
+  googleTypes: string[];
   title: string;
   description: string;
 };
 const THEME_REGISTRY: Record<string, ThemeRegistryEntry> = {
   wine_country: {
     buckets: WINE_THEME_BUCKETS,
-    yelpCategories: [...WINE_YELP_CATEGORIES, ...WINE_COMPANION_CATEGORIES],
+    googleTypes: [...WINE_GOOGLE_TYPES, ...WINE_COMPANION_TYPES],
     title: "Wine Country Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby wineries and tasting rooms.",
   },
   dog_friendly: {
     buckets: DOG_THEME_BUCKETS,
-    yelpCategories: DOG_YELP_CATEGORIES,
+    googleTypes: DOG_GOOGLE_TYPES,
     title: "Dog Friendly Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby dog-friendly spots.",
   },
   outdoor: {
     buckets: OUTDOOR_THEME_BUCKETS,
-    yelpCategories: OUTDOOR_YELP_CATEGORIES,
+    googleTypes: OUTDOOR_GOOGLE_TYPES,
     title: "Outdoor Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby trails and outdoor spots.",
   },
   oddities: {
     buckets: ODDITIES_THEME_BUCKETS,
-    yelpCategories: ODDITIES_YELP_CATEGORIES,
+    googleTypes: ODDITIES_GOOGLE_TYPES,
     title: "Oddities Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby curiosities and oddities.",
   },
   foodie_tour: {
     buckets: FOODIE_THEME_BUCKETS,
-    yelpCategories: FOODIE_YELP_CATEGORIES,
+    googleTypes: FOODIE_GOOGLE_TYPES,
     title: "Foodies Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby food spots.",
   },
   after_hours: {
     buckets: AFTER_HOURS_THEME_BUCKETS,
-    yelpCategories: AFTER_HOURS_YELP_CATEGORIES,
+    googleTypes: AFTER_HOURS_GOOGLE_TYPES,
     title: "After Hours Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby bars, lounges, and late-night spots.",
   },
@@ -811,7 +898,6 @@ function pickContrastingChoices(
 // Venue hours — "never offer a closed or closing-soon venue."
 // ---------------------------------------------------------------
 
-const HOURS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — hours change rarely; avoids re-fetching Yelp Business Details on every search near the same venue
 const CLOSING_SOON_BUFFER_MINUTES = 30;
 // Every current/planned venue (Tri-Valley, Napa, Mendocino, Lake County) is
 // in Pacific time — hardcoded rather than adding a timezone-lookup
@@ -842,56 +928,25 @@ function applyTimeOfDayLabels<T extends { theme: Theme }>(items: T[]): T[] {
   });
 }
 
-// Fetches (or reuses a cached, <24h-old) Yelp Business Details record for
-// one candidate's hours. Only the Business Details endpoint returns hours
-// — the Search endpoint used above doesn't — so this is a second,
-// per-candidate Yelp call, deliberately only made lazily for candidates
-// actually about to be offered (see pickOpenChoices below), not the whole
-// search result set, to keep Yelp quota usage bounded.
-async function getVenueHours(admin: Admin, yelpKey: string, candidate: Candidate): Promise<YelpHours | null> {
-  if (candidate.hours && candidate.hours_fetched_at) {
-    const age = Date.now() - new Date(candidate.hours_fetched_at).getTime();
-    if (age < HOURS_CACHE_TTL_MS) return candidate.hours;
-  }
-  if (!candidate.yelp_id) return candidate.hours ?? null; // nothing to look up against — best-effort fall back to whatever's cached, else unknown
-
-  try {
-    const res = await fetch(`https://api.yelp.com/v3/businesses/${encodeURIComponent(candidate.yelp_id)}`, {
-      headers: { Authorization: `Bearer ${yelpKey}` },
-    });
-    if (!res.ok) {
-      console.error(`Yelp business details failed for ${candidate.yelp_id}: ${res.status} ${res.statusText}`);
-      return candidate.hours ?? null;
-    }
-    const data = await res.json();
-    const hours = Array.isArray(data.hours) ? (data.hours as YelpHours) : null;
-    // Best-effort cache write — a failure here shouldn't break venue
-    // offering, it just means the next request re-fetches instead of
-    // hitting cache.
-    await admin.from("venues").update({ hours, hours_fetched_at: new Date().toISOString() }).eq("id", candidate.id);
-    return hours;
-  } catch (e) {
-    console.error("Yelp business details threw:", e);
-    return candidate.hours ?? null;
-  }
-}
-
-// Unknown hours (Yelp lookup failed, or no yelp_id) fall back to "assume
-// open" — a missing data point shouldn't block venue offering the way a
-// confirmed-closed status should.
-function isOpenOrClosingSoon(hours: YelpHours | null): { open: boolean; closingSoon: boolean } {
+// Unknown hours (no regularOpeningHours in the Places response) fall back
+// to "assume open" — a missing data point shouldn't block venue offering
+// the way a confirmed-closed status should.
+function isOpenOrClosingSoon(hours: VenueHours | null): { open: boolean; closingSoon: boolean } {
   if (!hours || !hours.length) return { open: true, closingSoon: false };
   const regular = hours.find((h) => h.hour_type === "REGULAR") ?? hours[0];
-  // is_open_now is Yelp's own authoritative "is it open right now"
-  // computation — trusted directly rather than re-derived from the `open`
-  // array, which sidesteps any ambiguity in exactly how Yelp indexes
-  // day-of-week there. The `open` array is only parsed below for the
-  // "closing soon" lookahead, which Yelp doesn't provide as a flag.
+  // is_open_now is derived directly from Google's own openNow flag
+  // (see googleHoursToVenueHours()) — trusted directly rather than
+  // re-derived from the `open` array, which sidesteps any ambiguity in
+  // exactly how day-of-week is indexed there. The `open` array is only
+  // parsed below for the "closing soon" lookahead, which isn't returned
+  // as a flag by either provider.
   if (!regular.is_open_now) return { open: false, closingSoon: false };
 
   const nowPacific = new Date(new Date().toLocaleString("en-US", { timeZone: VENUE_TIMEZONE }));
-  // Yelp's day field: 0=Monday..6=Sunday (confirmed against Yelp's own
-  // docs). JS Date#getDay() is 0=Sunday..6=Saturday, hence the shift.
+  // This file's internal day field stays Yelp's original convention:
+  // 0=Monday..6=Sunday (googleHoursToVenueHours() converts Google's
+  // 0=Sunday native format into this on the way in). JS Date#getDay() is
+  // 0=Sunday..6=Saturday, hence the shift.
   const weekday = (nowPacific.getDay() + 6) % 7;
   const minutesNow = nowPacific.getHours() * 60 + nowPacific.getMinutes();
 
@@ -909,21 +964,20 @@ function isOpenOrClosingSoon(hours: YelpHours | null): { open: boolean; closingS
 }
 
 // Wraps pickContrastingChoices with the open/closing-soon filter — picks
-// candidates, checks each one's hours (lazily, only the ones actually
-// picked), keeps the open ones, and asks for more from the remaining pool
-// until n are filled or the pool/attempt budget runs out. Never returns a
-// closed or closing-soon venue; may return fewer than n if the area
-// genuinely doesn't have enough currently-open options.
-async function pickOpenChoices(
-  admin: Admin,
-  yelpKey: string,
+// candidates, checks each one's hours (already attached to the candidate
+// from the Places search that found it — see searchNearbyVenues()), keeps
+// the open ones, and asks for more from the remaining pool until n are
+// filled or the pool/attempt budget runs out. Never returns a closed or
+// closing-soon venue; may return fewer than n if the area genuinely
+// doesn't have enough currently-open options.
+function pickOpenChoices(
   candidates: Candidate[],
   n: number,
   buckets: (Theme & { keywords: string[] })[],
   maxAttempts = 8,
-): Promise<(Candidate & { theme: Theme; hours: YelpHours | null })[]> {
+): (Candidate & { theme: Theme; hours: VenueHours | null })[] {
   const excludedIds = new Set<string>();
-  const result: (Candidate & { theme: Theme; hours: YelpHours | null })[] = [];
+  const result: (Candidate & { theme: Theme; hours: VenueHours | null })[] = [];
 
   for (let attempt = 0; attempt < maxAttempts && result.length < n; attempt++) {
     const pool = candidates.filter((c) => !excludedIds.has(c.id));
@@ -933,10 +987,9 @@ async function pickOpenChoices(
 
     for (const choice of picked) {
       excludedIds.add(choice.id); // never reconsider this exact candidate again, open or not
-      const hours = await getVenueHours(admin, yelpKey, choice);
-      const status = isOpenOrClosingSoon(hours);
+      const status = isOpenOrClosingSoon(choice.hours);
       if (status.open && !status.closingSoon) {
-        result.push({ ...choice, hours });
+        result.push(choice);
         if (result.length >= n) break;
       }
     }
@@ -1028,9 +1081,13 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  const yelpKey = Deno.env.get("YELP_API_KEY");
-  if (!yelpKey) {
-    return jsonResponse({ error: "YELP_API_KEY is not configured for this project yet." }, 501);
+  const placesServerKey = Deno.env.get("GOOGLE_PLACES_SERVER_KEY");
+  if (!placesServerKey) {
+    return jsonResponse({ error: "GOOGLE_PLACES_SERVER_KEY is not configured for this project yet." }, 501);
+  }
+  const placesPhotoKey = Deno.env.get("GOOGLE_PLACES_PHOTO_KEY");
+  if (!placesPhotoKey) {
+    return jsonResponse({ error: "GOOGLE_PLACES_PHOTO_KEY is not configured for this project yet." }, 501);
   }
 
   const authHeader = req.headers.get("Authorization") ?? "";
@@ -1164,10 +1221,10 @@ Deno.serve(async (req) => {
     const venueTheme = typeof body.venueTheme === "string" && THEME_REGISTRY[body.venueTheme] ? body.venueTheme : null;
     const themeEntry = venueTheme ? THEME_REGISTRY[venueTheme] : null;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = themeEntry ? themeEntry.yelpCategories : resolveYelpCategories(prefs);
+    const categories = themeEntry ? themeEntry.googleTypes : resolveGoogleTypes(prefs);
     const buckets = themeEntry ? themeEntry.buckets : THEME_BUCKETS;
 
-    const candidates = await searchNearbyVenues(admin, yelpKey, {
+    const candidates = await searchNearbyVenues(admin, placesServerKey, placesPhotoKey, {
       lat, lng, radiusMiles, budget: prefs.budget, categories,
     });
     if (!candidates.length) {
@@ -1184,7 +1241,7 @@ Deno.serve(async (req) => {
     const stopCount = Number.isInteger(requestedStopCount)
       ? Math.min(Math.max(requestedStopCount, 2), unlockedCap)
       : unlockedCap;
-    const choices = await pickOpenChoices(admin, yelpKey, candidates, 3, buckets);
+    const choices = pickOpenChoices(candidates, 3, buckets);
     if (!choices.length) {
       return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
@@ -1288,7 +1345,7 @@ Deno.serve(async (req) => {
     // Pick (and hours-verify) choices BEFORE touching coins/reroll_count —
     // a spin that comes back with nothing open shouldn't cost the player
     // anything.
-    const choices = await pickOpenChoices(admin, yelpKey, pool, 3, rerollBuckets);
+    const choices = pickOpenChoices(pool, 3, rerollBuckets);
     if (!choices.length) {
       return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
@@ -1457,12 +1514,12 @@ Deno.serve(async (req) => {
     if (!profile) return jsonResponse({ error: "Couldn't load your profile." }, 400);
     const prefs = (profile.preferences ?? {}) as Preferences;
     const radiusMiles = Math.min(prefs.radiusMiles || DEFAULT_RADIUS_MILES, profile.unlocked_radius_miles ?? DEFAULT_RADIUS_MILES);
-    const categories = advanceThemeEntry ? advanceThemeEntry.yelpCategories : resolveYelpCategories(prefs);
+    const categories = advanceThemeEntry ? advanceThemeEntry.googleTypes : resolveGoogleTypes(prefs);
     const buckets = advanceThemeEntry ? advanceThemeEntry.buckets : THEME_BUCKETS;
 
     const alreadyVisitedVenueIds = new Set(stops.filter((s) => s.venue_id).map((s) => s.venue_id as string));
 
-    const candidates = await searchNearbyVenues(admin, yelpKey, {
+    const candidates = await searchNearbyVenues(admin, placesServerKey, placesPhotoKey, {
       lat, lng, radiusMiles, budget: prefs.budget, categories,
     });
     const fresh = candidates.filter((c) => !alreadyVisitedVenueIds.has(c.id));
@@ -1470,7 +1527,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "No new nearby venues found for the next stop. Try again shortly." }, 404);
     }
 
-    const choices = await pickOpenChoices(admin, yelpKey, fresh, 3, buckets);
+    const choices = pickOpenChoices(fresh, 3, buckets);
     if (!choices.length) {
       return jsonResponse({ error: "No currently-open venues nearby right now. Try again shortly." }, 404);
     }
