@@ -3845,7 +3845,7 @@
     // of that group renders into its own collapsed/auto-cycling accordion
     // below it — see advAccordionStep() below. Two independent accordion
     // instances (keyed by container id) rather than one shared list, so
-    // "Choose Your Own" and "Curated" each cycle on their own.
+    // "Pick Your Path" and "Curated" each cycle on their own.
     // containerId identifies which accordion (if any) this card's pills
     // should hold open on interaction — null for the featured card, which
     // isn't part of any accordion/auto-cycle timer at all.
@@ -3921,7 +3921,7 @@
 
     body.innerHTML = `
       ${inviteFriendsCta}
-      <div class="picker-group-label">Choose Your Own Adventure</div>
+      <div class="picker-group-label">Pick Your Path</div>
       ${featuredCardHtml(themeToItem(featuredTheme, null), 0)}
       ${accordionHtml('adv-accordion-themes', otherThemes.map((t) => themeToItem(t, 'adv-accordion-themes')))}
       <div class="curated-adventures-group" id="curated-adventures-group">
@@ -3944,7 +3944,7 @@
   // resuming from there — clicking doesn't stop the cycle for good, it just
   // re-centers it on whatever the player is looking at right now.
   // Keyed by container id (there are now two independent accordions,
-  // "Choose Your Own" and "Curated" — see renderRoutePicker()) rather than
+  // "Pick Your Path" and "Curated" — see renderRoutePicker()) rather than
   // one shared global, so each cycles on its own timer without one
   // resetting the other.
   const advAccordions = new Map();
@@ -4008,7 +4008,7 @@
     }
   }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
 
-  // The "Choose Your Own Adventure" accordion (adv-accordion-themes) instead
+  // The "Pick Your Path" accordion (adv-accordion-themes) instead
   // pauses based on whether "Curated Adventures" is on screen below it —
   // expanding/collapsing rows changes its height, which jostles the curated
   // section whenever it's actually in view.
