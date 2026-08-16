@@ -115,10 +115,15 @@
       '  55%{transform:rotateX(var(--mca-rest-rot,0deg)) scaleY(1.05);}',
       '  100%{transform:rotateX(var(--mca-rest-rot,0deg)) scaleY(1);}',
       '}',
-      '.mca-result{font-family:"Fredoka",sans-serif; font-weight:700; font-size:1.5rem; margin:14px 0 4px; min-height:1.9rem;',
-      '  animation:mcaResultPop .35s var(--ease-bounce,cubic-bezier(0.34,1.56,0.64,1)) backwards;}',
-      '.mca-result-heads{color:var(--coral,#e8503f);}',
-      '.mca-result-tails{color:var(--deep-teal,#0b6e68);}',
+      // opacity:0 here (not the `hidden` attribute, which the old markup
+      // used) is what keeps this space reserved before a result lands —
+      // `hidden` maps to display:none in the UA stylesheet, which drops
+      // min-height entirely and made the whole card visibly grow the
+      // instant a result appeared. Opacity keeps the box in layout the
+      // entire time; only its color classes below make it visible.
+      '.mca-result{font-family:"Fredoka",sans-serif; font-weight:700; font-size:1.5rem; margin:14px 0 4px; min-height:1.9rem; opacity:0;}',
+      '.mca-result-heads{color:var(--coral,#e8503f); opacity:1; animation:mcaResultPop .35s var(--ease-bounce,cubic-bezier(0.34,1.56,0.64,1)) both;}',
+      '.mca-result-tails{color:var(--deep-teal,#0b6e68); opacity:1; animation:mcaResultPop .35s var(--ease-bounce,cubic-bezier(0.34,1.56,0.64,1)) both;}',
       '@keyframes mcaResultPop{from{opacity:0; transform:scale(0.6) translateY(8px);} to{opacity:1; transform:scale(1) translateY(0);}}',
       '.mca-actions{display:flex; gap:10px; margin-top:18px;}',
       '.mca-btn{flex:1; border:none; padding:12px 18px; border-radius:999px; font-weight:700;',
@@ -228,7 +233,7 @@
         '      <div class="mca-face mca-face-tails"><img src="' + TAILS_SRC + '" alt="Tails"></div>' +
         '    </div>' +
         '  </div>' +
-        '  <div class="mca-result" hidden></div>' +
+        '  <div class="mca-result"></div>' +
         '  <div class="mca-actions">' +
         '    <button type="button" class="mca-btn mca-btn-primary mca-flip-btn">🪙 Flip the Coin</button>' +
         '  </div>' +
@@ -268,8 +273,8 @@
           if (allowed === false) { flipBtn.disabled = false; return; } // caller already showed its own message
         }
 
-        resultEl.hidden = true;
         resultEl.textContent = '';
+        resultEl.className = 'mca-result'; // strips the winner color class, back to reserved-but-invisible
         settled = false;
         coin.classList.remove('mca-landed');
         coin.style.animation = 'none';
@@ -314,7 +319,6 @@
           coin.classList.add('mca-landed');
           if (opts.sound !== false) playLandSound();
 
-          resultEl.hidden = false;
           resultEl.textContent = forced === 'heads' ? (opts.headsLabel || 'HEADS!') : (opts.tailsLabel || 'TAILS!');
           resultEl.className = 'mca-result mca-result-' + forced;
 

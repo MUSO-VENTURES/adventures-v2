@@ -8,6 +8,7 @@
 //     | { action: 'flipStatus', adventureId }
 //     | { action: 'useFlip', adventureId }
 //     | { action: 'buyFlips', adventureId }
+//     | { action: 'nameCustomFlip', prompt, adventureId? }
 // Requires Authorization: Bearer <user JWT> (Supabase Auth).
 //
 // Mini games are quick, optional play elements droppable into any
@@ -95,6 +96,12 @@ const FREE_FLIPS_BASE = 5;
 const FLIP_PACK_SIZE = 5;
 const FLIP_PACK_COST = 50;
 
+// Naming your own solo flip (0036_custom_flip_prompt_coins.sql) — a flat
+// fee charged once at naming time, independent of the flip budget above
+// entirely. The 6 built-in presets stay free and only ever consume the
+// normal budget; this is purely the cost of typing something custom.
+const CUSTOM_PROMPT_COST = 10;
+
 function otherCall(call: "heads" | "tails"): "heads" | "tails" {
   return call === "heads" ? "tails" : "heads";
 }
@@ -124,7 +131,7 @@ const BLOCKED_PROMPT_RE = new RegExp("\\b(" + BLOCKED_PROMPT_TERMS.join("|") + "
 function promptRejectionReason(prompt: string): string | null {
   if (prompt.length > 200) return "Keep the prompt under 200 characters.";
   if (BLOCKED_PROMPT_RE.test(prompt)) {
-    return "That prompt isn't allowed — keep it PG-13: no cruelty, violence, or explicit content.";
+    return "That prompt isn't allowed. Keep it PG-13: no cruelty, violence, or explicit content.";
   }
   return null;
 }
@@ -493,11 +500,38 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true, added: FLIP_PACK_SIZE, spent: FLIP_PACK_COST });
   }
 
+  // Charges the flat naming fee for the solo Flip's "name your own" picker
+  // option (preview/index.html) — completely separate from the flip
+  // budget above, so it's chargeable even outside an active adventure
+  // (adventureId is only passed through for transaction attribution when
+  // one happens to be active). Reuses the same PG-13 wordlist the
+  // head-to-head challenge prompt already goes through.
+  if (action === "nameCustomFlip") {
+    const promptRaw = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
+    if (!promptRaw) return jsonResponse({ error: "Type something to name your flip." }, 400);
+    const rejection = promptRejectionReason(promptRaw);
+    if (rejection) return jsonResponse({ error: rejection }, 400);
+
+    const { data: success, error: debitErr } = await admin.rpc("debit_coins", {
+      p_profile_id: userId,
+      p_amount: CUSTOM_PROMPT_COST,
+      p_reason: "custom_flip_prompt",
+      p_adventure_id: adventureId,
+    });
+    if (debitErr) return jsonResponse({ error: debitErr.message }, 400);
+    if (!success) {
+      return jsonResponse({ error: `Not enough Adventure Coins. Need ${CUSTOM_PROMPT_COST}.` }, 402);
+    }
+
+    return jsonResponse({ ok: true, prompt: promptRaw, spent: CUSTOM_PROMPT_COST });
+  }
+
   return jsonResponse(
     {
       error:
         "action must be one of: listUnlocks, unlock, challenge, respondToChallenge, cancelChallenge, " +
-        "listChallenges, flipStatus, useFlip, buyFlips",
+        "listChallenges, flipStatus, useFlip, buyFlips, nameCustomFlip",
     },
     400,
   );

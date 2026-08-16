@@ -606,6 +606,21 @@
   #minigame-detail-title{ font-family:'Fredoka',sans-serif; margin-bottom:8px; }
   #minigame-detail-desc{ opacity:0.75; margin-bottom:20px; line-height:1.5; }
 
+  .flip-picker-chips{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:16px; }
+  .flip-picker-chip{
+    border:1.5px solid rgba(var(--shadow-rgb),0.14); background:transparent; color:var(--ink);
+    padding:7px 13px; border-radius:999px; font-family:'Fredoka',sans-serif; font-weight:600;
+    font-size:0.8rem; cursor:pointer; transition:all .18s;
+  }
+  .flip-picker-chip:hover{ border-color:var(--coral); background:rgba(232,80,63,0.08); }
+  .flip-picker-divider{
+    display:flex; align-items:center; gap:10px; margin:4px 0 16px;
+    color:rgba(var(--shadow-rgb),0.4); font-size:0.78rem; font-weight:700; text-transform:uppercase;
+  }
+  .flip-picker-divider::before, .flip-picker-divider::after{
+    content:""; flex:1; height:1px; background:rgba(var(--shadow-rgb),0.12);
+  }
+
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
@@ -1745,6 +1760,36 @@
   </div>
 </div>
 
+<!-- Solo Flip prompt picker — opened by playMinigame('heads_or_tails')
+     instead of flipping directly, so a player picks what's actually on the
+     line first. The 6 presets are free (pickFlipPreset() opens the coin
+     straight away, same gateSoloFlip budget as ever); typing something
+     custom costs coins up front (nameCustomFlip(), 0036_custom_flip_
+     prompt_coins.sql) before the coin ever opens. -->
+<div class="photobooth-overlay" id="flip-picker-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center; position:relative;">
+    <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeFlipPicker()">&times;</span>
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>🪙 The Flip</span>
+    </div>
+    <p style="opacity:0.75; font-size:0.9rem; margin:0 0 16px;">Pick what's on the line, or name your own.</p>
+    <div class="flip-picker-chips">
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset('Who orders first?')">Who orders first?</button>
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset('What do we eat?')">What do we eat?</button>
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset(&quot;Who's on photo duty?&quot;)">Photo duty?</button>
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset('Window or aisle?')">Window or aisle?</button>
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset(&quot;Who's paying?&quot;)">Who's paying?</button>
+      <button type="button" class="flip-picker-chip" onclick="pickFlipPreset('Inside or outside?')">Inside or outside?</button>
+    </div>
+    <div class="flip-picker-divider"><span>or</span></div>
+    <input type="text" id="flip-picker-custom-prompt" maxlength="200" placeholder="Name your own, e.g. &quot;Who gets a back rub?&quot;"
+      style="width:100%; box-sizing:border-box; background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
+      padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.88rem; margin-bottom:6px;">
+    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 14px;">Keep it PG-13. Costs 🪙10 to name your own.</p>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="nameMyFlip()">✏️ Name It &amp; Flip (🪙10)</button>
+  </div>
+</div>
+
 <!-- Head-to-head coin flip challenge — send side. Opened from the ⚔️ badge
      on a party member's avatar (renderPartyRoster()); see challengePlayer()/
      sendChallenge() below. Reuses the same photobooth-overlay/-card shell
@@ -1756,10 +1801,10 @@
       <span>⚔️ Challenge <span id="challenge-send-name"></span></span>
     </div>
     <p style="opacity:0.75; font-size:0.9rem; margin:0 0 14px;">Call it, win and you both know it, plus +20 XP.</p>
-    <input type="text" id="challenge-send-prompt" maxlength="200" placeholder="Name it (optional) — e.g. &quot;Who gets a back rub?&quot;"
+    <input type="text" id="challenge-send-prompt" maxlength="200" placeholder="Name it (optional), e.g. &quot;Who gets a back rub?&quot;"
       style="width:100%; box-sizing:border-box; background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
       padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.88rem; margin-bottom:6px;">
-    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 16px;">Keep it PG-13 — leave blank for a plain flip.</p>
+    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 16px;">Keep it PG-13. Leave blank for a plain flip.</p>
     <div style="display:flex; gap:10px;">
       <button type="button" class="pb-btn primary" style="flex:1;" onclick="sendChallenge('heads')">Heads</button>
       <button type="button" class="pb-btn secondary" style="flex:1;" onclick="sendChallenge('tails')">Tails</button>
@@ -2340,7 +2385,7 @@
   const BLOCKED_PROMPT_RE = /\b(kill|murder|suicide|self.?harm|torture|stab|shoot|abuse|sex|porn|nude|naked|fuck|rape|molest|nigger|faggot|retard(ed)?|spic|chink|kike)\b/i;
   function localPromptRejectionReason(prompt) {
     if (prompt.length > 200) return 'Keep the prompt under 200 characters.';
-    if (BLOCKED_PROMPT_RE.test(prompt)) return "Keep it PG-13 — no cruelty, violence, or explicit content.";
+    if (BLOCKED_PROMPT_RE.test(prompt)) return "Keep it PG-13. No cruelty, violence, or explicit content.";
     return null;
   }
 
@@ -3375,6 +3420,49 @@
     return false;
   }
 
+  // ---------- SOLO FLIP PROMPT PICKER ----------
+  // Shown before the coin ever opens, so a player picks what's actually on
+  // the line first — 6 free presets, or name your own for a flat coin fee
+  // (nameCustomFlip, 0036_custom_flip_prompt_coins.sql). Both paths end the
+  // same way: openFlipModal() with whatever prompt text was chosen, gated
+  // by the normal per-adventure flip budget (gateSoloFlip) exactly as
+  // before — the picker only decides the *prompt*, never bypasses the
+  // budget.
+  function openFlipModal(prompt) {
+    window.MusoCoinFlip.flip({ prompt, beforeFlip: gateSoloFlip });
+  }
+
+  window.openFlipPicker = function () {
+    document.getElementById('flip-picker-custom-prompt').value = '';
+    document.getElementById('flip-picker-overlay').removeAttribute('hidden');
+  };
+
+  window.closeFlipPicker = function () {
+    document.getElementById('flip-picker-overlay').setAttribute('hidden', '');
+  };
+
+  window.pickFlipPreset = function (prompt) {
+    closeFlipPicker();
+    openFlipModal(prompt);
+  };
+
+  window.nameMyFlip = async function () {
+    const prompt = document.getElementById('flip-picker-custom-prompt').value.trim();
+    if (!prompt) { alert('Type something to name your flip, or tap a preset above.'); return; }
+    const rejection = localPromptRejectionReason(prompt);
+    if (rejection) { alert(rejection); return; }
+
+    const { res, data } = await postMinigames('nameCustomFlip', {
+      prompt,
+      adventureId: activeAdventure?.adventureId,
+    });
+    if (!res.ok) { alert(data.error || 'Could not name that flip right now.'); return; }
+
+    await refreshProfileAndBadges(); // coin balance just changed
+    closeFlipPicker();
+    openFlipModal(data.prompt);
+  };
+
   // Real gameplay for each mini game ships separately from this app (see
   // conversation) — this is the integration point it plugs into once
   // ready, one function per game keyed the same as MINIGAMES_CONFIG/the
@@ -3382,7 +3470,7 @@
   // via the standalone assets/coin-flip.js widget loaded above.
   window.playMinigame = function (key) {
     if (key === 'heads_or_tails') {
-      window.MusoCoinFlip.flip({ prompt: 'Flip to make the call', beforeFlip: gateSoloFlip });
+      openFlipPicker();
       return;
     }
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);
