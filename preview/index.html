@@ -1045,6 +1045,21 @@
   .past-adv-roster-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
   .past-adv-roster-name{ font-size:0.68rem; font-weight:700; text-align:center; max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .past-adv-roster-score{ font-size:0.62rem; opacity:0.6; }
+  .flip-opponent-picker-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px; max-height:50vh; overflow-y:auto; }
+  .flip-opponent-row{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:rgba(var(--shadow-rgb),0.05); border:1.5px solid rgba(var(--shadow-rgb),0.1); border-radius:14px;
+    padding:9px 12px; font-family:'Nunito',sans-serif; font-size:0.9rem; font-weight:700; color:var(--ink); cursor:pointer;
+    transition:transform .2s var(--ease-bounce), background-color .2s ease;
+  }
+  .flip-opponent-row:hover{ background:rgba(var(--shadow-rgb),0.09); transform:scale(1.02); }
+  .flip-opponent-row:active{ transform:scale(0.98); }
+  .flip-opponent-row-avatar{
+    width:34px; height:34px; border-radius:50%; overflow:hidden; background:var(--plum); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700;
+  }
+  .flip-opponent-row-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .flip-opponent-picker-empty{ opacity:0.7; font-size:0.88rem; padding:10px 0; }
   .past-adv-venues, .past-adv-badges{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
   .past-adv-venue-chip{
     background:rgba(var(--shadow-rgb),0.06); border-radius:999px; padding:4px 10px; font-size:0.75rem;
@@ -1848,6 +1863,21 @@
   </div>
 </div>
 
+<!-- "Challenge a Friend" opponent list — opened from The Flip's Games-page
+     detail card (openMinigameDetail's heads_or_tails branch) via
+     openFlipChallengePicker(). Picking a row just calls the existing
+     challengePlayer()/sendChallenge() flow, same as the ⚔️ badge on a
+     party roster avatar — this is only a friendlier entry point into it. -->
+<div class="photobooth-overlay" id="flip-opponent-picker-overlay" hidden>
+  <div class="photobooth-card" style="text-align:center; position:relative;">
+    <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeFlipOpponentPicker()">&times;</span>
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>⚔️ Challenge a Friend</span>
+    </div>
+    <div id="flip-opponent-picker-list" class="flip-opponent-picker-list"></div>
+  </div>
+</div>
+
 <!-- Solo-flip paywall — shown by gateSoloFlip() (playMinigame's beforeFlip
      hook) when useFlip returns 402, i.e. this adventure's free budget
      (0034_flip_budget.sql: 5 base + 1 per check-in) is used up. Only the
@@ -2419,6 +2449,41 @@
   window.closeChallengeSend = function () {
     document.getElementById('challenge-send-overlay').setAttribute('hidden', '');
     challengeSendTarget = null;
+  };
+
+  // Friendlier entry point into the exact same challengePlayer() flow the
+  // ⚔️ roster badge already uses — reached from The Flip's Games-page
+  // detail card instead of requiring the party roster panel first.
+  window.openFlipChallengePicker = function () {
+    if (!activeAdventure?.partyId || !activeAdventure?.adventureId) {
+      alert('Start an adventure with friends first, then you can challenge them to a flip.');
+      return;
+    }
+    const myId = currentSession?.user?.id;
+    const others = (partyRosterCache.members || []).filter((m) => m.profileId !== myId);
+    const listEl = document.getElementById('flip-opponent-picker-list');
+    if (!others.length) {
+      listEl.innerHTML = '<div class="flip-opponent-picker-empty">No one else has joined your party yet, invite someone first.</div>';
+    } else {
+      listEl.innerHTML = others.map((m) => {
+        const name = escapeHtmlLite(m.displayName || 'Explorer');
+        const nameAttr = name.replace(/"/g, '&quot;');
+        const img = m.avatarUrl
+          ? `<img src="${String(m.avatarUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" alt="">`
+          : `<span>${name.charAt(0).toUpperCase()}</span>`;
+        return `
+          <button type="button" class="flip-opponent-row" data-profile-id="${m.profileId}" data-name="${nameAttr}" onclick="closeFlipOpponentPicker(); challengePlayer(this.dataset.profileId, this.dataset.name);">
+            <span class="flip-opponent-row-avatar">${img}</span>
+            <span>${name}</span>
+          </button>
+        `;
+      }).join('');
+    }
+    document.getElementById('flip-opponent-picker-overlay').removeAttribute('hidden');
+  };
+
+  window.closeFlipOpponentPicker = function () {
+    document.getElementById('flip-opponent-picker-overlay').setAttribute('hidden', '');
   };
 
   window.sendChallenge = async function () {
@@ -3092,7 +3157,18 @@
     document.getElementById('minigame-detail-title').textContent = g.title;
     document.getElementById('minigame-detail-desc').textContent = g.desc;
     const ctaEl = document.getElementById('minigame-detail-cta');
-    if (unlocked) {
+    if (unlocked && key === 'heads_or_tails') {
+      // First card-open for The Flip offers both modes up front: the
+      // existing solo prompt-picker flow, or challenging a party member —
+      // which routes into the same race-pick UI (openFlipPick/pickFlipSide)
+      // the ⚔️ roster badge already uses, just reached from the Games page
+      // instead of requiring an active adventure's roster panel first.
+      ctaEl.innerHTML = `
+        <button type="button" class="pb-btn primary" style="width:100%; margin-bottom:8px;" onclick="closeMinigameDetail(); playMinigame('${key}');">🪙 Solo Flip</button>
+        <button type="button" class="pb-btn secondary" style="width:100%;" onclick="closeMinigameDetail(); openFlipChallengePicker();">⚔️ Challenge a Friend</button>
+        <p style="opacity:0.6; font-size:0.74rem; margin:10px 0 0;">Challenge mode: you both race to call heads or tails, first pick wins that side.</p>
+      `;
+    } else if (unlocked) {
       ctaEl.innerHTML = `<button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); playMinigame('${key}');">▶ Play ${g.title}</button>`;
     } else if (!currentSession) {
       ctaEl.innerHTML = `
@@ -3845,7 +3921,7 @@
     // of that group renders into its own collapsed/auto-cycling accordion
     // below it — see advAccordionStep() below. Two independent accordion
     // instances (keyed by container id) rather than one shared list, so
-    // "Pick Your Path" and "Curated" each cycle on their own.
+    // "Pick Your Adventure" and "Curated" each cycle on their own.
     // containerId identifies which accordion (if any) this card's pills
     // should hold open on interaction — null for the featured card, which
     // isn't part of any accordion/auto-cycle timer at all.
@@ -3921,7 +3997,7 @@
 
     body.innerHTML = `
       ${inviteFriendsCta}
-      <div class="picker-group-label">Pick Your Path</div>
+      <div class="picker-group-label">Pick Your Adventure</div>
       ${featuredCardHtml(themeToItem(featuredTheme, null), 0)}
       ${accordionHtml('adv-accordion-themes', otherThemes.map((t) => themeToItem(t, 'adv-accordion-themes')))}
       <div class="curated-adventures-group" id="curated-adventures-group">
@@ -3944,7 +4020,7 @@
   // resuming from there — clicking doesn't stop the cycle for good, it just
   // re-centers it on whatever the player is looking at right now.
   // Keyed by container id (there are now two independent accordions,
-  // "Pick Your Path" and "Curated" — see renderRoutePicker()) rather than
+  // "Pick Your Adventure" and "Curated" — see renderRoutePicker()) rather than
   // one shared global, so each cycles on its own timer without one
   // resetting the other.
   const advAccordions = new Map();
@@ -4008,7 +4084,7 @@
     }
   }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
 
-  // The "Pick Your Path" accordion (adv-accordion-themes) instead
+  // The "Pick Your Adventure" accordion (adv-accordion-themes) instead
   // pauses based on whether "Curated Adventures" is on screen below it —
   // expanding/collapsing rows changes its height, which jostles the curated
   // section whenever it's actually in view.
