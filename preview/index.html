@@ -4581,7 +4581,24 @@
   // function — there's no client-side UPDATE policy on adventures at all)
   // so neither of those lookups can resurrect it again.
   window.leaveAdventure = async function () {
-    if (!activeAdventure || !currentSession) return;
+    // Used to silently no-op here if currentSession looked falsy — with no
+    // confirm, no alert, nothing — which read to a player as the button
+    // being flat-out broken, especially since the itinerary it's sitting on
+    // top of was already proof an adventure was active. currentSession can
+    // go stale (a background tab, a long-idle session) without a re-render
+    // ever clearing this button, so re-verify via getFreshSession() first,
+    // same recovery path startAdventure()/startRealVenueAdventure() already
+    // use, instead of trusting the possibly-stale closure variable — and
+    // actually tell the player if it's genuinely gone, rather than vanish.
+    if (!activeAdventure) { alert('No adventure to leave right now.'); return; }
+    const freshSession = await getFreshSession();
+    if (!freshSession) {
+      currentSession = null;
+      renderAccountBar();
+      alert('Your sign-in session has expired. Please sign in again above, then try again.');
+      return;
+    }
+    currentSession = freshSession;
     if (!confirm("Leave this adventure? Your progress on it won't count, and you'll be able to start a brand new one right away.")) return;
     try {
       const { res, data } = await postEdgeFunction('real-venue-adventure', { action: 'leaveAdventure', adventureId: activeAdventure.adventureId });
