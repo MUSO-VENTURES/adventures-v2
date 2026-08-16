@@ -106,6 +106,14 @@
   }
   .tab-item svg{ width:21px; height:21px; }
   .tab-item.active{ color:var(--coral); opacity:1; }
+  .tab-item.raised{ margin-top:-30px; padding:0 0 8px; flex:0 0 54px; gap:6px; opacity:1; }
+  .nav-avatar-disc{
+    position:relative; width:54px; height:54px; border-radius:50%; overflow:hidden;
+    background:var(--ink); border:3px solid var(--card-bg);
+    box-shadow:0 8px 18px rgba(var(--shadow-rgb),0.4);
+  }
+  .nav-avatar-disc img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .rank-ring{ outline:3px solid var(--rank-color, transparent); outline-offset:2px; border-radius:50%; }
   .coin-pill{
     display:inline-flex; align-items:center; gap:4px; background:var(--cream); border-radius:999px;
     padding:6px 14px; font-weight:700; font-family:'Fredoka',sans-serif; font-size:0.85rem; color:var(--deep-teal);
@@ -630,10 +638,33 @@
     if (!supabaseClient || !currentSession) return;
     const { data } = await supabaseClient
       .from('profiles')
-      .select('subscription_tier, subscription_status')
+      .select('subscription_tier, subscription_status, avatar_url, level')
       .eq('id', currentSession.user.id)
       .maybeSingle();
     currentProfile = data ?? null;
+  }
+
+  // Matches preview/index.html's PLACEHOLDER_AVATAR_URL/applyRankRing so the
+  // nav avatar looks identical whichever page a player is on.
+  const PLACEHOLDER_AVATAR_URL = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#2a2438"/><circle cx="50" cy="38" r="18" fill="#f7f3ff" fill-opacity="0.85"/><path d="M50 62c-22 0-34 12-34 30v8h68v-8c0-18-12-30-34-30z" fill="#f7f3ff" fill-opacity="0.85"/></svg>'
+  );
+  function rankRingColor(level) {
+    const lvl = Number(level) || 1;
+    if (lvl <= 4) return '#cd7f32';
+    if (lvl <= 9) return '#b0b0b8';
+    if (lvl <= 19) return '#e8b923';
+    return '#7dd3e0';
+  }
+  function renderNavAvatar() {
+    const img = document.getElementById('nav-avatar-img');
+    if (!img) return;
+    img.src = currentProfile?.avatar_url || PLACEHOLDER_AVATAR_URL;
+    const disc = document.querySelector('.nav-avatar-disc');
+    if (disc) {
+      disc.style.setProperty('--rank-color', rankRingColor(currentProfile?.level));
+      disc.classList.add('rank-ring');
+    }
   }
 
   function renderAccountBar() {
@@ -709,7 +740,9 @@
     if (!supabaseClient) return;
     await supabaseClient.auth.signOut();
     currentSession = null;
+    currentProfile = null;
     renderAccountBar();
+    renderNavAvatar();
   };
 
   window.buyPack = async function (btn) {
@@ -957,15 +990,18 @@
 
   (async function init() {
     renderAccountBar();
+    renderNavAvatar();
     if (!supabaseClient) return;
     const { data: { session } } = await supabaseClient.auth.getSession();
     currentSession = session;
     await refreshProfile();
     renderAccountBar();
+    renderNavAvatar();
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
       currentSession = session;
       await refreshProfile();
       renderAccountBar();
+      renderNavAvatar();
     });
     if (new URLSearchParams(window.location.search).get('checkout') === 'success') {
       setTimeout(() => {
@@ -986,8 +1022,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="3" width="12" height="18" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/><path d="M10 9l4.5 3-4.5 3z" fill="currentColor" stroke="none"/></svg>
       <span>Games</span>
     </a>
-    <a class="tab-item" href="/preview/profile.html">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+    <a class="tab-item raised" href="/preview/profile.html">
+      <div class="nav-avatar-disc">
+        <img src="" alt="Profile" id="nav-avatar-img">
+      </div>
       <span>Profile</span>
     </a>
     <a class="tab-item" href="/preview/#maps">

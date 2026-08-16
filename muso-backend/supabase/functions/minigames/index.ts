@@ -1,8 +1,9 @@
 // POST /minigames
 // Body: { action: 'listUnlocks' }
 //     | { action: 'unlock', minigameKey: 'photo_challenge' | 'scavenger_clue' }
-//     | { action: 'challenge', partyId, adventureId, opponentId, call: 'heads' | 'tails', prompt?: string }
-//     | { action: 'respondToChallenge', challengeId, response: 'accept' | 'decline' }
+//     | { action: 'challenge', partyId, adventureId, opponentId, prompt?: string }
+//     | { action: 'pickSide', challengeId, call: 'heads' | 'tails' }
+//     | { action: 'respondToChallenge', challengeId, response: 'decline' }
 //     | { action: 'cancelChallenge', challengeId }
 //     | { action: 'listChallenges', partyId, adventureId }
 //     | { action: 'flipStatus', adventureId }
@@ -27,14 +28,18 @@
 // game turns out to look like once it's wired in.
 //
 // heads_or_tails is the one exception with real gameplay living here: the
-// challenge/respondToChallenge/cancelChallenge/listChallenges actions back
-// a head-to-head coin flip between two members of the same party, backed
-// by coin_flip_challenges (0032_coin_flip_challenges.sql). The flip result
-// is always decided in respondToChallenge, server-side, the instant the
-// opponent accepts — never left to either client — because two different
-// devices need to land on the exact same outcome, and only a single
-// trusted source can pick it fairly. Winner XP goes through award_xp, the
-// same RPC checkin/index.ts uses for check-in XP.
+// challenge/pickSide/respondToChallenge/cancelChallenge/listChallenges
+// actions back a head-to-head coin flip between two members of the same
+// party, backed by coin_flip_challenges (0032_coin_flip_challenges.sql,
+// 0037_flip_race_pick.sql). Sending a challenge doesn't lock in a side —
+// both players see an open "pick heads or tails" race, and pickSide claims
+// whichever side reaches the server first via an atomic conditional
+// update (challenger_call IS NULL), so two near-simultaneous picks can
+// never collide. The flip result is decided immediately, server-side, the
+// instant a pick lands — never left to either client — because two
+// different devices need to land on the exact same outcome, and only a
+// single trusted source can pick it fairly. Winner XP goes through
+// award_xp, the same RPC checkin/index.ts uses for check-in XP.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -137,15 +142,19 @@ function promptRejectionReason(prompt: string): string | null {
 }
 
 function serializeChallenge(row: Record<string, unknown>) {
-  const challengerCall = row.challenger_call as "heads" | "tails";
+  const challengerCall = (row.challenger_call ?? null) as "heads" | "tails" | null;
   return {
     id: row.id,
     partyId: row.party_id,
     adventureId: row.adventure_id,
     challengerId: row.challenger_id,
     opponentId: row.opponent_id,
+    // Despite the column name, this is "whichever side got locked in
+    // first," not necessarily the challenger's own pick — see
+    // firstPickerId, and 0037_flip_race_pick.sql's header comment.
     challengerCall,
-    opponentCall: otherCall(challengerCall),
+    opponentCall: challengerCall ? otherCall(challengerCall) : null,
+    firstPickerId: row.first_picker_id ?? null,
     prompt: row.prompt ?? null,
     status: row.status,
     result: row.result ?? null,
@@ -259,13 +268,12 @@ Deno.serve(async (req) => {
     const partyId = typeof body.partyId === "string" ? body.partyId : null;
     const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
     const opponentId = typeof body.opponentId === "string" ? body.opponentId : null;
-    const call = body.call === "heads" || body.call === "tails" ? body.call : null;
     const promptRaw = typeof body.prompt === "string" ? body.prompt.trim() : "";
     const prompt = promptRaw.length ? promptRaw : null;
 
-    if (!partyId || !adventureId || !opponentId || !call) {
+    if (!partyId || !adventureId || !opponentId) {
       return jsonResponse(
-        { error: "partyId, adventureId, opponentId, and call ('heads' | 'tails') are all required." },
+        { error: "partyId, adventureId, and opponentId are all required." },
         400,
       );
     }
@@ -302,7 +310,6 @@ Deno.serve(async (req) => {
         adventure_id: adventureId,
         challenger_id: userId,
         opponent_id: opponentId,
-        challenger_call: call,
         prompt,
       })
       .select()
@@ -312,11 +319,11 @@ Deno.serve(async (req) => {
     return jsonResponse({ challenge: serializeChallenge(inserted) });
   }
 
-  if (action === "respondToChallenge") {
+  if (action === "pickSide") {
     const challengeId = typeof body.challengeId === "string" ? body.challengeId : null;
-    const response = body.response === "accept" || body.response === "decline" ? body.response : null;
-    if (!challengeId || !response) {
-      return jsonResponse({ error: "challengeId and response ('accept' | 'decline') are required." }, 400);
+    const call = body.call === "heads" || body.call === "tails" ? body.call : null;
+    if (!challengeId || !call) {
+      return jsonResponse({ error: "challengeId and call ('heads' | 'tails') are required." }, 400);
     }
 
     const { data: challenge, error: fetchErr } = await admin
@@ -326,31 +333,42 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (fetchErr) return jsonResponse({ error: fetchErr.message }, 400);
     if (!challenge) return jsonResponse({ error: "Challenge not found." }, 404);
-    if (challenge.opponent_id !== userId) {
-      return jsonResponse({ error: "Only the challenged player can respond to this." }, 403);
+    if (challenge.challenger_id !== userId && challenge.opponent_id !== userId) {
+      return jsonResponse({ error: "You're not part of this challenge." }, 403);
     }
     if (challenge.status !== "pending") {
-      return jsonResponse({ error: "This challenge isn't pending anymore." }, 409);
+      return jsonResponse({ error: "This challenge isn't open anymore." }, 409);
     }
 
-    if (response === "decline") {
-      const { data: updated, error: updateErr } = await admin
-        .from("coin_flip_challenges")
-        .update({ status: "declined", resolved_at: new Date().toISOString() })
-        .eq("id", challengeId)
-        .select()
-        .single();
-      if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
-      return jsonResponse({ challenge: serializeChallenge(updated) });
+    // Race lock: only the pick that reaches this WHERE clause first
+    // actually updates a row. Postgres locks and serializes concurrent
+    // UPDATEs against the same row, so a near-simultaneous second pick
+    // always re-evaluates the WHERE clause after the first has committed,
+    // finds challenger_call no longer null, and matches zero rows —
+    // there's no way for both picks to land.
+    const { data: claimed, error: claimErr } = await admin
+      .from("coin_flip_challenges")
+      .update({ challenger_call: call, first_picker_id: userId })
+      .eq("id", challengeId)
+      .eq("status", "pending")
+      .is("challenger_call", null)
+      .select()
+      .maybeSingle();
+    if (claimErr) return jsonResponse({ error: claimErr.message }, 400);
+    if (!claimed) {
+      return jsonResponse({ error: "Too slow, the other player already called it." }, 409);
     }
 
-    // Accept: the flip happens right here, server-side, once — this is the
-    // single source of truth both players' clients animate toward, so
-    // there's no way for two devices to disagree on the outcome.
+    // Claiming the pick resolves the flip immediately, server-side — the
+    // instant one side is known the other is forced, so there's no reason
+    // to wait on a separate accept step. This is the single source of
+    // truth both players' clients animate toward, so there's no way for
+    // two devices to disagree on the outcome.
     const randBuf = new Uint32Array(1);
     crypto.getRandomValues(randBuf);
     const result: "heads" | "tails" = randBuf[0] / 4294967296 < 0.5 ? "heads" : "tails";
-    const winnerId = result === challenge.challenger_call ? challenge.challenger_id : challenge.opponent_id;
+    const otherPlayerId = userId === claimed.challenger_id ? claimed.opponent_id : claimed.challenger_id;
+    const winnerId = result === call ? userId : otherPlayerId;
 
     const { data: updated, error: updateErr } = await admin
       .from("coin_flip_challenges")
@@ -373,6 +391,37 @@ Deno.serve(async (req) => {
     const xpResult = (xpData ?? {}) as { oldLevel?: number; newLevel?: number; leveledUp?: boolean };
 
     return jsonResponse({ challenge: serializeChallenge(updated), xpResult });
+  }
+
+  if (action === "respondToChallenge") {
+    const challengeId = typeof body.challengeId === "string" ? body.challengeId : null;
+    const response = body.response === "decline" ? body.response : null;
+    if (!challengeId || !response) {
+      return jsonResponse({ error: "challengeId and response ('decline') are required." }, 400);
+    }
+
+    const { data: challenge, error: fetchErr } = await admin
+      .from("coin_flip_challenges")
+      .select("opponent_id, status")
+      .eq("id", challengeId)
+      .maybeSingle();
+    if (fetchErr) return jsonResponse({ error: fetchErr.message }, 400);
+    if (!challenge) return jsonResponse({ error: "Challenge not found." }, 404);
+    if (challenge.opponent_id !== userId) {
+      return jsonResponse({ error: "Only the challenged player can respond to this." }, 403);
+    }
+    if (challenge.status !== "pending") {
+      return jsonResponse({ error: "This challenge isn't pending anymore." }, 409);
+    }
+
+    const { data: updated, error: updateErr } = await admin
+      .from("coin_flip_challenges")
+      .update({ status: "declined", resolved_at: new Date().toISOString() })
+      .eq("id", challengeId)
+      .select()
+      .single();
+    if (updateErr) return jsonResponse({ error: updateErr.message }, 400);
+    return jsonResponse({ challenge: serializeChallenge(updated) });
   }
 
   if (action === "cancelChallenge") {

@@ -228,9 +228,10 @@
      chips and net coins earned — attributed via adventure_id, added in
      migration 0018_adventure_attribution.sql. */
   .trophy-list{ display:flex; flex-direction:column; gap:16px; margin-top:6px; }
-  .trophy-item{ background:var(--cream); border-radius:16px; padding:16px; }
-  .trophy-item-header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:6px; }
-  .trophy-item-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; }
+  .trophy-item{ background:var(--cream); border-radius:16px; padding:16px; border-left:4px solid transparent; }
+  .trophy-item-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:8px; }
+  .trophy-item-icon{ width:32px; height:32px; object-fit:contain; flex-shrink:0; }
+  .trophy-item-title{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; margin-right:auto; }
   .trophy-item-date{ font-size:0.75rem; opacity:0.55; }
   .trophy-item-stats{ font-size:0.78rem; opacity:0.75; margin-bottom:10px; }
   .trophy-badge-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
@@ -239,6 +240,21 @@
     font-size:0.72rem; font-weight:700; font-family:'Fredoka',sans-serif;
   }
   .trophy-item .photo-grid{ grid-template-columns:repeat(auto-fill, minmax(90px,1fr)); gap:8px; }
+  .trophy-game-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+  .trophy-game-item{
+    background:var(--card, #fff); border-radius:10px; padding:8px 12px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:0.78rem;
+  }
+  .trophy-game-name{ font-weight:700; }
+  .trophy-game-result{ opacity:0.8; white-space:nowrap; }
+  /* Same accent colors as REAL_VENUE_ADVENTURE_THEMES' colorClass gradients
+     in preview/index.html, applied as a simple left-border accent here. */
+  .trophy-item.wine-cta{ border-left-color:#5b4b8a; }
+  .trophy-item.dog-cta{ border-left-color:#4a8f3c; }
+  .trophy-item.outdoor-cta{ border-left-color:#1d6fa3; }
+  .trophy-item.oddities-cta{ border-left-color:#5b3b8a; }
+  .trophy-item.foodie-cta{ border-left-color:#c9622f; }
+  .trophy-item.afterhours-cta{ border-left-color:#1f2f52; }
   .trophy-review-list{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
   .trophy-review-item{ background:var(--card, #fff); border-radius:12px; padding:10px 12px; }
   .trophy-review-header{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; font-size:0.82rem; font-weight:700; font-family:'Fredoka',sans-serif; }
@@ -793,7 +809,7 @@
 
     const { data: adventures, error } = await supabaseClient
       .from('adventures')
-      .select('id, completed_at, routes(title)')
+      .select('id, completed_at, routes(title, venue_theme)')
       .in('party_id', partyIds)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false });
@@ -806,11 +822,23 @@
 
     const adventureIds = adventures.map((a) => a.id);
 
-    // Three separate per-adventure lookups, same shape as renderPhotobooth()/
+    // Small icon-only mirror of preview/index.html's REAL_VENUE_ADVENTURE_THEMES
+    // (title/desc/CTA fields live there, not needed here) — keep the icon
+    // paths/colorClass in sync with that array if a theme is added/renamed.
+    const THEME_ICON_MAP = {
+      wine_country: { icon: '../assets/adventure-icons/wine-country.png', colorClass: 'wine-cta' },
+      dog_friendly: { icon: '../assets/adventure-icons/dog-friendly.png', colorClass: 'dog-cta' },
+      outdoor: { icon: '../assets/adventure-icons/outdoors.png', colorClass: 'outdoor-cta' },
+      oddities: { icon: '../assets/adventure-icons/oddities.png', colorClass: 'oddities-cta' },
+      foodie_tour: { icon: '../assets/adventure-icons/foodies.png', colorClass: 'foodie-cta' },
+      after_hours: { icon: '../assets/adventure-icons/after-hours.png', colorClass: 'afterhours-cta' },
+    };
+
+    // Four separate per-adventure lookups, same shape as renderPhotobooth()/
     // renderBadges() elsewhere on this page — just filtered by adventure_id
     // (added in 0018_adventure_attribution.sql) instead of/alongside
     // profile_id, then grouped client-side by adventure.
-    const [{ data: photoRows }, { data: badgeRows }, { data: coinRows }, { data: reviewRows }] = await Promise.all([
+    const [{ data: photoRows }, { data: badgeRows }, { data: coinRows }, { data: reviewRows }, { data: flipRows }] = await Promise.all([
       supabaseClient.from('check_ins').select('adventure_id, photo_url, checked_in_at, route_stops(name)')
         .in('adventure_id', adventureIds).not('photo_url', 'is', null).order('checked_in_at', { ascending: true }),
       supabaseClient.from('profile_badges').select('adventure_id, badge_key, badges(name, emoji)')
@@ -821,6 +849,10 @@
       // doesn't require one, so a review can exist on a photo-less check-in.
       supabaseClient.from('check_ins').select('adventure_id, route_stops(name), venue_reviews(rating, review_text)')
         .eq('checked_in_by', session.user.id).in('adventure_id', adventureIds),
+      // Every resolved Flip challenge this player took part in, either side.
+      supabaseClient.from('coin_flip_challenges').select('adventure_id, challenger_id, opponent_id, winner_id, result')
+        .in('adventure_id', adventureIds).eq('status', 'resolved')
+        .or(`challenger_id.eq.${session.user.id},opponent_id.eq.${session.user.id}`),
     ]);
 
     const photosByAdventure = {};
@@ -838,13 +870,23 @@
       if (!review) return;
       (reviewsByAdventure[r.adventure_id] ||= []).push({ stopName: (r.route_stops && r.route_stops.name) || 'Stop', ...review });
     });
+    const gamesByAdventure = {};
+    (flipRows || []).forEach((g) => { (gamesByAdventure[g.adventure_id] ||= []).push(g); });
+    const opponentIds = [...new Set((flipRows || []).map((g) => (g.challenger_id === session.user.id ? g.opponent_id : g.challenger_id)))];
+    let opponentNameById = {};
+    if (opponentIds.length) {
+      const { data: opponentRows } = await supabaseClient.from('profiles').select('id, display_name').in('id', opponentIds);
+      (opponentRows || []).forEach((p) => { opponentNameById[p.id] = p.display_name || 'Explorer'; });
+    }
 
     el.innerHTML = `<div class="trophy-list">${adventures.map((a) => {
       const photos = photosByAdventure[a.id] || [];
       const badges = badgesByAdventure[a.id] || [];
       const coins = coinsByAdventure[a.id] || 0;
       const reviews = reviewsByAdventure[a.id] || [];
+      const games = gamesByAdventure[a.id] || [];
       const title = (a.routes && a.routes.title) || 'Adventure';
+      const theme = THEME_ICON_MAP[a.routes && a.routes.venue_theme];
       const date = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
       const photoGridHtml = photos.length
         ? `<div class="photo-grid">${photos.map((p) => `
@@ -866,14 +908,28 @@
             </div>
           `).join('')}</div>`
         : '';
+      const gamesHtml = games.length
+        ? `<div class="trophy-game-list">${games.map((g) => {
+            const opponentId = g.challenger_id === session.user.id ? g.opponent_id : g.challenger_id;
+            const opponentName = esc(opponentNameById[opponentId] || 'Explorer');
+            const won = g.winner_id === session.user.id;
+            return `<div class="trophy-game-item">
+              <span class="trophy-game-name">🪙 The Flip vs ${opponentName}</span>
+              <span class="trophy-game-result">${won ? '🏆 Won' : 'Lost'} (${esc(g.result)})</span>
+            </div>`;
+          }).join('')}</div>`
+        : '';
+      const headerIcon = theme?.icon ? `<img class="trophy-item-icon" src="${theme.icon}" alt="">` : '';
       return `
-        <div class="trophy-item">
+        <div class="trophy-item ${theme?.colorClass || ''}">
           <div class="trophy-item-header">
+            ${headerIcon}
             <span class="trophy-item-title">${title}</span>
             <span class="trophy-item-date">${date}</span>
           </div>
           <div class="trophy-item-stats">🪙 ${coins >= 0 ? '+' : ''}${coins} coins earned</div>
           ${badgeRowHtml}
+          ${gamesHtml}
           ${photoGridHtml}
           ${reviewsHtml}
         </div>

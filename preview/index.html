@@ -689,6 +689,15 @@
     transition:opacity .3s ease, transform .35s var(--ease-bounce), padding .5s var(--ease-bounce);
   }
   .adv-acc-item.open .adv-acc-body{ padding:16px 18px; opacity:1; transform:translateY(0); }
+  /* Large theme-art header shown only inside the expanded card body — the
+     collapsed header icon (.adv-acc-icon) shrinks away on open, so this is
+     a separate, bigger piece of art that only exists once the card's
+     content is visible. Rides the same fade/slide as the rest of
+     .adv-acc-body, no separate transition needed. */
+  .adv-acc-body-hero{
+    display:block; width:150px; height:150px; object-fit:contain;
+    margin:0 auto 14px;
+  }
   .adv-acc-body .rvc-desc{ font-size:0.85rem; opacity:0.75; max-width:460px; }
   /* One "Stops" label plus a row of number-only bubbles, instead of each
      pill spelling out "N stops" — the repeated word was what forced 4
@@ -1044,6 +1053,14 @@
     background:#fdeee0; color:#8a5b1f; border-radius:999px;
     padding:4px 10px; font-size:0.75rem; font-weight:700;
   }
+  .past-adv-games{ margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+  .past-adv-game-item{
+    background:rgba(var(--shadow-rgb),0.04); border-radius:12px; padding:10px 12px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:0.8rem;
+  }
+  .past-adv-game-name{ font-weight:700; }
+  .past-adv-game-players{ opacity:0.7; }
+  .past-adv-game-winner{ font-weight:700; color:var(--coral); }
   .past-adv-reviews{ margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
   .past-adv-review-item{ background:rgba(var(--shadow-rgb),0.04); border-radius:12px; padding:10px 12px; }
   .past-adv-review-stop{ font-weight:700; font-size:0.82rem; margin-right:8px; }
@@ -1804,28 +1821,30 @@
     <input type="text" id="challenge-send-prompt" maxlength="200" placeholder="Name it (optional), e.g. &quot;Who gets a back rub?&quot;"
       style="width:100%; box-sizing:border-box; background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
       padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.88rem; margin-bottom:6px;">
-    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 16px;">Keep it PG-13. Leave blank for a plain flip.</p>
-    <div style="display:flex; gap:10px;">
-      <button type="button" class="pb-btn primary" style="flex:1;" onclick="sendChallenge('heads')">Heads</button>
-      <button type="button" class="pb-btn secondary" style="flex:1;" onclick="sendChallenge('tails')">Tails</button>
-    </div>
+    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 16px;">Keep it PG-13. Leave blank for a plain flip. You'll both race to call heads or tails next.</p>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="sendChallenge()">⚔️ Send Challenge</button>
   </div>
 </div>
 
-<!-- Head-to-head coin flip challenge — receive side. Populated and shown by
-     handleIncomingChallenge() when a realtime INSERT lands on
-     coin_flip_challenges with me as opponent_id (or by checkPendingChallenges()
-     on load, for one that arrived while I wasn't subscribed). -->
-<div class="photobooth-overlay" id="challenge-incoming-overlay" hidden>
+<!-- Head-to-head coin flip challenge — race pick. Shared by both players:
+     opened for the challenger right after sendChallenge() (they haven't
+     picked either), and for the opponent by handleIncomingChallenge() when
+     a realtime INSERT/UPDATE lands on coin_flip_challenges with them as
+     either side of a still-open (challenger_call null) pending row (or by
+     checkPendingChallenges() on load, for one that arrived while not
+     subscribed). Whoever taps Heads/Tails first here wins that side,
+     server-side — see pickSide in minigames/index.ts. -->
+<div class="photobooth-overlay" id="flip-pick-overlay" hidden>
   <div class="photobooth-card" style="text-align:center;">
     <div class="photobooth-header" style="justify-content:center;">
       <span>⚔️ Coin Flip Challenge</span>
     </div>
-    <p id="challenge-incoming-text" style="font-size:0.95rem; margin:0 0 18px;"></p>
-    <div style="display:flex; gap:10px;">
-      <button type="button" class="pb-btn secondary" style="flex:1;" onclick="respondToIncomingChallenge('decline')">Decline</button>
-      <button type="button" class="pb-btn primary" style="flex:1;" onclick="respondToIncomingChallenge('accept')">Accept</button>
+    <p id="flip-pick-text" style="font-size:0.95rem; margin:0 0 18px;"></p>
+    <div style="display:flex; gap:10px; margin-bottom:10px;">
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="pickFlipSide('heads')">Heads</button>
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="pickFlipSide('tails')">Tails</button>
     </div>
+    <button type="button" class="pb-btn secondary" style="width:100%;" id="flip-pick-secondary-btn" onclick="declineOrCancelFlipPick()"></button>
   </div>
 </div>
 
@@ -2291,7 +2310,7 @@
       const pendingChallengeId = myPendingChallenges.get(m.profileId);
       let challengeBtn = '';
       if (pendingChallengeId) {
-        challengeBtn = `<button type="button" class="party-member-challenge-btn pending" data-challenge-id="${pendingChallengeId}" data-profile-id="${m.profileId}" onclick="event.stopPropagation(); cancelSentChallenge(this.dataset.challengeId, this.dataset.profileId)" title="Cancel challenge">⏳</button>`;
+        challengeBtn = `<button type="button" class="party-member-challenge-btn pending" data-challenge-id="${pendingChallengeId}" data-profile-id="${m.profileId}" onclick="event.stopPropagation(); resumeMyPendingChallenge(this.dataset.challengeId, this.dataset.profileId)" title="Pick heads or tails">⏳</button>`;
       } else if (canChallenge) {
         challengeBtn = `<button type="button" class="party-member-challenge-btn" data-profile-id="${m.profileId}" data-name="${nameAttr}" onclick="event.stopPropagation(); challengePlayer(this.dataset.profileId, this.dataset.name)" title="Challenge to a coin flip">⚔️</button>`;
       }
@@ -2331,26 +2350,25 @@
   // Head-to-head sibling of the solo flip (playMinigame('heads_or_tails'))
   // — any party member can challenge any other at any time during an
   // active adventure, from the ⚔️ badge on their roster avatar (see
-  // renderPartyRoster() above). The flip result is always decided
-  // server-side in respondToChallenge (minigames/index.ts) the instant the
-  // opponent accepts; both clients just animate the shared MusoCoinFlip
-  // widget toward that one result via its { result } option (see
+  // renderPartyRoster() above). Sending a challenge doesn't lock in a
+  // side: both the challenger (via sendChallenge()) and the opponent (via
+  // handleIncomingChallenge()) see the same flip-pick-overlay race UI, and
+  // whichever one taps Heads/Tails first wins that side server-side, in
+  // minigames/index.ts's pickSide action — see 0037_flip_race_pick.sql.
+  // Both clients just animate the shared MusoCoinFlip widget toward that
+  // one server-decided result via its { result } option (see
   // assets/coin-flip.js), so the two devices can't disagree on who won.
-  // Both the challenger and the opponent learn the outcome the same way —
-  // through the realtime UPDATE handled in handleResolvedChallenge() below
-  // — rather than the accepting player short-circuiting on their own
-  // respondToChallenge response, so there's exactly one code path instead
-  // of two slightly-different ones.
+  // Both players learn the outcome the same way — through the realtime
+  // UPDATE handled in handleResolvedChallenge() below — rather than
+  // whoever picked first short-circuiting on their own pickSide response,
+  // so there's exactly one code path instead of two slightly-different
+  // ones.
   let challengeSendTarget = null; // { profileId, name }
-  let incomingChallenge = null; // normalized (camelCase) challenge row currently shown in the incoming modal
+  let activeFlipPick = null; // { id, isChallenger, challengerId, opponentId } for the challenge currently shown in flip-pick-overlay
   let myPendingChallenges = new Map(); // opponentId -> challengeId, for challenges *I've* sent that are still pending
 
-  function opponentCallOf(challengerCall) {
-    return challengerCall === 'heads' ? 'tails' : 'heads';
-  }
-
   // A custom challenge prompt is player-typed free text landing in
-  // innerHTML (challenge-incoming-text) — escape it the same minimal way
+  // innerHTML (flip-pick-text) — escape it the same minimal way
   // renderPartyRoster()/renderPastAdventures() already escape display
   // names elsewhere in this file.
   function escapeHtmlLite(s) {
@@ -2370,6 +2388,7 @@
       challengerId: row.challenger_id,
       opponentId: row.opponent_id,
       challengerCall: row.challenger_call,
+      firstPickerId: row.first_picker_id,
       prompt: row.prompt,
       status: row.status,
       result: row.result,
@@ -2402,7 +2421,7 @@
     challengeSendTarget = null;
   };
 
-  window.sendChallenge = async function (call) {
+  window.sendChallenge = async function () {
     if (!challengeSendTarget) return;
     const { profileId, name } = challengeSendTarget;
     const prompt = document.getElementById('challenge-send-prompt').value.trim();
@@ -2415,13 +2434,12 @@
       partyId: activeAdventure.partyId,
       adventureId: activeAdventure.adventureId,
       opponentId: profileId,
-      call,
       prompt: prompt || undefined,
     });
     if (!res.ok) { alert(data.error || 'Could not send that challenge.'); return; }
     myPendingChallenges.set(profileId, data.challenge.id);
     renderPartyRoster(partyRosterCache); // swap that member's ⚔️ badge to ⏳ without a full roster refetch
-    showToast(`⚔️ Challenge sent to ${name}, waiting for them to respond…`);
+    openFlipPick(normalizeChallengeRow(data.challenge), true);
   };
 
   window.cancelSentChallenge = async function (challengeId, opponentId) {
@@ -2432,29 +2450,61 @@
     showToast('Challenge cancelled.');
   };
 
-  function handleIncomingChallenge(rawRow) {
-    const row = normalizeChallengeRow(rawRow);
-    if (row.status !== 'pending' || row.opponentId !== currentSession?.user?.id) return;
-    incomingChallenge = row;
-    const challengerName = memberNameById(row.challengerId);
-    const myCall = opponentCallOf(row.challengerCall);
-    const promptLine = row.prompt ? `<br>"<strong>${escapeHtmlLite(row.prompt)}</strong>"` : '';
-    document.getElementById('challenge-incoming-text').innerHTML =
-      `<strong>${challengerName}</strong> challenges you to a coin flip!${promptLine}<br>They called <strong>${row.challengerCall}</strong>, you get <strong>${myCall}</strong>.`;
-    document.getElementById('challenge-incoming-overlay').removeAttribute('hidden');
+  // Reopens the race-pick modal for a challenge I already sent — used when
+  // tapping the ⏳ badge again (e.g. after dismissing the picker, or after
+  // a page reload lost the open modal but not myPendingChallenges).
+  window.resumeMyPendingChallenge = function (challengeId, opponentId) {
+    openFlipPick({ id: challengeId, challengerId: currentSession?.user?.id, opponentId, prompt: null }, true);
+  };
+
+  // Shared by both the challenger (right after sending, via sendChallenge())
+  // and the opponent (via handleIncomingChallenge()) — whoever taps Heads
+  // or Tails first here wins that side, so both need the identical race UI.
+  function openFlipPick(row, isChallenger) {
+    activeFlipPick = { id: row.id, isChallenger, challengerId: row.challengerId, opponentId: row.opponentId };
+    const otherName = isChallenger ? memberNameById(row.opponentId) : memberNameById(row.challengerId);
+    const promptLine = row.prompt ? `"<strong>${escapeHtmlLite(row.prompt)}</strong>"<br>` : '';
+    document.getElementById('flip-pick-text').innerHTML = isChallenger
+      ? `${promptLine}You challenged <strong>${otherName}</strong> to a coin flip! Call it fast, whoever picks first wins that side.`
+      : `${promptLine}<strong>${otherName}</strong> challenges you to a coin flip! Call it fast, whoever picks first wins that side.`;
+    document.getElementById('flip-pick-secondary-btn').textContent = isChallenger ? 'Cancel Challenge' : 'Decline';
+    document.getElementById('flip-pick-overlay').removeAttribute('hidden');
   }
 
-  window.respondToIncomingChallenge = async function (response) {
-    if (!incomingChallenge) return;
-    const challengeId = incomingChallenge.id;
-    document.getElementById('challenge-incoming-overlay').setAttribute('hidden', '');
-    incomingChallenge = null;
-    const { res, data } = await postMinigames('respondToChallenge', { challengeId, response });
-    if (!res.ok) { alert(data.error || 'Could not respond to that challenge.'); return; }
-    if (response === 'decline') showToast('Challenge declined.');
-    // 'accept' plays out via the realtime 'resolved' update, same as it
-    // does for the challenger — see handleResolvedChallenge().
+  function closeFlipPickOverlay() {
+    document.getElementById('flip-pick-overlay').setAttribute('hidden', '');
+    activeFlipPick = null;
+  }
+
+  window.pickFlipSide = async function (call) {
+    if (!activeFlipPick) return;
+    const { id } = activeFlipPick;
+    closeFlipPickOverlay();
+    const { res, data } = await postMinigames('pickSide', { challengeId: id, call });
+    if (!res.ok) { alert(data.error || 'Could not lock in that call.'); return; }
+    // The result plays out via the realtime 'resolved' update, the same
+    // path for both players — see handleResolvedChallenge() — even though
+    // this response already carries the resolved challenge.
   };
+
+  window.declineOrCancelFlipPick = async function () {
+    if (!activeFlipPick) return;
+    const { id, isChallenger, opponentId } = activeFlipPick;
+    closeFlipPickOverlay();
+    if (isChallenger) {
+      await window.cancelSentChallenge(id, opponentId);
+      return;
+    }
+    const { res, data } = await postMinigames('respondToChallenge', { challengeId: id, response: 'decline' });
+    if (!res.ok) { alert(data.error || 'Could not respond to that challenge.'); return; }
+    showToast('Challenge declined.');
+  };
+
+  function handleIncomingChallenge(rawRow) {
+    const row = normalizeChallengeRow(rawRow);
+    if (row.status !== 'pending' || row.challengerCall || row.opponentId !== currentSession?.user?.id) return;
+    openFlipPick(row, false);
+  }
 
   // ---------- CHALLENGE RESULT MESSAGES ----------
   // A few PRESET_RESULT_TEMPLATES carry flavor tied to what was actually
@@ -2529,6 +2579,12 @@
     const myId = currentSession?.user?.id;
     if (!myId || (row.challengerId !== myId && row.opponentId !== myId)) return;
 
+    // Whichever side (challenger or opponent) had the picker still open
+    // for this exact challenge loses that race the instant a resolved
+    // update lands — close it rather than leaving a stale Heads/Tails
+    // prompt for a call that's already been decided.
+    if (activeFlipPick?.id === row.id) closeFlipPickOverlay();
+
     const amChallenger = row.challengerId === myId;
     if (amChallenger && myPendingChallenges.get(row.opponentId) === row.id) {
       myPendingChallenges.delete(row.opponentId);
@@ -2539,8 +2595,13 @@
     const winnerName = memberNameById(row.winnerId);
     const loserName = row.winnerId === row.challengerId ? opponentName : challengerName;
     const iWon = row.winnerId === myId;
-    const headsName = row.challengerCall === 'heads' ? challengerName : opponentName;
-    const tailsName = row.challengerCall === 'tails' ? challengerName : opponentName;
+    // challengerCall belongs to whoever actually won the race to pick
+    // (firstPickerId), not necessarily the challenger — see
+    // 0037_flip_race_pick.sql.
+    const firstPickerName = row.firstPickerId === row.challengerId ? challengerName : opponentName;
+    const secondPickerName = row.firstPickerId === row.challengerId ? opponentName : challengerName;
+    const headsName = row.challengerCall === 'heads' ? firstPickerName : secondPickerName;
+    const tailsName = row.challengerCall === 'tails' ? firstPickerName : secondPickerName;
     const resultMessage = buildResultMessage(winnerName, loserName, row.prompt) + (iWon ? ` +${row.xpAwarded ?? 0} XP 🎉` : '');
 
     window.MusoCoinFlip.flip({
@@ -2646,12 +2707,10 @@
             myPendingChallenges.delete(row.opponent_id);
             renderPartyRoster(partyRosterCache);
           }
+          if (activeFlipPick?.id === row.id) closeFlipPickOverlay();
           showToast(`${memberNameById(row.opponent_id)} declined your challenge.`);
         } else if (row.status === 'cancelled' && row.opponent_id === myId) {
-          if (incomingChallenge?.id === row.id) {
-            document.getElementById('challenge-incoming-overlay').setAttribute('hidden', '');
-            incomingChallenge = null;
-          }
+          if (activeFlipPick?.id === row.id) closeFlipPickOverlay();
         }
       })
       .subscribe();
@@ -2669,8 +2728,8 @@
     const feed = document.getElementById('party-feed');
     if (feed) feed.innerHTML = '<div class="party-feed-empty">No activity yet</div>';
     document.getElementById('party-roster-wrap')?.setAttribute('hidden', '');
-    document.getElementById('challenge-incoming-overlay')?.setAttribute('hidden', '');
-    incomingChallenge = null;
+    document.getElementById('flip-pick-overlay')?.setAttribute('hidden', '');
+    activeFlipPick = null;
     myPendingChallenges = new Map();
   }
 
@@ -3026,7 +3085,7 @@
   window.openMinigameDetail = function (key) {
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);
     if (!g) return;
-    const unlocked = unlockedMinigameKeys.has(key);
+    const unlocked = !!currentSession && unlockedMinigameKeys.has(key);
     const detailIconEl = document.getElementById('minigame-detail-icon');
     detailIconEl.src = `../assets/minigames/${g.icon}`;
     detailIconEl.alt = g.title;
@@ -3035,6 +3094,11 @@
     const ctaEl = document.getElementById('minigame-detail-cta');
     if (unlocked) {
       ctaEl.innerHTML = `<button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); playMinigame('${key}');">▶ Play ${g.title}</button>`;
+    } else if (!currentSession) {
+      ctaEl.innerHTML = `
+        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 Sign in to play</div>
+        <button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); document.getElementById('signin-email')?.focus();">Sign in</button>
+      `;
     } else {
       ctaEl.innerHTML = `
         <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 ${g.lockedHint}</div>
@@ -3069,7 +3133,7 @@
 
     const { data: adventures, error } = await supabaseClient
       .from('adventures')
-      .select('id, party_id, completed_at, routes(title)')
+      .select('id, party_id, completed_at, routes(title, venue_theme)')
       .in('party_id', myPartyIds)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false })
@@ -3080,7 +3144,7 @@
     const adventureIds = adventures.map((a) => a.id);
     const partyIds = [...new Set(adventures.map((a) => a.party_id))];
 
-    const [{ data: rosterRows }, { data: checkinRows }, { data: reviewRows }, { data: badgeRows }, { data: photoRows }] = await Promise.all([
+    const [{ data: rosterRows }, { data: checkinRows }, { data: reviewRows }, { data: badgeRows }, { data: photoRows }, { data: flipRows }] = await Promise.all([
       supabaseClient.from('party_members').select('party_id, profile_id, profiles(display_name, avatar_url)').in('party_id', partyIds),
       supabaseClient.from('check_ins').select('adventure_id, checked_in_by').in('adventure_id', adventureIds),
       // Not filtered to any one person — this is the whole party's ratings,
@@ -3089,10 +3153,25 @@
       supabaseClient.from('check_ins').select('adventure_id, checked_in_by, route_stops(name), venue_reviews(rating, review_text)').in('adventure_id', adventureIds),
       supabaseClient.from('profile_badges').select('adventure_id, profile_id, badge_key, badges(name, emoji)').in('adventure_id', adventureIds),
       supabaseClient.from('check_ins').select('adventure_id, photo_url, route_stops(name)').in('adventure_id', adventureIds).not('photo_url', 'is', null),
+      supabaseClient.from('coin_flip_challenges').select('adventure_id, challenger_id, opponent_id, winner_id, result').in('adventure_id', adventureIds).eq('status', 'resolved'),
     ]);
 
     const rosterByParty = new Map();
-    (rosterRows || []).forEach((r) => { if (!rosterByParty.has(r.party_id)) rosterByParty.set(r.party_id, []); rosterByParty.get(r.party_id).push(r); });
+    const nameByProfileId = new Map();
+    (rosterRows || []).forEach((r) => {
+      if (!rosterByParty.has(r.party_id)) rosterByParty.set(r.party_id, []);
+      rosterByParty.get(r.party_id).push(r);
+      nameByProfileId.set(r.profile_id, r.profiles?.display_name || 'Explorer');
+    });
+    // Theme icon/accent to match REAL_VENUE_ADVENTURE_THEMES, keyed off the
+    // route's venue_theme — curated routes have no venue_theme and keep the
+    // plain 🏁 emoji instead.
+    const themeByKey = new Map(REAL_VENUE_ADVENTURE_THEMES.filter((t) => t.venueTheme).map((t) => [t.venueTheme, t]));
+    const gamesByAdventure = new Map();
+    (flipRows || []).forEach((g) => {
+      if (!gamesByAdventure.has(g.adventure_id)) gamesByAdventure.set(g.adventure_id, []);
+      gamesByAdventure.get(g.adventure_id).push(g);
+    });
     const checkinCountByAdvAndProfile = new Map(); // "advId|profileId" -> count
     const venuesByAdventure = new Map(); // advId -> Set of stop names
     (checkinRows || []).forEach((c) => {
@@ -3118,12 +3197,14 @@
 
     el.innerHTML = `<div class="past-adv-list">${adventures.map((a) => {
       const title = (a.routes && a.routes.title) || 'Adventure';
+      const theme = themeByKey.get(a.routes && a.routes.venue_theme);
       const date = a.completed_at ? new Date(a.completed_at).toLocaleDateString() : '';
       const roster = rosterByParty.get(a.party_id) || [];
       const venues = [...(venuesByAdventure.get(a.id) || [])];
       const badges = badgesByAdventure.get(a.id) || [];
       const photos = (photosByAdventure.get(a.id) || []).slice(0, 8);
       const reviews = reviewsByAdventure.get(a.id) || [];
+      const games = gamesByAdventure.get(a.id) || [];
 
       const rosterHtml = roster.map((m) => {
         const name = esc(m.profiles?.display_name || 'Explorer');
@@ -3167,10 +3248,27 @@
           `).join('')}</div>`
         : '';
 
+      const gamesHtml = games.length
+        ? `<div class="past-adv-games">${games.map((g) => {
+            const challengerName = esc(nameByProfileId.get(g.challenger_id) || 'Explorer');
+            const opponentName = esc(nameByProfileId.get(g.opponent_id) || 'Explorer');
+            const winnerName = esc(nameByProfileId.get(g.winner_id) || 'Explorer');
+            return `<div class="past-adv-game-item">
+              <span class="past-adv-game-name">🪙 The Flip</span>
+              <span class="past-adv-game-players">${challengerName} vs ${opponentName}</span>
+              <span class="past-adv-game-winner">🏆 ${winnerName} won (${esc(g.result)})</span>
+            </div>`;
+          }).join('')}</div>`
+        : '';
+
+      const headerIcon = theme?.icon
+        ? `<img class="adv-acc-icon" src="${theme.icon}" alt="">`
+        : '<span class="adv-acc-emoji">🏁</span>';
+
       return `
-        <div class="past-adv-item adv-acc-item">
+        <div class="past-adv-item adv-acc-item ${theme?.colorClass || ''}">
           <button type="button" class="adv-acc-header past-adv-header" onclick="this.closest('.past-adv-item').classList.toggle('open')">
-            <span class="adv-acc-emoji">🏁</span>
+            ${headerIcon}
             <span class="adv-acc-name">${esc(title)}</span>
             <span class="past-adv-date">${date}</span>
             <span class="adv-acc-chevron">›</span>
@@ -3178,6 +3276,7 @@
           <div class="adv-acc-body-wrap"><div class="adv-acc-body">
             <div class="past-adv-roster">${rosterHtml}</div>
             ${venuesHtml}
+            ${gamesHtml}
             ${badgesHtml}
             ${reviewsHtml}
             ${photosHtml}
@@ -3230,8 +3329,8 @@
         title: a.routes?.title || 'Adventure',
         status: a.status,
         stops: (stopsByRoute.get(a.route_id) || [])
-          .filter((s) => typeof s.venues?.lat === 'number' && typeof s.venues?.lng === 'number')
-          .map((s) => ({ lat: s.venues.lat, lng: s.venues.lng, name: s.venues.name || s.name })),
+          .map((s) => ({ lat: Number(s.venues?.lat), lng: Number(s.venues?.lng), name: s.venues?.name || s.name }))
+          .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)),
       }))
       .filter((a) => a.stops.length);
     return mapsAdventuresCache;
@@ -3333,7 +3432,7 @@
     const grid = document.getElementById('minigames-grid');
     if (!grid) return;
     grid.innerHTML = MINIGAMES_CONFIG.map((g) => {
-      const unlocked = unlockedMinigameKeys.has(g.key);
+      const unlocked = !!currentSession && unlockedMinigameKeys.has(g.key);
       const featuredCls = g.featured ? ' featured' : '';
       const featuredBadge = g.featured ? '<div class="minigame-featured-badge">⭐ Featured</div>' : '';
       if (unlocked) {
@@ -3344,6 +3443,17 @@
             <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
             <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')">▶ Play</button>
+          </div>
+        `;
+      }
+      if (!currentSession) {
+        return `
+          <div class="minigame-card locked${featuredCls}" onclick="openMinigameDetail('${g.key}')">
+            ${featuredBadge}
+            <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
+            <div class="minigame-title">${g.tagline}</div>
+            <div class="minigame-desc">${g.desc}</div>
+            <div class="minigame-status">🔒 Sign in to play</div>
           </div>
         `;
       }
@@ -3469,6 +3579,11 @@
   // backend registry. heads_or_tails is the first one wired up for real,
   // via the standalone assets/coin-flip.js widget loaded above.
   window.playMinigame = function (key) {
+    if (!currentSession) {
+      alert('Sign in first to play mini games.');
+      document.getElementById('signin-email')?.focus();
+      return;
+    }
     if (key === 'heads_or_tails') {
       openFlipPicker();
       return;
@@ -3742,6 +3857,7 @@
         colorClass: t.colorClass,
         kindClass: '',
         bodyHtml: `
+          ${t.icon ? `<img class="adv-acc-body-hero" src="${t.icon}" alt="">` : ''}
           <div class="rvc-desc">${t.desc}</div>
           <div class="rvc-stopcount" data-stopkey="${stopKey}" data-container="${containerId || ''}">
             <span class="rvc-stopcount-label">Stops</span>
@@ -6433,7 +6549,7 @@
     if (!(opts && opts.skipHistory) && location.hash.slice(1) !== view) {
       history.pushState(null, '', view === 'adventures' ? location.pathname : `#${view}`);
     }
-    if (view === 'maps') renderMapsView();
+    if (view === 'maps') { mapsAdventuresCache = null; renderMapsView(); }
     // Newly-visible content's reveal-on-scroll entries are already
     // observed from page load, so IntersectionObserver fires them on its
     // own once display flips to block — this just covers anything added
