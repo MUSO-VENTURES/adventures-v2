@@ -1,18 +1,34 @@
 // POST /trivia
-// Body: { action: 'startRound', partyId, adventureId, mode: 'solo'|'group' }
-//     | { action: 'getActiveRound', partyId, adventureId, mode: 'solo'|'group' }
+// Body: { action: 'startRound', partyId, adventureId?, mode: 'solo'|'group', category? }
+//     | { action: 'getActiveRound', partyId, adventureId?, mode: 'solo'|'group' }
 //     | { action: 'buzzIn', roundId }
 //     | { action: 'submitAnswer', roundId, choiceKey }
 //     | { action: 'advanceTurn', roundId }
-//     | { action: 'listRounds', partyId, adventureId, limit? }
+//     | { action: 'listRounds', partyId, adventureId?, limit? }
 // Requires Authorization: Bearer <user JWT> (Supabase Auth).
 //
-// Trivia Break — solo or "quick draw" group buzzer trivia, generated from
-// whatever route the caller's party is currently playing (curated or
-// real-venue) via the template generator in ../_shared/triviaGenerator.ts.
-// No LLM call: questions are built purely from route_stops/venues/
-// venue_reviews already in the schema, so any new adventure works the
-// instant it exists, with zero code changes here.
+// Trivia Break — solo or "quick draw" group buzzer trivia, drawn from the
+// curated category bank in ../_shared/triviaGenerator.ts. adventureId is
+// optional: mid-adventure, category auto-resolves from the party's current
+// route theme (routes.venue_theme -> resolveCategory) unless the player
+// picks a different one via the category-picker override; with no active
+// adventure at all ("freeplay" — see preview/index.html's Trivia Break
+// entry point), the picker is the only source of a category, so it's
+// required in that case. See 0047_trivia_freeplay.sql for the schema side
+// of making adventure_id optional.
+//
+// Played in fixed 5-question games (QUESTIONS_PER_GAME), each entirely at
+// one difficulty tier tracked in trivia_progress, scoped per (party,
+// adventure, mode) so solo and group play level up independently. A party
+// starts at 'easy'; a perfect 5/5 game advances their NEXT game a tier
+// (nextDifficulty, capped at 'hard'); anything less leaves the tier
+// unchanged — there's no demotion. See 0044_trivia_games_and_leveling.sql.
+//
+// v2 of this function: the original version generated questions live from
+// route_stops/venues/venue_reviews ("which venue is at stop 3?"). That read
+// as flat/logistics trivia rather than actually fun trivia, so it's been
+// replaced entirely with the static bank — see triviaGenerator.ts's header
+// for the full rationale and content provenance.
 //
 // This is a dedicated function rather than new actions on minigames/
 // index.ts — that file frames itself as unlock-bookkeeping (see its own
@@ -35,11 +51,8 @@
 // posture pickSide uses for the coin result.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import {
-  templateGenerator,
-  type RouteContent,
-  type StopContent,
-} from "../_shared/triviaGenerator.ts";
+import { nextDifficulty, pickQuestion, QUESTIONS_PER_GAME, resolveCategory, TRIVIA_CATEGORIES } from "../_shared/triviaGenerator.ts";
+import type { TriviaCategory, TriviaDifficulty } from "../_shared/triviaGenerator.ts";
 
 // Inlined from ../_shared/cors.ts and ../_shared/supabaseAdmin.ts — see
 // minigames/index.ts's comment for why (the dashboard's single-file editor
@@ -89,31 +102,21 @@ const TRIVIA_XP = {
   SOLO_WIN: 15,
 };
 
-// How many random cross-route rows to pull as wrong-answer padding for
-// thin routes (e.g. right after a player's very first check-in). Cheap,
-// best-effort — not meant to be a uniform random sample of the whole
-// content library, just enough variety that a 1-stop route can still
-// produce a plausible multiple-choice question.
-const DISTRACTOR_POOL_SIZE = 24;
-const DISTRACTOR_TAKE = 12;
-
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
 function serializeRound(row: Record<string, unknown>) {
+  const roundNumber = row.round_number as number;
   return {
     id: row.id,
     partyId: row.party_id,
     adventureId: row.adventure_id,
     mode: row.mode,
     initiatorProfileId: row.initiator_profile_id,
-    roundNumber: row.round_number,
+    roundNumber,
+    // Purely computed from roundNumber, not stored — 1-indexed position
+    // within the current 5-question game, and which game number this is.
+    questionInGame: ((roundNumber - 1) % QUESTIONS_PER_GAME) + 1,
+    gameNumber: Math.ceil(roundNumber / QUESTIONS_PER_GAME),
+    category: row.category,
+    difficulty: row.difficulty,
     questionType: row.question_type,
     questionText: row.question_text,
     choices: row.choices,
@@ -129,125 +132,182 @@ function serializeRound(row: Record<string, unknown>) {
     explanation: row.explanation ?? null,
     winnerProfileId: row.winner_profile_id ?? null,
     xpAwarded: row.xp_awarded ?? null,
+    // Only set on the 5th round of a game, once it resolves/expires — see
+    // maybeCompleteGame() below.
+    gameCorrectCount: row.game_correct_count ?? null,
+    gameLeveledUp: row.game_leveled_up ?? null,
+    gameNewDifficulty: row.game_new_difficulty ?? null,
+    gameSummary: row.game_summary ?? null,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at ?? null,
   };
 }
 
-async function loadRouteContent(
-  // deno-lint-ignore no-explicit-any
-  admin: any,
-  routeId: string,
-): Promise<RouteContent> {
-  const { data: route } = await admin
-    .from("routes")
-    .select("id, title")
-    .eq("id", routeId)
-    .maybeSingle();
-
-  const { data: stopRows } = await admin
-    .from("route_stops")
-    .select("id, stop_order, name, description, emoji, is_mystery, venue_id")
-    .eq("route_id", routeId)
-    .eq("is_mystery", false)
-    .order("stop_order", { ascending: true });
-
-  const venueIds = (stopRows ?? []).map((s: Record<string, unknown>) => s.venue_id).filter(Boolean) as string[];
-
-  const [{ data: venueRows }, { data: reviewRows }] = await Promise.all([
-    venueIds.length
-      ? admin.from("venues").select("id, name, category, address, muso_rating, muso_rating_count").in("id", venueIds)
-      : Promise.resolve({ data: [] }),
-    venueIds.length
-      ? admin.from("venue_reviews").select("venue_id, rating, review_text").in("venue_id", venueIds).limit(60)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const venueById = new Map((venueRows ?? []).map((v: Record<string, unknown>) => [v.id, v]));
-  const reviewsByVenue = new Map<string, Array<{ rating: number; reviewText: string | null }>>();
-  for (const r of reviewRows ?? []) {
-    const list = reviewsByVenue.get(r.venue_id as string) ?? [];
-    list.push({ rating: r.rating as number, reviewText: (r.review_text as string | null) ?? null });
-    reviewsByVenue.set(r.venue_id as string, list);
-  }
-
-  const stops: StopContent[] = (stopRows ?? []).map((s: Record<string, unknown>) => {
-    const venue = s.venue_id ? (venueById.get(s.venue_id as string) as Record<string, unknown> | undefined) : undefined;
-    return {
-      id: s.id as string,
-      stopOrder: s.stop_order as number,
-      name: s.name as string,
-      description: (s.description as string | null) ?? null,
-      emoji: (s.emoji as string | null) ?? null,
-      isMystery: Boolean(s.is_mystery),
-      venue: venue
-        ? {
-            name: venue.name as string,
-            category: (venue.category as string | null) ?? null,
-            address: (venue.address as string | null) ?? null,
-            musoRating: (venue.muso_rating as number | null) ?? null,
-            musoRatingCount: (venue.muso_rating_count as number | null) ?? 0,
-          }
-        : null,
-      reviews: s.venue_id ? reviewsByVenue.get(s.venue_id as string) ?? [] : [],
-    };
-  });
-
-  // Cross-route padding for thin routes — cheap, best-effort, no strict
-  // randomness guarantee (Postgres row order without an ORDER BY isn't
-  // random; shuffling client-side over a wider-than-needed slice is
-  // simpler than an ORDER BY random() and good enough for distractor text).
-  const [{ data: otherStopRows }, { data: otherRouteRows }] = await Promise.all([
-    admin.from("route_stops").select("name, emoji").neq("route_id", routeId).eq("is_mystery", false).limit(DISTRACTOR_POOL_SIZE),
-    admin.from("routes").select("title").neq("id", routeId).limit(DISTRACTOR_POOL_SIZE),
-  ]);
-
-  const distractorStopNames = shuffle((otherStopRows ?? []).map((s: Record<string, unknown>) => s.name as string)).slice(0, DISTRACTOR_TAKE);
-  const distractorEmojis = shuffle(
-    (otherStopRows ?? []).map((s: Record<string, unknown>) => s.emoji as string | null).filter((e: string | null): e is string => Boolean(e)),
-  ).slice(0, DISTRACTOR_TAKE);
-  const distractorRouteTitles = shuffle((otherRouteRows ?? []).map((r: Record<string, unknown>) => r.title as string)).slice(0, DISTRACTOR_TAKE);
-
-  return {
-    routeId,
-    routeTitle: (route?.title as string) ?? "This Adventure",
-    stops,
-    distractorStopNames,
-    distractorRouteTitles,
-    distractorEmojis,
-  };
+// Every trivia_rounds/trivia_progress query below is scoped by adventureId,
+// which is now optional (null = freeplay, no active adventure — see
+// 0047_trivia_freeplay.sql). Supabase's .eq() compiles to SQL `= NULL`,
+// which never matches anything, so a null adventureId has to route through
+// .is() instead — this one helper keeps every call site correct without
+// repeating the null check everywhere.
+// deno-lint-ignore no-explicit-any
+function eqOrIsNull(query: any, col: string, value: string | null) {
+  return value === null ? query.is(col, value) : query.eq(col, value);
 }
 
+// Scoped by mode (not just party+adventure) so solo and group play count
+// their own independent round sequences — otherwise mixing solo and group
+// play within one adventure would interleave round numbers and split
+// "games" (and the difficulty tier tied to them) across both modes.
 async function nextRoundNumber(
   // deno-lint-ignore no-explicit-any
   admin: any,
   partyId: string,
-  adventureId: string,
+  adventureId: string | null,
+  mode: string,
 ): Promise<number> {
-  const { data } = await admin
-    .from("trivia_rounds")
-    .select("round_number")
-    .eq("party_id", partyId)
-    .eq("adventure_id", adventureId)
+  const { data } = await eqOrIsNull(
+    admin.from("trivia_rounds").select("round_number").eq("party_id", partyId),
+    "adventure_id",
+    adventureId,
+  )
+    .eq("mode", mode)
     .order("round_number", { ascending: false })
     .limit(1)
     .maybeSingle();
   return ((data?.round_number as number | undefined) ?? 0) + 1;
 }
 
+// Reads the party's current difficulty tier for this adventure+mode,
+// creating the row (defaulting to 'easy') on first play — satisfies "the
+// first game should never be too hard" for free, since every new party/
+// adventure/mode combination starts here.
+async function getOrCreateProgress(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  partyId: string,
+  adventureId: string | null,
+  mode: string,
+): Promise<TriviaDifficulty> {
+  const { data: existing } = await eqOrIsNull(
+    admin.from("trivia_progress").select("difficulty").eq("party_id", partyId),
+    "adventure_id",
+    adventureId,
+  )
+    .eq("mode", mode)
+    .maybeSingle();
+  if (existing) return existing.difficulty as TriviaDifficulty;
+
+  const { data: created, error } = await admin
+    .from("trivia_progress")
+    .insert({ party_id: partyId, adventure_id: adventureId, mode })
+    .select("difficulty")
+    .single();
+  if (error) {
+    // Lost a create race against a concurrent startRound call (e.g. two
+    // teammates tapping Play within the same instant) — the other call's
+    // insert already landed, so just read what it wrote.
+    const { data: raced } = await eqOrIsNull(
+      admin.from("trivia_progress").select("difficulty").eq("party_id", partyId),
+      "adventure_id",
+      adventureId,
+    )
+      .eq("mode", mode)
+      .maybeSingle();
+    return (raced?.difficulty as TriviaDifficulty) ?? "easy";
+  }
+  return created.difficulty as TriviaDifficulty;
+}
+
+export interface GameSummaryItem {
+  questionText: string;
+  correct: boolean;
+  winnerProfileId: string | null;
+}
+
+// Called right after submitAnswer/advanceTurn resolves a round. If that
+// round was the LAST question of its game (questionInGame ===
+// QUESTIONS_PER_GAME), builds the full recap of all 5 questions asked
+// (question text + right/wrong, for the end-of-game summary list), tallies
+// how many were answered correctly (winner_profile_id set — true for both
+// solo and group, since both only ever set it on a correct answer), levels
+// the party's next game up a tier on a perfect score, and writes the whole
+// outcome onto this round row so it fans out to every party member via the
+// existing trivia_rounds realtime subscription, not just the answering
+// player's own HTTP response.
+async function maybeCompleteGame(
+  // deno-lint-ignore no-explicit-any
+  admin: any,
+  partyId: string,
+  adventureId: string | null,
+  mode: string,
+  roundId: string,
+  roundNumber: number,
+): Promise<
+  { gameCorrectCount: number; gameLeveledUp: boolean; gameNewDifficulty: TriviaDifficulty; gameSummary: GameSummaryItem[] } | null
+> {
+  const questionInGame = ((roundNumber - 1) % QUESTIONS_PER_GAME) + 1;
+  if (questionInGame !== QUESTIONS_PER_GAME) return null;
+
+  const gameStart = roundNumber - QUESTIONS_PER_GAME + 1;
+  const { data: gameRounds } = await eqOrIsNull(
+    admin.from("trivia_rounds").select("round_number, question_text, winner_profile_id").eq("party_id", partyId),
+    "adventure_id",
+    adventureId,
+  )
+    .eq("mode", mode)
+    .gte("round_number", gameStart)
+    .lte("round_number", roundNumber)
+    .order("round_number", { ascending: true });
+
+  const rows = (gameRounds ?? []) as Array<{ round_number: number; question_text: string; winner_profile_id: string | null }>;
+  const gameSummary: GameSummaryItem[] = rows.map((r) => ({
+    questionText: r.question_text,
+    correct: r.winner_profile_id != null,
+    winnerProfileId: r.winner_profile_id,
+  }));
+  const gameCorrectCount = gameSummary.filter((s) => s.correct).length;
+  const perfect = gameCorrectCount === QUESTIONS_PER_GAME;
+
+  const currentDifficulty = await getOrCreateProgress(admin, partyId, adventureId, mode);
+  const gameNewDifficulty = perfect ? nextDifficulty(currentDifficulty) : currentDifficulty;
+  const gameLeveledUp = perfect && gameNewDifficulty !== currentDifficulty;
+
+  if (gameLeveledUp) {
+    await eqOrIsNull(
+      admin.from("trivia_progress")
+        .update({ difficulty: gameNewDifficulty, updated_at: new Date().toISOString() })
+        .eq("party_id", partyId),
+      "adventure_id",
+      adventureId,
+    ).eq("mode", mode);
+  }
+
+  await admin
+    .from("trivia_rounds")
+    .update({
+      game_correct_count: gameCorrectCount,
+      game_leveled_up: gameLeveledUp,
+      game_new_difficulty: gameNewDifficulty,
+      game_summary: gameSummary,
+    })
+    .eq("id", roundId);
+
+  return { gameCorrectCount, gameLeveledUp, gameNewDifficulty, gameSummary };
+}
+
 async function fetchLiveRound(
   // deno-lint-ignore no-explicit-any
   admin: any,
   partyId: string,
-  adventureId: string,
+  adventureId: string | null,
   mode: string,
   initiatorProfileId?: string,
 ) {
-  let query = admin
-    .from("trivia_rounds")
-    .select("*")
-    .eq("party_id", partyId)
-    .eq("adventure_id", adventureId)
+  let query = eqOrIsNull(
+    admin.from("trivia_rounds").select("*").eq("party_id", partyId),
+    "adventure_id",
+    adventureId,
+  )
     .eq("mode", mode)
     .in("status", ["buzzing", "answering"]);
   if (mode === "solo" && initiatorProfileId) {
@@ -326,8 +386,12 @@ Deno.serve(async (req) => {
     const partyId = typeof body.partyId === "string" ? body.partyId : null;
     const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
     const mode = body.mode === "solo" ? "solo" : "group";
-    if (!partyId || !adventureId) {
-      return jsonResponse({ error: "partyId and adventureId are required." }, 400);
+    const requestedCategory = typeof body.category === "string" ? body.category as TriviaCategory : null;
+    if (requestedCategory && !TRIVIA_CATEGORIES.includes(requestedCategory)) {
+      return jsonResponse({ error: "category must be one of: " + TRIVIA_CATEGORIES.join(", ") }, 400);
+    }
+    if (!partyId) {
+      return jsonResponse({ error: "partyId is required." }, 400);
     }
 
     const { data: membership } = await admin
@@ -338,20 +402,53 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!membership) return jsonResponse({ error: "You're not in that party." }, 403);
 
-    const { data: adventure } = await admin
-      .from("adventures")
-      .select("id, route_id")
-      .eq("id", adventureId)
-      .eq("party_id", partyId)
-      .maybeSingle();
-    if (!adventure) return jsonResponse({ error: "Adventure not found for that party." }, 404);
+    // Mid-adventure: category auto-resolves from the route's theme, unless
+    // the player explicitly overrode it (the "Change Category" CTA).
+    // Freeplay (no adventureId — no route to resolve a theme from at all):
+    // the category picker is the only way to get one, so it's required.
+    let category: TriviaCategory;
+    if (adventureId) {
+      const { data: adventure } = await admin
+        .from("adventures")
+        .select("id, route_id")
+        .eq("id", adventureId)
+        .eq("party_id", partyId)
+        .maybeSingle();
+      if (!adventure) return jsonResponse({ error: "Adventure not found for that party." }, 404);
 
-    const routeContent = await loadRouteContent(admin, adventure.route_id as string);
-    const roundNumber = await nextRoundNumber(admin, partyId, adventureId);
-    const [question] = templateGenerator.generate(routeContent, 1);
-    if (!question) {
-      return jsonResponse({ error: "Couldn't put together a trivia question right now — try again in a bit." }, 500);
+      const { data: route } = await admin
+        .from("routes")
+        .select("venue_theme")
+        .eq("id", adventure.route_id)
+        .maybeSingle();
+      category = requestedCategory ?? resolveCategory(route?.venue_theme as string | null | undefined);
+    } else {
+      if (!requestedCategory) {
+        return jsonResponse({ error: "category is required to play trivia without an active adventure." }, 400);
+      }
+      category = requestedCategory;
     }
+
+    const roundNumber = await nextRoundNumber(admin, partyId, adventureId, mode);
+    const difficulty = await getOrCreateProgress(admin, partyId, adventureId, mode);
+
+    // Avoid repeating a question already asked this party+adventure+mode+
+    // category — scoped by category too now that it can vary within one
+    // adventure_id/null "slot" (the change-category override, or freeplay
+    // switching categories between games) — best effort, not a hard
+    // guarantee (pickQuestion falls back to allowing a repeat once a
+    // bucket's fully exhausted, see its own comment).
+    const { data: priorRounds } = await eqOrIsNull(
+      admin.from("trivia_rounds").select("question_text").eq("party_id", partyId),
+      "adventure_id",
+      adventureId,
+    )
+      .eq("mode", mode)
+      .eq("category", category)
+      .limit(100);
+    const excludeQuestionTexts = (priorRounds ?? []).map((r: Record<string, unknown>) => r.question_text as string);
+
+    const question = pickQuestion(category, difficulty, excludeQuestionTexts);
 
     const startingStatus = mode === "solo" ? "answering" : "buzzing";
     const startingActiveTurn = mode === "solo" ? userId : null;
@@ -364,10 +461,12 @@ Deno.serve(async (req) => {
         mode,
         initiator_profile_id: userId,
         round_number: roundNumber,
-        question_type: question.questionType,
+        category,
+        difficulty,
+        question_type: category,
         question_text: question.questionText,
         choices: question.choices,
-        source: question.source ?? "template",
+        source: "curated",
         status: startingStatus,
         active_turn_profile_id: startingActiveTurn,
       })
@@ -399,8 +498,8 @@ Deno.serve(async (req) => {
     const partyId = typeof body.partyId === "string" ? body.partyId : null;
     const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
     const mode = body.mode === "solo" ? "solo" : "group";
-    if (!partyId || !adventureId) {
-      return jsonResponse({ error: "partyId and adventureId are required." }, 400);
+    if (!partyId) {
+      return jsonResponse({ error: "partyId is required." }, 400);
     }
     const round = await fetchLiveRound(admin, partyId, adventureId, mode, mode === "solo" ? userId : undefined);
     if (!round) return jsonResponse({ round: null, buzzes: [] });
@@ -455,25 +554,57 @@ Deno.serve(async (req) => {
       await admin.from("trivia_rounds").update({ xp_awarded: xpAmount }).eq("id", roundId);
       xpResult = xp;
     }
-    return jsonResponse({ ok: true, correct: data.correct, nextProfileId: data.nextProfileId ?? null, xpResult });
+
+    // The round is only actually OVER (not just passed to the next
+    // buzzer) when it's correct, or it's solo (solo never retries) — see
+    // trivia_submit_answer's own branching in 0040_trivia_break.sql.
+    let game = null;
+    if (data.correct || round!.mode === "solo") {
+      game = await maybeCompleteGame(
+        admin,
+        round!.party_id as string,
+        round!.adventure_id as string | null,
+        round!.mode as string,
+        roundId,
+        round!.round_number as number,
+      );
+    }
+
+    return jsonResponse({ ok: true, correct: data.correct, nextProfileId: data.nextProfileId ?? null, xpResult, game });
   }
 
   if (action === "advanceTurn") {
     const roundId = typeof body.roundId === "string" ? body.roundId : null;
     if (!roundId) return jsonResponse({ error: "roundId is required." }, 400);
-    const { response } = await requireRoundMembership(roundId); // any party member may call this, not just the active answerer
+    const { round, response } = await requireRoundMembership(roundId); // any party member may call this, not just the active answerer
     if (response) return response;
 
     const { data, error } = await admin.rpc("trivia_force_advance", { p_round_id: roundId });
     if (error) return jsonResponse({ error: error.message }, 400);
-    return jsonResponse(data);
+
+    // Only run game-completion bookkeeping for the call that actually just
+    // expired the round — a `noop: true` response means some other call
+    // already resolved/expired it first (and already ran this).
+    let game = null;
+    if (data.expired) {
+      game = await maybeCompleteGame(
+        admin,
+        round!.party_id as string,
+        round!.adventure_id as string | null,
+        round!.mode as string,
+        roundId,
+        round!.round_number as number,
+      );
+    }
+
+    return jsonResponse({ ...data, game });
   }
 
   if (action === "listRounds") {
     const partyId = typeof body.partyId === "string" ? body.partyId : null;
     const adventureId = typeof body.adventureId === "string" ? body.adventureId : null;
-    if (!partyId || !adventureId) {
-      return jsonResponse({ error: "partyId and adventureId are required." }, 400);
+    if (!partyId) {
+      return jsonResponse({ error: "partyId is required." }, 400);
     }
     const { data: membership } = await admin
       .from("party_members")
@@ -483,12 +614,11 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!membership) return jsonResponse({ error: "You're not in that party." }, 403);
 
-    const { data, error } = await admin
-      .from("trivia_rounds")
-      .select("*")
-      .eq("party_id", partyId)
-      .eq("adventure_id", adventureId)
-      .order("round_number", { ascending: false })
+    const { data, error } = await eqOrIsNull(
+      admin.from("trivia_rounds").select("*").eq("party_id", partyId),
+      "adventure_id",
+      adventureId,
+    ).order("round_number", { ascending: false })
       .limit(typeof body.limit === "number" ? body.limit : 20);
     if (error) return jsonResponse({ error: error.message }, 400);
 

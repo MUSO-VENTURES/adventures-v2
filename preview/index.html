@@ -625,6 +625,15 @@
      Correct/wrong reveal colors reuse --deep-teal/--coral, the same two-
      outcome palette coin-flip.js already uses for its heads/tails result
      box, so the two minigames read as visually related. */
+  .trivia-category-badge{ display:flex; justify-content:center; gap:8px; margin-bottom:10px; }
+  .trivia-category-pill{
+    background:rgba(var(--shadow-rgb),0.08); color:var(--ink); border-radius:999px; padding:4px 12px;
+    font-family:'Fredoka',sans-serif; font-weight:600; font-size:0.76rem;
+  }
+  .trivia-difficulty-pill{ border-radius:999px; padding:4px 12px; font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.76rem; color:#fff; }
+  .trivia-difficulty-easy{ background:var(--deep-teal); }
+  .trivia-difficulty-medium{ background:var(--tangerine); }
+  .trivia-difficulty-hard{ background:var(--coral); }
   .trivia-question{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.05rem; margin:0 0 16px; text-align:center; }
   .trivia-choices{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
   .trivia-choice-btn{
@@ -647,9 +656,38 @@
   .trivia-turn-banner{ text-align:center; font-family:'Fredoka',sans-serif; font-weight:700; color:var(--tangerine); margin-bottom:10px; }
   .trivia-buzz-order{ display:flex; flex-direction:column; gap:4px; font-size:0.82rem; opacity:0.75; margin-bottom:12px; }
   .trivia-outcome{ text-align:center; font-weight:700; margin:4px 0 6px; }
+  .trivia-gameover-line{ text-align:center; font-family:'Fredoka',sans-serif; font-weight:700; font-size:1rem; margin:10px 0 4px; }
+  .trivia-levelup-banner{
+    text-align:center; font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.9rem; color:#fff;
+    background:linear-gradient(135deg, var(--tangerine), var(--coral)); border-radius:14px; padding:8px 14px; margin:0 0 12px;
+  }
+  .trivia-nextround-banner{
+    text-align:center; font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.9rem; color:var(--ink);
+    background:rgba(var(--shadow-rgb),0.07); border-radius:14px; padding:8px 14px; margin:0 0 12px;
+  }
+  .trivia-recap-list{
+    display:flex; flex-direction:column; gap:4px; font-size:0.82rem; text-align:left;
+    background:rgba(var(--shadow-rgb),0.04); border-radius:12px; padding:10px 12px; margin:0 0 10px;
+  }
+  .trivia-recap-row{ line-height:1.4; }
   .trivia-explanation{ text-align:center; font-size:0.82rem; opacity:0.7; margin:0 0 14px; }
   .trivia-next-btn{ width:100%; }
+  .trivia-suggest-adventure-btn{ width:100%; margin-bottom:8px; }
   .trivia-empty{ text-align:center; opacity:0.7; padding:20px 0; }
+  .trivia-change-category-btn{
+    background:rgba(var(--shadow-rgb),0.08); border:none; border-radius:999px; padding:5px 12px;
+    font-family:'Fredoka',sans-serif; font-weight:600; font-size:0.74rem; color:var(--ink); cursor:pointer;
+    transition:background-color .2s ease, transform .2s var(--ease-bounce);
+  }
+  .trivia-change-category-btn:hover{ background:rgba(var(--shadow-rgb),0.14); transform:scale(1.03); }
+  .trivia-category-grid{ display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .trivia-category-btn{
+    background:var(--card); border:1.5px solid rgba(var(--shadow-rgb),0.1); border-radius:14px;
+    padding:16px 10px; font-family:'Fredoka',sans-serif; font-weight:700; font-size:0.92rem; color:var(--ink);
+    cursor:pointer; transition:transform .2s var(--ease-bounce), border-color .2s ease;
+  }
+  .trivia-category-btn:hover{ border-color:var(--coral); transform:scale(1.03); }
+  .trivia-category-btn:active{ transform:scale(0.97); }
 
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
@@ -954,6 +992,11 @@
     background:var(--card); border-radius:24px; max-width:420px; width:100%;
     padding:22px 22px 26px; box-shadow:0 20px 60px rgba(0,0,0,0.35);
     animation:modalPopIn .4s var(--ease-bounce) backwards;
+    /* .photobooth-overlay centers this with 5vw padding top+bottom — without
+       a max-height+overflow, content taller than the viewport (e.g. Trivia
+       Break's end-of-game recap list) overflows the flex box invisibly on
+       both ends with no way to scroll to it, hiding the actual CTA button. */
+    max-height:calc(100vh - 10vw); overflow-y:auto;
   }
   @keyframes modalPopIn{ from{ transform:scale(0.9) translateY(10px); opacity:0; } to{ transform:scale(1) translateY(0); opacity:1; } }
   .photobooth-header{
@@ -1955,8 +1998,9 @@
 <div class="photobooth-overlay" id="trivia-overlay" hidden>
   <div class="photobooth-card" style="max-width:440px; position:relative;">
     <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeTriviaBreak()">&times;</span>
-    <div class="photobooth-header" style="justify-content:center;">
+    <div class="photobooth-header" style="justify-content:space-between; padding-right:30px;">
       <span>🧠 Trivia Break</span>
+      <button type="button" class="trivia-change-category-btn" onclick="renderTriviaCategoryPicker()">🔀 Category</button>
     </div>
     <div id="trivia-body"><div class="trivia-empty">Getting your question ready…</div></div>
   </div>
@@ -2490,6 +2534,13 @@
       mode: row.mode,
       initiatorProfileId: row.initiator_profile_id,
       roundNumber: row.round_number,
+      // Mirrors trivia/index.ts's serializeRound() computation exactly —
+      // purely derived from round_number, not a DB column, so a realtime
+      // row (which has no such field) needs it computed here too.
+      questionInGame: ((row.round_number - 1) % 5) + 1,
+      gameNumber: Math.ceil(row.round_number / 5),
+      category: row.category,
+      difficulty: row.difficulty,
       questionType: row.question_type,
       questionText: row.question_text,
       choices: row.choices,
@@ -2501,6 +2552,10 @@
       explanation: row.explanation ?? null,
       winnerProfileId: row.winner_profile_id ?? null,
       xpAwarded: row.xp_awarded ?? null,
+      gameCorrectCount: row.game_correct_count ?? null,
+      gameLeveledUp: row.game_leveled_up ?? null,
+      gameNewDifficulty: row.game_new_difficulty ?? null,
+      gameSummary: row.game_summary ?? null,
       createdAt: row.created_at,
       resolvedAt: row.resolved_at ?? null,
     };
@@ -2525,20 +2580,46 @@
       buzzes: activeTriviaBuzzes,
       myProfileId: currentSession?.user?.id,
       resolveName: memberNameById,
+      midAdventure: !!activeAdventure,
     }, {
       onBuzzRef: 'triviaBuzzIn',
       onAnswerRef: 'triviaSubmitAnswer',
       onNextRef: 'triviaNextQuestion',
+      onSuggestAdventureRef: 'triviaSuggestAdventure',
     });
   }
 
-  async function startTriviaRound(mode) {
-    if (!activeAdventure) return;
-    const { res, data } = await postTrivia('startRound', {
-      partyId: activeAdventure.partyId,
-      adventureId: activeAdventure.adventureId,
-      mode,
-    });
+  // Maps a trivia category back to the real-venue adventure theme that
+  // matches its vibe (the inverse of triviaGenerator.ts's
+  // VENUE_THEME_TO_CATEGORY) — used only for the win-card "start a themed
+  // adventure" suggestion below, never for question selection itself.
+  const TRIVIA_CATEGORY_TO_THEME = {
+    dogs: 'dog_friendly',
+    great_outdoors: 'outdoor',
+    curiosities: 'oddities',
+    food_for_thought: 'foodie_tour',
+    after_hours: 'after_hours',
+    wtf: 'the_challenge',
+  };
+
+  async function startTriviaRound(mode, categoryOverride) {
+    let partyId, adventureId;
+    if (activeAdventure) {
+      partyId = activeAdventure.partyId;
+      adventureId = activeAdventure.adventureId;
+    } else {
+      try {
+        partyId = await ensurePartyId();
+      } catch (e) {
+        document.getElementById('trivia-body').innerHTML =
+          `<div class="trivia-empty">${String(e.message || 'Could not start trivia right now.').replace(/</g, '&lt;')}</div>`;
+        return;
+      }
+      adventureId = null;
+    }
+    const body = { partyId, adventureId, mode };
+    if (categoryOverride) body.category = categoryOverride;
+    const { res, data } = await postTrivia('startRound', body);
     if (!res.ok) {
       document.getElementById('trivia-body').innerHTML =
         `<div class="trivia-empty">${(data.error || 'Could not start trivia right now.').replace(/</g, '&lt;')}</div>`;
@@ -2550,36 +2631,90 @@
     armTriviaTimeout();
   }
 
-  // Trivia needs activeAdventure.routeId to generate questions (unlike The
-  // Flip, which needs no adventure context at all) — question content is
-  // generated live from whatever route the party is currently playing (see
-  // trivia/index.ts's loadRouteContent), so there's nothing to ask about
-  // without one. mode defaults to group whenever more than one party
-  // member is around, solo otherwise — same "who's actually here" signal
-  // renderPartyRoster already tracks via partyRosterCache.
-  window.openTriviaBreak = async function () {
-    if (!activeAdventure) {
-      document.getElementById('trivia-body').innerHTML =
-        '<div class="trivia-empty">Start an adventure first — Trivia Break plays off your current stops.</div>';
-      document.getElementById('trivia-overlay').removeAttribute('hidden');
-      return;
+  // Default game state (no category chosen yet) — shown when there's no
+  // active adventure to auto-pick a category from, and reachable anytime
+  // via the "Change Category" header button so a mid-adventure player can
+  // override the auto-picked category too.
+  function renderTriviaCategoryPicker() {
+    clearTimeout(triviaAnswerTimer);
+    activeTriviaRound = null;
+    activeTriviaBuzzes = [];
+    const labels = (window.MusoTrivia && window.MusoTrivia.CATEGORY_LABELS) || {};
+    const keys = Object.keys(labels);
+    const introText = activeAdventure
+      ? 'Pick a category to play:'
+      : "No adventure going yet. Pick a category for a quick round, or start an adventure and trivia will match its theme automatically.";
+    document.getElementById('trivia-body').innerHTML = `
+      <div class="trivia-empty" style="margin-bottom:12px;">${introText}</div>
+      <div class="trivia-category-grid">
+        ${keys.map((k) => `<button type="button" class="trivia-category-btn" onclick="chooseTriviaCategory('${k}')">${labels[k]}</button>`).join('')}
+      </div>
+    `;
+  }
+
+  window.chooseTriviaCategory = function (key) {
+    const mode = activeAdventure && (partyRosterCache.members || []).length > 1 ? 'group' : 'solo';
+    document.getElementById('trivia-body').innerHTML = '<div class="trivia-empty">Getting your question ready…</div>';
+    startTriviaRound(mode, key);
+  };
+
+  // Suggests the real-venue adventure matching whatever category was just
+  // played, shown on the game-over card only when there's no active
+  // adventure already (see assets/trivia.js's render()).
+  window.triviaSuggestAdventure = function (category) {
+    const theme = TRIVIA_CATEGORY_TO_THEME[category];
+    closeTriviaBreak();
+    if (theme) {
+      beginAdventureCountdown(theme);
+    } else {
+      showView('adventures');
     }
+  };
+
+  // mode defaults to group whenever more than one party member is around,
+  // solo otherwise — same "who's actually here" signal renderPartyRoster
+  // already tracks via partyRosterCache. With no active adventure, there's
+  // no roster to check (freeplay is always solo) and no theme to
+  // auto-resolve a category from, so the category picker becomes the
+  // default starting screen instead of blocking outright.
+  window.openTriviaBreak = async function () {
     document.getElementById('trivia-body').innerHTML = '<div class="trivia-empty">Getting your question ready…</div>';
     document.getElementById('trivia-overlay').removeAttribute('hidden');
 
-    const mode = (partyRosterCache.members || []).length > 1 ? 'group' : 'solo';
-    const { res, data } = await postTrivia('getActiveRound', {
-      partyId: activeAdventure.partyId,
-      adventureId: activeAdventure.adventureId,
-      mode,
-    });
+    if (activeAdventure) {
+      const mode = (partyRosterCache.members || []).length > 1 ? 'group' : 'solo';
+      const { res, data } = await postTrivia('getActiveRound', {
+        partyId: activeAdventure.partyId,
+        adventureId: activeAdventure.adventureId,
+        mode,
+      });
+      if (res.ok && data.round) {
+        activeTriviaRound = data.round;
+        activeTriviaBuzzes = data.buzzes || [];
+        renderTrivia();
+        armTriviaTimeout();
+      } else {
+        await startTriviaRound(mode);
+      }
+      return;
+    }
+
+    let partyId;
+    try {
+      partyId = await ensurePartyId();
+    } catch (e) {
+      document.getElementById('trivia-body').innerHTML =
+        `<div class="trivia-empty">${String(e.message || 'Could not load trivia right now.').replace(/</g, '&lt;')}</div>`;
+      return;
+    }
+    const { res, data } = await postTrivia('getActiveRound', { partyId, adventureId: null, mode: 'solo' });
     if (res.ok && data.round) {
       activeTriviaRound = data.round;
       activeTriviaBuzzes = data.buzzes || [];
       renderTrivia();
       armTriviaTimeout();
     } else {
-      await startTriviaRound(mode);
+      renderTriviaCategoryPicker();
     }
   };
 
@@ -3333,12 +3468,12 @@
       desc: 'Flip the official Adventure Coin to make the call: who goes first, what you eat, which turn to take. Free plays each adventure, then keep it going with Adventure Coins.',
     },
     {
-      key: 'photo_challenge', icon: 'photo_challenge.png', title: 'Photo Challenge', tagline: 'Snap the prompt, earn coins', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
-      desc: 'A themed photo prompt at your current stop. Snap it, submit it, earn bonus coins.',
+      key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', tagline: 'Quick trivia, bonus XP', lockedHint: 'Unlocks after your first check-in',
+      desc: 'Pick a category and answer fast for bonus XP. Play anytime, or let it match whatever adventure you\'re currently on.',
     },
     {
-      key: 'trivia', icon: 'trivia_break.png', title: 'Trivia Break', tagline: 'Quick trivia, bonus XP', lockedHint: 'Unlocks after your first check-in',
-      desc: 'A quick round of adventure and venue trivia between stops. Answer fast for bonus XP.',
+      key: 'photo_challenge', icon: 'photo_challenge.png', title: 'Photo Challenge', tagline: 'Snap the prompt, earn coins', lockedHint: 'Free at Level 4, or unlock for coins', cost: 150,
+      desc: 'A themed photo prompt at your current stop. Snap it, submit it, earn bonus coins.',
     },
     {
       key: 'spot_it', icon: 'spot_it.png', title: 'Spot It', tagline: 'Spot it before your party does', lockedHint: 'Coming soon',

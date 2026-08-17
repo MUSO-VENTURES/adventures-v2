@@ -1,45 +1,48 @@
-// Trivia Break — pure question-generation logic for the trivia edge
-// function. Kept framework-free (no Deno/Supabase imports, no fetch), same
-// "unit test with a plain Node/Deno test runner as well as inside the edge
-// function" shape as nextStopNotification.ts.
+// Trivia Break — curated question bank + category/difficulty selection
+// logic for the trivia edge function. Kept framework-free (no Deno/
+// Supabase imports, no fetch) so it can be unit tested in isolation the
+// same way nextStopNotification.ts is.
 //
-// Templates are built entirely from data already in the schema
-// (route_stops/venues/venue_reviews, fed in via RouteContent) — no per-
-// adventure hardcoding, so any new curated route or real-venue adventure
-// works automatically the moment it exists, purely because it's queryable.
+// v2 of this file: the original version generated questions live from the
+// CURRENT adventure's own route_stops/venues/venue_reviews ("which venue
+// is at stop 3?", "what's the name of this adventure?"). That played fine
+// mechanically but read as flat and repetitive — trivia about logistics,
+// not actually fun trivia. This version replaces that entirely with six
+// fixed, curated categories (Underdogs, Great Outdoors, Curiosities,
+// Food for Thought, After Hours, WTF?!), each with 30 questions per
+// difficulty tier. The category itself is chosen automatically from
+// whatever adventure theme the party is currently playing (see
+// VENUE_THEME_TO_CATEGORY below) rather than asked of the player, so
+// there's no extra picker screen — Trivia Break just matches the vibe of
+// tonight's adventure. See QUESTIONS_PER_GAME/nextDifficulty below for how
+// difficulty is actually paced now — a whole 5-question game at one tier,
+// not a ramp within a session.
 //
-// Swap point for a future LLM-backed generator: implement the same
-// TriviaGenerator interface (e.g. llmGenerator.generate(input, count)) and
-// change ONE call site in trivia/index.ts's startRound action. Nothing else
-// in the schema, the edge function's action dispatch, or the frontend needs
-// to know which generator produced a question — that's already opaque
-// behind trivia_rounds.source ('template' | 'fallback' | future 'llm').
+// Content provenance: Food for Thought was bootstrapped from a free,
+// no-auth trivia API (The Trivia API's food_and_drink category) and
+// copied in statically here rather than called live, so the game never
+// depends on a third party's uptime. Underdogs, Great Outdoors,
+// Curiosities, After Hours, and WTF?! are all original, hand-written
+// questions — the first three started life pulled from Open Trivia
+// Database (Animals/Geography/Science & Nature) but that content drifted
+// off-theme badly enough on inspection (generic animal trivia with almost
+// nothing about dogs; world-capital trivia with nothing about hiking or
+// nature; periodic-table trivia with nothing "curious" about it) that all
+// three got rewritten from scratch to actually match their category:
+// Underdogs is strictly K9-only, Great Outdoors is genuinely about trails/
+// camping/national parks/nature, and Curiosities leans into "curiosity
+// shop, weird museum, a little strange in a good way" territory (the
+// Oddities adventure theme's own description) rather than a science exam.
 
-export interface StopContent {
-  id: string;
-  stopOrder: number;
-  name: string;
-  description: string | null;
-  emoji: string | null;
-  isMystery: boolean;
-  venue: null | {
-    name: string;
-    category: string | null;
-    address: string | null;
-    musoRating: number | null;
-    musoRatingCount: number;
-  };
-  reviews: Array<{ rating: number; reviewText: string | null }>;
-}
+export type TriviaCategory =
+  | "dogs"
+  | "great_outdoors"
+  | "curiosities"
+  | "food_for_thought"
+  | "after_hours"
+  | "wtf";
 
-export interface RouteContent {
-  routeId: string;
-  routeTitle: string;
-  stops: StopContent[]; // revealed stops only (is_mystery=false), sorted by stopOrder
-  distractorStopNames: string[]; // padding pool pulled from OTHER routes, for thin routes
-  distractorRouteTitles: string[];
-  distractorEmojis: string[];
-}
+export type TriviaDifficulty = "easy" | "medium" | "hard";
 
 export interface TriviaQuestionChoice {
   key: string;
@@ -47,308 +50,672 @@ export interface TriviaQuestionChoice {
 }
 
 export interface TriviaQuestion {
-  questionType: string;
   questionText: string;
   choices: TriviaQuestionChoice[];
   correctChoiceKey: string;
   explanation: string | null;
-  source?: "template" | "fallback";
 }
 
-export interface TriviaGenerator {
-  generate(input: RouteContent, count: number): TriviaQuestion[];
-}
+// Maps a route's venue_theme (routes.venue_theme, see 0022_wine_country_
+// adventure.sql and REAL_VENUE_ADVENTURE_THEMES in preview/index.html) to
+// the trivia category that matches its vibe. wine_country and foodie_tour
+// both land on Food for Thought (both are food/drink-centric). the_challenge
+// (bowling/mini golf/axe throwing/go-karts/arcades) doesn't fit any of the
+// other five, so it's routed to the wildcard category alongside the
+// untethered "Fork in the Road" theme (venue_theme null) and any curated
+// (non real-venue) route, which has no venue_theme concept at all.
+export const VENUE_THEME_TO_CATEGORY: Record<string, TriviaCategory> = {
+  dog_friendly: "dogs",
+  outdoor: "great_outdoors",
+  oddities: "curiosities",
+  foodie_tour: "food_for_thought",
+  wine_country: "food_for_thought",
+  after_hours: "after_hours",
+  the_challenge: "wtf",
+};
 
-const CHOICE_KEYS = ["A", "B", "C", "D"];
+export const DEFAULT_CATEGORY: TriviaCategory = "wtf";
 
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-function pickOne<T>(arr: T[]): T | null {
-  if (!arr.length) return null;
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-// Builds a shuffled, deduped, at-most-4-choice set with the correct answer
-// placed at a random position. Returns null if there isn't enough distinct
-// material for at least 2 total choices (a question with only 1 possible
-// answer isn't trivia, it's a statement).
-function buildChoices(
-  correctText: string,
-  wrongCandidates: string[],
-  desiredCount = 4,
-): { choices: TriviaQuestionChoice[]; correctChoiceKey: string } | null {
-  const seen = new Set([correctText]);
-  const wrong: string[] = [];
-  for (const c of shuffle(wrongCandidates)) {
-    if (seen.has(c)) continue;
-    seen.add(c);
-    wrong.push(c);
-    if (wrong.length >= desiredCount - 1) break;
-  }
-  if (wrong.length < 1) return null;
-
-  const texts = shuffle([correctText, ...wrong]);
-  const choices = texts.map((text, i) => ({ key: CHOICE_KEYS[i], text }));
-  const correctChoiceKey = choices.find((c) => c.text === correctText)!.key;
-  return { choices, correctChoiceKey };
-}
-
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max).trimEnd() + "…";
-}
-
-// ---------------------------------------------------------------
-// Templates — each pushes 0 or 1 question, skipping silently when the
-// route doesn't have enough of the source material it needs.
-// ---------------------------------------------------------------
-
-function pushVenueCategoryMatch(pool: TriviaQuestion[], input: RouteContent) {
-  const candidates = input.stops.filter((s) => s.venue?.category);
-  const target = pickOne(candidates);
-  if (!target || !target.venue?.category) return;
-
-  const wrongNames = [
-    ...input.stops.filter((s) => s.id !== target.id).map((s) => s.name),
-    ...input.distractorStopNames,
-  ];
-  const built = buildChoices(target.name, wrongNames);
-  if (!built) return;
-
-  pool.push({
-    questionType: "venue_category_match",
-    questionText: `Which stop on this adventure is a ${target.venue.category}?`,
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: `${target.name} is the ${target.venue.category} stop.`,
-  });
-}
-
-function pushVenueNameAtOrder(pool: TriviaQuestion[], input: RouteContent) {
-  const candidates = input.stops.filter((s) => s.venue?.name);
-  const target = pickOne(candidates);
-  if (!target || !target.venue?.name) return;
-
-  const wrongNames = [
-    ...input.stops.filter((s) => s.id !== target.id && s.venue?.name).map((s) => s.venue!.name),
-    ...input.distractorStopNames,
-  ];
-  const built = buildChoices(target.venue.name, wrongNames);
-  if (!built) return;
-
-  pool.push({
-    questionType: "venue_name_at_order",
-    questionText: `What's the name of the venue at stop ${target.stopOrder} on this adventure?`,
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: `Stop ${target.stopOrder} is ${target.venue.name}.`,
-  });
-}
-
-function pushRatingTrueFalse(pool: TriviaQuestion[], input: RouteContent) {
-  const candidates = input.stops.filter(
-    (s) => s.venue?.musoRating != null && (s.venue?.musoRatingCount ?? 0) > 0,
-  );
-  const target = pickOne(candidates);
-  if (!target || target.venue?.musoRating == null) return;
-
-  const actual = target.venue.musoRating;
-  const rounded = Math.round(actual);
-  const offset = Math.random() < 0.5 ? -1 : 1;
-  const threshold = Math.min(9, Math.max(1, rounded + offset));
-  const isAboveTrue = actual > threshold;
-
-  pool.push({
-    questionType: "rating_true_false",
-    questionText: `True or False: ${target.venue.name} has a MUSO rating above ${threshold}/10.`,
-    choices: [
-      { key: "A", text: "True" },
-      { key: "B", text: "False" },
-    ],
-    correctChoiceKey: isAboveTrue ? "A" : "B",
-    explanation: `${target.venue.name} has a MUSO rating of ${actual}/10.`,
-  });
-}
-
-function pushStopOrderPosition(pool: TriviaQuestion[], input: RouteContent) {
-  if (input.stops.length < 2) return;
-  const i = Math.floor(Math.random() * (input.stops.length - 1));
-  const ref = input.stops[i];
-  const next = input.stops[i + 1];
-
-  const wrongNames = [
-    ...input.stops.filter((s) => s.id !== ref.id && s.id !== next.id).map((s) => s.name),
-    ...input.distractorStopNames,
-  ];
-  const built = buildChoices(next.name, wrongNames);
-  if (!built) return;
-
-  pool.push({
-    questionType: "stop_order_position",
-    questionText: `Which stop comes right after ${ref.name} on this adventure?`,
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: `${next.name} follows ${ref.name}.`,
-  });
-}
-
-function pushReviewIdentifiesStop(pool: TriviaQuestion[], input: RouteContent) {
-  const candidates = input.stops.filter((s) => s.reviews.some((r) => r.reviewText));
-  const target = pickOne(candidates);
-  if (!target) return;
-  const review = pickOne(target.reviews.filter((r) => r.reviewText));
-  if (!review?.reviewText) return;
-
-  const wrongNames = [
-    ...input.stops.filter((s) => s.id !== target.id).map((s) => s.name),
-    ...input.distractorStopNames,
-  ];
-  const built = buildChoices(target.name, wrongNames);
-  if (!built) return;
-
-  pool.push({
-    questionType: "review_identifies_stop",
-    questionText: `A player left this review: "${truncate(review.reviewText, 80)}" Which stop is that about?`,
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: `That review was left for ${target.name}.`,
-  });
-}
-
-function pushRouteTitleMatch(pool: TriviaQuestion[], input: RouteContent) {
-  const built = buildChoices(input.routeTitle, input.distractorRouteTitles);
-  if (!built) return;
-
-  pool.push({
-    questionType: "route_title_match",
-    questionText: "What's the name of this adventure?",
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: null,
-  });
-}
-
-function pushEmojiMatch(pool: TriviaQuestion[], input: RouteContent) {
-  const candidates = input.stops.filter((s) => s.emoji);
-  const target = pickOne(candidates);
-  if (!target?.emoji) return;
-
-  const wrongEmojis = [
-    ...input.stops.filter((s) => s.id !== target.id && s.emoji).map((s) => s.emoji!),
-    ...input.distractorEmojis,
-  ];
-  const built = buildChoices(target.emoji, wrongEmojis);
-  if (!built) return;
-
-  pool.push({
-    questionType: "emoji_match",
-    questionText: `Which emoji represents "${target.name}" on this adventure?`,
-    choices: built.choices,
-    correctChoiceKey: built.correctChoiceKey,
-    explanation: null,
-  });
-}
-
-// ---------------------------------------------------------------
-// Fallback bank — fresh, original general adventure/venue-going-out
-// trivia, used only when even distractor-padded templates can't produce
-// enough questions (e.g. a brand-new real-venue route with exactly one
-// revealed stop, no category, no rating, no reviews).
-// ---------------------------------------------------------------
-
-export const FALLBACK_QUESTION_BANK: TriviaQuestion[] = [
-  { questionType: "fallback_general", questionText: "In a classic wine flight, how many pours do you typically get?",
-    choices: [{ key: "A", text: "2" }, { key: "B", text: "4" }, { key: "C", text: "8" }, { key: "D", text: "12" }],
-    correctChoiceKey: "B", explanation: "Most tasting flights pour 4 small samples.", source: "fallback" },
-  { questionType: "fallback_general", questionText: "What spirit is the base of a classic Old Fashioned?",
-    choices: [{ key: "A", text: "Vodka" }, { key: "B", text: "Gin" }, { key: "C", text: "Whiskey" }, { key: "D", text: "Rum" }],
-    correctChoiceKey: "C", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In cornhole, how many points does landing a bag ON the board score?",
-    choices: [{ key: "A", text: "1" }, { key: "B", text: "2" }, { key: "C", text: "3" }, { key: "D", text: "5" }],
-    correctChoiceKey: "A", explanation: "A bag through the hole scores 3; on the board scores 1.", source: "fallback" },
-  { questionType: "fallback_general", questionText: "What does a sommelier primarily specialize in?",
-    choices: [{ key: "A", text: "Cheese" }, { key: "B", text: "Wine" }, { key: "C", text: "Coffee" }, { key: "D", text: "Chocolate" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In karaoke, what does the on-screen bar usually track?",
-    choices: [{ key: "A", text: "Tempo" }, { key: "B", text: "Lyrics timing" }, { key: "C", text: "Volume" }, { key: "D", text: "Key change" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "What's the standard par for one hole on a mini golf course?",
-    choices: [{ key: "A", text: "1" }, { key: "B", text: "2" }, { key: "C", text: "3" }, { key: "D", text: "5" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In an escape room, what's the most common time limit?",
-    choices: [{ key: "A", text: "15 minutes" }, { key: "B", text: "30 minutes" }, { key: "C", text: "60 minutes" }, { key: "D", text: "3 hours" }],
-    correctChoiceKey: "C", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: 'True or False: a "flight" at a brewery means a sampler of several small beers.',
-    choices: [{ key: "A", text: "True" }, { key: "B", text: "False" }],
-    correctChoiceKey: "A", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "What is the traditional garnish on a classic martini?",
-    choices: [{ key: "A", text: "Lime wheel" }, { key: "B", text: "Olive" }, { key: "C", text: "Cherry" }, { key: "D", text: "Mint sprig" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In axe throwing, what's the center ring usually called?",
-    choices: [{ key: "A", text: "Bullseye" }, { key: "B", text: "The kill zone" }, { key: "C", text: "Clutch" }, { key: "D", text: "Blue horse" }],
-    correctChoiceKey: "A", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In ten-pin bowling, what's it called when you knock down all ten pins on your first roll?",
-    choices: [{ key: "A", text: "Spare" }, { key: "B", text: "Strike" }, { key: "C", text: "Turkey" }, { key: "D", text: "Split" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "Three strikes in a row in bowling is called a...?",
-    choices: [{ key: "A", text: "Hat trick" }, { key: "B", text: "Turkey" }, { key: "C", text: "Triple play" }, { key: "D", text: "Trifecta" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "What's the typical steeping time for a standard black tea?",
-    choices: [{ key: "A", text: "30 seconds" }, { key: "B", text: "1 minute" }, { key: "C", text: "3-5 minutes" }, { key: "D", text: "15 minutes" }],
-    correctChoiceKey: "C", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In a classic board game cafe, what's usually charged for a table?",
-    choices: [{ key: "A", text: "Per game rented" }, { key: "B", text: "Cover charge or hourly fee" }, { key: "C", text: "Nothing, it's free" }, { key: "D", text: "Per player, per win" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "At a comedy club, what's the term for a comedian's opening set before the headliner?",
-    choices: [{ key: "A", text: "Warm-up" }, { key: "B", text: "Feature" }, { key: "C", text: "Opener" }, { key: "D", text: "Closer" }],
-    correctChoiceKey: "C", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "True or False: most food trucks accept only cash.",
-    choices: [{ key: "A", text: "True" }, { key: "B", text: "False" }],
-    correctChoiceKey: "B", explanation: "Most modern food trucks take cards or mobile pay too.", source: "fallback" },
-  { questionType: "fallback_general", questionText: "What's a common rule at dog-friendly patios?",
-    choices: [{ key: "A", text: "Dogs must stay on a leash" }, { key: "B", text: "Dogs eat free" }, { key: "C", text: "Dogs must wear shoes" }, { key: "D", text: "Only puppies allowed" }],
-    correctChoiceKey: "A", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "In an arcade, what do you typically trade tickets for?",
-    choices: [{ key: "A", text: "More tokens" }, { key: "B", text: "Prizes" }, { key: "C", text: "Free games" }, { key: "D", text: "Nothing, they're just for scorekeeping" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: 'A "flight" of cocktails typically means...?',
-    choices: [{ key: "A", text: "One large cocktail" }, { key: "B", text: "A set of small tastes of several cocktails" }, { key: "C", text: "A cocktail served in a plane cup" }, { key: "D", text: "A round for the whole table" }],
-    correctChoiceKey: "B", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "What's the usual minimum age for most late-night/after-hours bar venues?",
-    choices: [{ key: "A", text: "16" }, { key: "B", text: "18" }, { key: "C", text: "21" }, { key: "D", text: "25" }],
-    correctChoiceKey: "C", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "On a scavenger hunt, what's another common name for a hidden checkpoint?",
-    choices: [{ key: "A", text: "A clue stop" }, { key: "B", text: "A finish line" }, { key: "C", text: "A base camp" }, { key: "D", text: "A rest stop" }],
-    correctChoiceKey: "A", explanation: null, source: "fallback" },
-  { questionType: "fallback_general", questionText: "What's the classic first step before starting most outdoor group hikes?",
-    choices: [{ key: "A", text: "A trail briefing / warm-up" }, { key: "B", text: "A cooldown stretch" }, { key: "C", text: "A group photo at the finish" }, { key: "D", text: "Nothing, you just start walking" }],
-    correctChoiceKey: "A", explanation: null, source: "fallback" },
+// Single source of truth for "which category strings are valid" — used by
+// trivia/index.ts to validate a client-supplied category (freeplay mode, or
+// the mid-adventure "change category" override), since TriviaCategory is a
+// type and doesn't exist at runtime.
+export const TRIVIA_CATEGORIES: TriviaCategory[] = [
+  "dogs", "great_outdoors", "curiosities", "food_for_thought", "after_hours", "wtf",
 ];
 
-function pickFallback(count: number): TriviaQuestion[] {
-  return shuffle(FALLBACK_QUESTION_BANK).slice(0, Math.max(0, count));
+export function resolveCategory(venueTheme: string | null | undefined): TriviaCategory {
+  if (venueTheme && VENUE_THEME_TO_CATEGORY[venueTheme]) return VENUE_THEME_TO_CATEGORY[venueTheme];
+  return DEFAULT_CATEGORY;
 }
 
-function generate(input: RouteContent, count: number): TriviaQuestion[] {
-  const pool: TriviaQuestion[] = [];
-  pushVenueCategoryMatch(pool, input);
-  pushVenueNameAtOrder(pool, input);
-  pushRatingTrueFalse(pool, input);
-  pushStopOrderPosition(pool, input);
-  pushReviewIdentifiesStop(pool, input);
-  pushRouteTitleMatch(pool, input);
-  pushEmojiMatch(pool, input);
+// Games are fixed-length: 5 questions, played entirely at one difficulty
+// tier (see trivia/index.ts and trivia_progress, 0044_trivia_games_and_
+// leveling.sql). A party starts at 'easy'; going a perfect 5/5 advances
+// their NEXT game a tier via nextDifficulty() below. There's no
+// ramping-within-a-game anymore (that was the old resolveDifficulty(
+// roundNumber) behavior) and no demotion on a bad score — only a perfect
+// game ever changes the tier.
+export const QUESTIONS_PER_GAME = 5;
 
-  const shuffled = shuffle(pool);
-  if (shuffled.length >= count) return shuffled.slice(0, count);
-  return [...shuffled, ...pickFallback(count - shuffled.length)];
+export function nextDifficulty(current: TriviaDifficulty): TriviaDifficulty {
+  if (current === "easy") return "medium";
+  if (current === "medium") return "hard";
+  return "hard"; // already at the ceiling
 }
 
-export const templateGenerator: TriviaGenerator = { generate };
+// Picks a random question from the category+difficulty bucket, excluding
+// question text already asked this session (see trivia/index.ts's
+// startRound, which passes in this party+adventure's prior question_text
+// values) so a long trivia binge doesn't immediately repeat. Falls back to
+// the full bucket (allowing a repeat) once every question in it has been
+// used, rather than erroring — better than trivia just stopping.
+export function pickQuestion(
+  category: TriviaCategory,
+  difficulty: TriviaDifficulty,
+  excludeQuestionTexts: string[] = [],
+): TriviaQuestion {
+  const bucket = TRIVIA_BANK[category][difficulty];
+  const exclude = new Set(excludeQuestionTexts);
+  const fresh = bucket.filter((q) => !exclude.has(q.questionText));
+  const pool = fresh.length ? fresh : bucket;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+type CategoryBank = Record<TriviaDifficulty, TriviaQuestion[]>;
+
+export const TRIVIA_BANK: Record<TriviaCategory, CategoryBank> = {
+  dogs: {
+    easy: [
+      { questionText: 'What do you call a baby dog?', choices: [{ key: 'A', text: 'A kit' }, { key: 'B', text: 'A cub' }, { key: 'C', text: 'A joey' }, { key: 'D', text: 'A puppy' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which sense is a dog\'s strongest?', choices: [{ key: 'A', text: 'Taste' }, { key: 'B', text: 'Hearing' }, { key: 'C', text: 'Smell' }, { key: 'D', text: 'Sight' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call a group of dogs?', choices: [{ key: 'A', text: 'A herd' }, { key: 'B', text: 'A litter' }, { key: 'C', text: 'A flock' }, { key: 'D', text: 'A pack' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which breed is a classic guide dog for the visually impaired?', choices: [{ key: 'A', text: 'Chihuahua' }, { key: 'B', text: 'Dachshund' }, { key: 'C', text: 'Labrador Retriever' }, { key: 'D', text: 'Pug' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'About how many teeth does an adult dog typically have?', choices: [{ key: 'A', text: '32' }, { key: 'B', text: '20' }, { key: 'C', text: '60' }, { key: 'D', text: '42' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do you call a dog that is a mix of multiple breeds?', choices: [{ key: 'A', text: 'A purebred' }, { key: 'B', text: 'A runt' }, { key: 'C', text: 'A stray' }, { key: 'D', text: 'A mutt' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which of these is the smallest dog breed?', choices: [{ key: 'A', text: 'Poodle' }, { key: 'B', text: 'Beagle' }, { key: 'C', text: 'Chihuahua' }, { key: 'D', text: 'Boxer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Since dogs barely sweat, what\'s their main way of cooling down?', choices: [{ key: 'A', text: 'Shivering' }, { key: 'B', text: 'Yawning' }, { key: 'C', text: 'Panting' }, { key: 'D', text: 'Sneezing' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which dog breed has a distinctive black-and-white spotted coat?', choices: [{ key: 'A', text: 'Dalmatian' }, { key: 'B', text: 'Beagle' }, { key: 'C', text: 'Boxer' }, { key: 'D', text: 'Bulldog' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What do dogs use their tails for, besides balance?', choices: [{ key: 'A', text: 'Cooling down' }, { key: 'B', text: 'Digging' }, { key: 'C', text: 'Communicating emotion' }, { key: 'D', text: 'Steering while running' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is a common dog command taught first to puppies?', choices: [{ key: 'A', text: 'Speak' }, { key: 'B', text: 'Roll over' }, { key: 'C', text: 'Fetch' }, { key: 'D', text: 'Sit' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "litter" of puppies?', choices: [{ key: 'A', text: 'A type of dog bed' }, { key: 'B', text: 'A dog\'s favorite toys' }, { key: 'C', text: 'A group of adult dogs' }, { key: 'D', text: 'Puppies born together from the same mother' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which breed is known for its extremely long, droopy ears?', choices: [{ key: 'A', text: 'Boxer' }, { key: 'B', text: 'Poodle' }, { key: 'C', text: 'Basset Hound' }, { key: 'D', text: 'Chihuahua' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call a dog trained to assist people with disabilities?', choices: [{ key: 'A', text: 'A watch dog' }, { key: 'B', text: 'A lap dog' }, { key: 'C', text: 'A show dog' }, { key: 'D', text: 'A service dog' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which of these breeds is often cited as especially good with families and kids?', choices: [{ key: 'A', text: 'Golden Retriever' }, { key: 'B', text: 'Chihuahua' }, { key: 'C', text: 'Akita' }, { key: 'D', text: 'Chow Chow' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the term for a dog\'s father?', choices: [{ key: 'A', text: 'Pup' }, { key: 'B', text: 'Sire' }, { key: 'C', text: 'Whelp' }, { key: 'D', text: 'Dam' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'About how old are puppies when their eyes first open?', choices: [{ key: 'A', text: 'At birth' }, { key: 'B', text: 'About 2 days' }, { key: 'C', text: 'About 2 months' }, { key: 'D', text: 'About 2 weeks' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which breed is often used as a police or military working dog?', choices: [{ key: 'A', text: 'Poodle' }, { key: 'B', text: 'Shih Tzu' }, { key: 'C', text: 'German Shepherd' }, { key: 'D', text: 'Pug' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is it called when a dog play-bows (front down, rear up) to another dog?', choices: [{ key: 'A', text: 'A submission signal' }, { key: 'B', text: 'A stretching exercise' }, { key: 'C', text: 'A sign of aggression' }, { key: 'D', text: 'An invitation to play' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What best describes a "rescue dog"?', choices: [{ key: 'A', text: 'A dog adopted from a shelter or rescue organization' }, { key: 'B', text: 'A dog trained to perform rescues' }, { key: 'C', text: 'A dog that ran away and was found' }, { key: 'D', text: 'A wild dog' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a dog\'s cold, wet nose primarily good for?', choices: [{ key: 'A', text: 'Helping it smell more effectively' }, { key: 'B', text: 'Detecting light' }, { key: 'C', text: 'Nothing in particular' }, { key: 'D', text: 'Regulating body temperature only' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which breed is easily recognized by its blue-black tongue?', choices: [{ key: 'A', text: 'Chow Chow' }, { key: 'B', text: 'Boxer' }, { key: 'C', text: 'Beagle' }, { key: 'D', text: 'Poodle' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which dog breed is famous for search-and-rescue work in the snow, historically used by Swiss monks?', choices: [{ key: 'A', text: 'Dalmatian' }, { key: 'B', text: 'Beagle' }, { key: 'C', text: 'Poodle' }, { key: 'D', text: 'Saint Bernard' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a dog\'s "undercoat"?', choices: [{ key: 'A', text: 'A show-competition outfit' }, { key: 'B', text: 'A puppy\'s first coat before shedding' }, { key: 'C', text: 'A soft layer of fur beneath the visible outer coat' }, { key: 'D', text: 'A dog raincoat' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these breeds does NOT typically shed much, often called "hypoallergenic"?', choices: [{ key: 'A', text: 'German Shepherd' }, { key: 'B', text: 'Poodle' }, { key: 'C', text: 'Labrador Retriever' }, { key: 'D', text: 'Golden Retriever' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Burying bones is considered what kind of dog behavior?', choices: [{ key: 'A', text: 'A trained trick' }, { key: 'B', text: 'Random play' }, { key: 'C', text: 'An instinctual behavior from wild ancestors' }, { key: 'D', text: 'A sign of illness' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is a toy dog breed, bred mainly as a companion?', choices: [{ key: 'A', text: 'Mastiff' }, { key: 'B', text: 'Great Dane' }, { key: 'C', text: 'Rottweiler' }, { key: 'D', text: 'Pomeranian' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does it usually mean when a dog\'s ears are pinned back flat against its head?', choices: [{ key: 'A', text: 'Excitement' }, { key: 'B', text: 'Curiosity' }, { key: 'C', text: 'Fear or submission' }, { key: 'D', text: 'Hunger' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which breed is known for herding sheep and cattle on farms?', choices: [{ key: 'A', text: 'Shih Tzu' }, { key: 'B', text: 'Pug' }, { key: 'C', text: 'Border Collie' }, { key: 'D', text: 'Bulldog' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'About how many weeks old are puppies typically ready to leave their mother and littermates?', choices: [{ key: 'A', text: 'About 8 weeks' }, { key: 'B', text: 'About 2 weeks' }, { key: 'C', text: 'About 20 weeks' }, { key: 'D', text: 'About 1 week' }], correctChoiceKey: 'A', explanation: null },
+    ],
+    medium: [
+      { questionText: 'Which dog breed is famous for pulling sleds in cold climates?', choices: [{ key: 'A', text: 'Beagle' }, { key: 'B', text: 'Siberian Husky' }, { key: 'C', text: 'Bulldog' }, { key: 'D', text: 'Golden Retriever' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'A dog circling before lying down is believed to be an instinct rooted in what?', choices: [{ key: 'A', text: 'Flattening grass to make a nest' }, { key: 'B', text: 'Stretching their legs' }, { key: 'C', text: 'Marking territory' }, { key: 'D', text: 'Checking for predators' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these is the tallest dog breed on average?', choices: [{ key: 'A', text: 'Great Dane' }, { key: 'B', text: 'Beagle' }, { key: 'C', text: 'Corgi' }, { key: 'D', text: 'Dachshund' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a healthy dog\'s normal body temperature range?', choices: [{ key: 'A', text: '96-98°F' }, { key: 'B', text: '90-95°F' }, { key: 'C', text: '101-102.5°F' }, { key: 'D', text: '105-108°F' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which breed was originally bred to hunt badgers, giving it its name?', choices: [{ key: 'A', text: 'Beagle' }, { key: 'B', text: 'Terrier' }, { key: 'C', text: 'Dachshund' }, { key: 'D', text: 'Corgi' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'About how many bones does the average dog have?', choices: [{ key: 'A', text: 'About 150' }, { key: 'B', text: 'About 500' }, { key: 'C', text: 'About 206' }, { key: 'D', text: 'About 320' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s the technical term for a dog\'s whiskers, which help it sense its surroundings?', choices: [{ key: 'A', text: 'Follicles' }, { key: 'B', text: 'Vibrissae' }, { key: 'C', text: 'Cilia' }, { key: 'D', text: 'Barbels' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'The Shih Tzu breed originally comes from where?', choices: [{ key: 'A', text: 'China' }, { key: 'B', text: 'Mexico' }, { key: 'C', text: 'Japan' }, { key: 'D', text: 'Germany' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which AKC dog breed group includes retrievers and pointers?', choices: [{ key: 'A', text: 'Working Group' }, { key: 'B', text: 'Sporting Group' }, { key: 'C', text: 'Toy Group' }, { key: 'D', text: 'Herding Group' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'About how long ago do genetic studies suggest dogs were first domesticated from wolves?', choices: [{ key: 'A', text: 'About 100,000 years ago' }, { key: 'B', text: 'About 500 years ago' }, { key: 'C', text: 'About 2,000 years ago' }, { key: 'D', text: 'Roughly 15,000-40,000 years ago' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the fastest dog breed, capable of speeds up to 45 mph?', choices: [{ key: 'A', text: 'Siberian Husky' }, { key: 'B', text: 'Border Collie' }, { key: 'C', text: 'Greyhound' }, { key: 'D', text: 'Dalmatian' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which breed traditionally pulls carts and guards flocks in Switzerland?', choices: [{ key: 'A', text: 'Pug' }, { key: 'B', text: 'Chihuahua' }, { key: 'C', text: 'Bernese Mountain Dog' }, { key: 'D', text: 'Shih Tzu' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the term for a dog\'s mother?', choices: [{ key: 'A', text: 'Litter' }, { key: 'B', text: 'Sire' }, { key: 'C', text: 'Pup' }, { key: 'D', text: 'Dam' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which breed originated in Japan and is known for its curled tail and fox-like face?', choices: [{ key: 'A', text: 'Husky' }, { key: 'B', text: 'Shiba Inu' }, { key: 'C', text: 'Corgi' }, { key: 'D', text: 'Samoyed' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a dog\'s "dewclaw"?', choices: [{ key: 'A', text: 'A retractable nail' }, { key: 'B', text: 'A vestigial toe higher up on the leg that doesn\'t touch the ground' }, { key: 'C', text: 'A type of paw pad' }, { key: 'D', text: 'A baby tooth' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which breed is Wales\' national dog breed, known for short legs and a long body?', choices: [{ key: 'A', text: 'Beagle' }, { key: 'B', text: 'Welsh Corgi' }, { key: 'C', text: 'Terrier' }, { key: 'D', text: 'Dachshund' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'About how many hours a day do adult dogs typically sleep?', choices: [{ key: 'A', text: '8 hours' }, { key: 'B', text: '4-6 hours' }, { key: 'C', text: '20-22 hours' }, { key: 'D', text: '12-14 hours' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the term for a dog show category judging how closely a dog matches its breed standard?', choices: [{ key: 'A', text: 'Agility' }, { key: 'B', text: 'Obedience' }, { key: 'C', text: 'Conformation' }, { key: 'D', text: 'Rally' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which breed is famous for historically running ahead of horse-drawn fire carriages as a firehouse mascot?', choices: [{ key: 'A', text: 'Boxer' }, { key: 'B', text: 'Dalmatian' }, { key: 'C', text: 'Beagle' }, { key: 'D', text: 'Poodle' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a common sign of stress or anxiety in dogs, often mistaken for just being tired?', choices: [{ key: 'A', text: 'Wagging tail' }, { key: 'B', text: 'Play bowing' }, { key: 'C', text: 'Eating quickly' }, { key: 'D', text: 'Excessive yawning' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which two breeds are often cited as the most intelligent, per canine researcher Stanley Coren\'s rankings?', choices: [{ key: 'A', text: 'Chihuahua and Shih Tzu' }, { key: 'B', text: 'Bulldog and Pug' }, { key: 'C', text: 'Basset Hound and Beagle' }, { key: 'D', text: 'Border Collie and Poodle' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Why do dogs often tilt their head while listening to you?', choices: [{ key: 'A', text: 'A sign of confusion only' }, { key: 'B', text: 'A hearing problem' }, { key: 'C', text: 'A trained trick' }, { key: 'D', text: 'Believed to help locate sound or read facial expressions better' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which breed was originally bred in Mexico and is one of the oldest breeds in the Americas?', choices: [{ key: 'A', text: 'Xoloitzcuintli' }, { key: 'B', text: 'Husky' }, { key: 'C', text: 'Corgi' }, { key: 'D', text: 'Poodle' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "flews" on a dog?', choices: [{ key: 'A', text: 'The hanging skin of the upper lips, prominent in breeds like Bloodhounds' }, { key: 'B', text: 'A tail marking' }, { key: 'C', text: 'A paw pad' }, { key: 'D', text: 'A type of ear shape' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which breed is known for webbed feet and a love of swimming, often used for water rescue?', choices: [{ key: 'A', text: 'Greyhound' }, { key: 'B', text: 'Newfoundland' }, { key: 'C', text: 'Pug' }, { key: 'D', text: 'Chihuahua' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the average gestation period for a dog pregnancy?', choices: [{ key: 'A', text: 'About 63 days (9 weeks)' }, { key: 'B', text: 'About 150 days' }, { key: 'C', text: 'About 30 days' }, { key: 'D', text: 'About 100 days' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these breeds is a "sighthound," bred to hunt by sight and speed rather than scent?', choices: [{ key: 'A', text: 'Greyhound' }, { key: 'B', text: 'Beagle' }, { key: 'C', text: 'Bloodhound' }, { key: 'D', text: 'Basset Hound' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is it called when a breeder intentionally pairs two purebred dogs of different breeds, like a Labradoodle?', choices: [{ key: 'A', text: 'A mutt' }, { key: 'B', text: 'A purebred' }, { key: 'C', text: 'A mixed rescue' }, { key: 'D', text: 'A designer (hybrid) breed' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which country is the Rottweiler breed originally from?', choices: [{ key: 'A', text: 'Italy' }, { key: 'B', text: 'Switzerland' }, { key: 'C', text: 'France' }, { key: 'D', text: 'Germany' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the Beagle\'s primary historical job?', choices: [{ key: 'A', text: 'Pulling sleds' }, { key: 'B', text: 'Hunting rabbits by scent' }, { key: 'C', text: 'Guarding livestock' }, { key: 'D', text: 'Herding sheep' }], correctChoiceKey: 'B', explanation: null },
+    ],
+    hard: [
+      { questionText: 'What\'s the average resting heart rate of a healthy adult dog?', choices: [{ key: 'A', text: '20-40 bpm' }, { key: 'B', text: '200-250 bpm' }, { key: 'C', text: '300+ bpm' }, { key: 'D', text: '60-140 bpm' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s the term for the loose skin around a dog\'s neck, prominent in breeds like Bloodhounds?', choices: [{ key: 'A', text: 'Withers' }, { key: 'B', text: 'Ruff' }, { key: 'C', text: 'Dewlap' }, { key: 'D', text: 'Jowl' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'A dog\'s sense of smell is estimated to be how much stronger than a human\'s?', choices: [{ key: 'A', text: 'About 10 times stronger' }, { key: 'B', text: 'About the same' }, { key: 'C', text: 'Up to 100,000 times stronger' }, { key: 'D', text: 'About 1,000 times stronger' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a dog breed\'s officially recognized physical and behavioral profile called?', choices: [{ key: 'A', text: 'A breed standard' }, { key: 'B', text: 'A pedigree chart' }, { key: 'C', text: 'A lineage code' }, { key: 'D', text: 'A conformation score' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What makes a dog\'s nose print unique to that individual dog, like a human fingerprint?', choices: [{ key: 'A', text: 'How wet it is' }, { key: 'B', text: 'The pattern of ridges and creases' }, { key: 'C', text: 'Its size' }, { key: 'D', text: 'Its color' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which breed is believed to be one of the oldest still in existence, largely unchanged for thousands of years?', choices: [{ key: 'A', text: 'Labrador Retriever' }, { key: 'B', text: 'Poodle' }, { key: 'C', text: 'Basenji' }, { key: 'D', text: 'Beagle' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Roughly how much larger is the smell-processing region of a dog\'s brain, proportionally, compared to a human\'s?', choices: [{ key: 'A', text: 'About 2 times larger' }, { key: 'B', text: 'About the same size' }, { key: 'C', text: 'About 40 times larger' }, { key: 'D', text: 'Smaller than a human’s' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Dogs have a reflective layer behind the retina that helps them see in low light. What is it called?', choices: [{ key: 'A', text: 'Photic layer' }, { key: 'B', text: 'Retina reflectum' }, { key: 'C', text: 'Corneal mirror' }, { key: 'D', text: 'Tapetum lucidum' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What field of genetics traced dog breeds into distinct ancient lineages?', choices: [{ key: 'A', text: 'Canine phylogenetics' }, { key: 'B', text: 'Ethology' }, { key: 'C', text: 'Cynology' }, { key: 'D', text: 'Zoometrics' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'About what frequency can dogs hear up to, compared to about 20kHz for humans?', choices: [{ key: 'A', text: 'About 20 kHz (same as humans)' }, { key: 'B', text: 'About 45-65 kHz' }, { key: 'C', text: 'About 100-150 kHz' }, { key: 'D', text: 'About 10 kHz' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What type of receptor makes a dog\'s whisker follicles highly sensitive to touch and air movement?', choices: [{ key: 'A', text: 'Chemoreceptors' }, { key: 'B', text: 'Photoreceptors' }, { key: 'C', text: 'Thermoreceptors' }, { key: 'D', text: 'Mechanoreceptors' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'True or False: Modern dogs are believed to have descended directly from modern gray wolves.', choices: [{ key: 'A', text: 'False' }, { key: 'B', text: 'True' }], correctChoiceKey: 'A', explanation: 'Dogs and modern wolves are believed to share a common, now-extinct ancestor, rather than dogs descending directly from today\'s wolves.' },
+      { questionText: 'What is a dog\'s "occiput"?', choices: [{ key: 'A', text: 'A type of ear fold' }, { key: 'B', text: 'A jaw joint' }, { key: 'C', text: 'A tail vertebra' }, { key: 'D', text: 'The bony bump at the top/back of the skull, prominent in some breeds' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the term for a litter with puppies from two different fathers, a real biological possibility in dogs?', choices: [{ key: 'A', text: 'Superfecundation' }, { key: 'B', text: 'Chimerism' }, { key: 'C', text: 'Polyembryony' }, { key: 'D', text: 'Heterozygosity' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "vomeronasal organ" (Jacobson\'s organ) in dogs used for?', choices: [{ key: 'A', text: 'Balancing while running' }, { key: 'B', text: 'Detecting pheromones and chemical scent signals' }, { key: 'C', text: 'Filtering dust while breathing' }, { key: 'D', text: 'Regulating body temperature' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which dog breed was traditionally associated with Chinese royalty, once forbidden for commoners to own?', choices: [{ key: 'A', text: 'Pug' }, { key: 'B', text: 'Pekingese' }, { key: 'C', text: 'Shih Tzu' }, { key: 'D', text: 'Chow Chow' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What term describes breeding closely related dogs to fix specific traits, which can also increase genetic health risks?', choices: [{ key: 'A', text: 'Outcrossing' }, { key: 'B', text: 'Hybridization' }, { key: 'C', text: 'Cross breeding' }, { key: 'D', text: 'Line breeding' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which US president\'s Welsh Terrier, Fala, became famous for public appearances during WWII?', choices: [{ key: 'A', text: 'Theodore Roosevelt' }, { key: 'B', text: 'Ronald Reagan' }, { key: 'C', text: 'John F. Kennedy' }, { key: 'D', text: 'Franklin D. Roosevelt' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "canine cognitive dysfunction"?', choices: [{ key: 'A', text: 'A genetic vision disorder' }, { key: 'B', text: 'A digestive disease' }, { key: 'C', text: 'A hearing impairment' }, { key: 'D', text: 'A dementia-like condition affecting older dogs' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the record lifespan for the oldest verified dog, an Australian Cattle Dog named Bluey?', choices: [{ key: 'A', text: '29 years' }, { key: 'B', text: '22 years' }, { key: 'C', text: '15 years' }, { key: 'D', text: '35 years' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "hip dysplasia," a condition common in larger dog breeds?', choices: [{ key: 'A', text: 'A digestive disorder' }, { key: 'B', text: 'A malformation of the hip joint causing pain and mobility issues' }, { key: 'C', text: 'A vision impairment' }, { key: 'D', text: 'A skin allergy' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which organization maintains the official written breed standards for purebred dogs in the US?', choices: [{ key: 'A', text: 'The USDA' }, { key: 'B', text: 'The American Kennel Club (AKC)' }, { key: 'C', text: 'The ASPCA' }, { key: 'D', text: 'The FDA' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a dog\'s "stop," a term used in breed standard descriptions?', choices: [{ key: 'A', text: 'The indentation between the forehead and the muzzle' }, { key: 'B', text: 'A tail position' }, { key: 'C', text: 'A type of gait' }, { key: 'D', text: 'An ear fold' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which ancient civilization left some of the earliest known dog breed depictions in art?', choices: [{ key: 'A', text: 'Ancient Egypt' }, { key: 'B', text: 'Ancient China' }, { key: 'C', text: 'Ancient Rome' }, { key: 'D', text: 'Ancient Greece' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the term for the gait pattern where a dog\'s legs on the same side move together?', choices: [{ key: 'A', text: 'Cantering' }, { key: 'B', text: 'Galloping' }, { key: 'C', text: 'Pacing' }, { key: 'D', text: 'Trotting' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What color are Dalmatian puppies born as, before their spots develop?', choices: [{ key: 'A', text: 'Solid brown' }, { key: 'B', text: 'Solid black' }, { key: 'C', text: 'Completely white' }, { key: 'D', text: 'Already spotted' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "reverse sneezing" in dogs, a common but harmless phenomenon?', choices: [{ key: 'A', text: 'A sign of a collapsed lung' }, { key: 'B', text: 'A type of hiccup' }, { key: 'C', text: 'Rapid, repeated inhaling through the nose that sounds alarming but is usually benign' }, { key: 'D', text: 'A serious allergic emergency' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which breed was bred specifically to hunt otters in England, giving it a stiff, dense coat?', choices: [{ key: 'A', text: 'Beagle' }, { key: 'B', text: 'Otterhound' }, { key: 'C', text: 'Terrier' }, { key: 'D', text: 'Spaniel' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a dog\'s "brindle" coat pattern?', choices: [{ key: 'A', text: 'A solid single color' }, { key: 'B', text: 'A spotted pattern' }, { key: 'C', text: 'Large distinct patches' }, { key: 'D', text: 'A streaked, tiger-stripe-like mix of colors' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which country is credited as the origin of the Samoyed breed, bred by nomadic Siberian herders?', choices: [{ key: 'A', text: 'Mongolia' }, { key: 'B', text: 'Finland' }, { key: 'C', text: 'Russia (Siberia)' }, { key: 'D', text: 'Norway' }], correctChoiceKey: 'C', explanation: null },
+    ],
+  },
+
+  great_outdoors: {
+    easy: [
+      { questionText: 'What do you call a trail that loops back to its own starting point?', choices: [{ key: 'A', text: 'An out-and-back trail' }, { key: 'B', text: 'A loop trail' }, { key: 'C', text: 'A switchback' }, { key: 'D', text: 'A spur trail' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What do you call overnight hiking trips where you carry all your gear with you?', choices: [{ key: 'A', text: 'Rappelling' }, { key: 'B', text: 'Backpacking' }, { key: 'C', text: 'Portaging' }, { key: 'D', text: 'Bouldering' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which US national park is home to the famous geyser Old Faithful?', choices: [{ key: 'A', text: 'Glacier' }, { key: 'B', text: 'Grand Canyon' }, { key: 'C', text: 'Yosemite' }, { key: 'D', text: 'Yellowstone' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What tool helps you find direction in the wilderness without GPS?', choices: [{ key: 'A', text: 'A sextant' }, { key: 'B', text: 'A sundial' }, { key: 'C', text: 'A compass' }, { key: 'D', text: 'A barometer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the tallest mountain in the world?', choices: [{ key: 'A', text: 'Mount Everest' }, { key: 'B', text: 'Denali' }, { key: 'C', text: 'Kilimanjaro' }, { key: 'D', text: 'K2' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What do you call the zigzag path used to climb a steep trail?', choices: [{ key: 'A', text: 'A switchback' }, { key: 'B', text: 'A bypass' }, { key: 'C', text: 'A spur' }, { key: 'D', text: 'A loop' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a common way to purify water while camping?', choices: [{ key: 'A', text: 'Salting it' }, { key: 'B', text: 'Boiling it' }, { key: 'C', text: 'Freezing it' }, { key: 'D', text: 'Shaking it' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What do you call a small, lightweight shelter most campers sleep in?', choices: [{ key: 'A', text: 'A cabin' }, { key: 'B', text: 'A lean-to' }, { key: 'C', text: 'A yurt' }, { key: 'D', text: 'A tent' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do you call climbing rock faces using ropes and gear?', choices: [{ key: 'A', text: 'Bouldering' }, { key: 'B', text: 'Spelunking' }, { key: 'C', text: 'Rappelling' }, { key: 'D', text: 'Rock climbing' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the name for a marked path through the wilderness for hikers?', choices: [{ key: 'A', text: 'A causeway' }, { key: 'B', text: 'A road' }, { key: 'C', text: 'A trail' }, { key: 'D', text: 'A boardwalk' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do campers call the fire built for cooking and warmth at a campsite?', choices: [{ key: 'A', text: 'A hearth' }, { key: 'B', text: 'A bonfire' }, { key: 'C', text: 'A kiln' }, { key: 'D', text: 'A campfire' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which piece of gear keeps you dry from rain while hiking?', choices: [{ key: 'A', text: 'A bandana' }, { key: 'B', text: 'A sun hat' }, { key: 'C', text: 'A rain jacket' }, { key: 'D', text: 'A fleece' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call exploring caves as a hobby?', choices: [{ key: 'A', text: 'Bouldering' }, { key: 'B', text: 'Spelunking (caving)' }, { key: 'C', text: 'Portaging' }, { key: 'D', text: 'Rappelling' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the term for the place where a trail begins?', choices: [{ key: 'A', text: 'The base camp' }, { key: 'B', text: 'The trailhead' }, { key: 'C', text: 'The switchback' }, { key: 'D', text: 'The summit' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these is a common way to carry water while hiking?', choices: [{ key: 'A', text: 'A ceramic jug' }, { key: 'B', text: 'A hydration bladder/reservoir' }, { key: 'C', text: 'A metal bucket' }, { key: 'D', text: 'A glass bottle' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What natural feature do you call a large area of trees?', choices: [{ key: 'A', text: 'A meadow' }, { key: 'B', text: 'A plateau' }, { key: 'C', text: 'A canyon' }, { key: 'D', text: 'A forest' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the term for camping in a vehicle equipped for sleeping, like a van or RV?', choices: [{ key: 'A', text: 'Glamping' }, { key: 'B', text: 'Car camping' }, { key: 'C', text: 'Backpacking' }, { key: 'D', text: 'Bushwhacking' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these is a basic first-aid item every hiker should carry?', choices: [{ key: 'A', text: 'A board game' }, { key: 'B', text: 'A frying pan' }, { key: 'C', text: 'A first-aid kit' }, { key: 'D', text: 'A folding chair' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call a large area of protected wild land managed by the government?', choices: [{ key: 'A', text: 'A golf course' }, { key: 'B', text: 'A national park' }, { key: 'C', text: 'A private ranch' }, { key: 'D', text: 'A farm' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the main purpose of hiking boots compared to regular sneakers?', choices: [{ key: 'A', text: 'They\'re cheaper' }, { key: 'B', text: 'They\'re lighter' }, { key: 'C', text: 'They\'re waterproof only' }, { key: 'D', text: 'Better ankle support and grip on rough terrain' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do you call fish caught for sport, often released back into the water?', choices: [{ key: 'A', text: 'Trawling' }, { key: 'B', text: 'Spearfishing' }, { key: 'C', text: 'Catch-and-release fishing' }, { key: 'D', text: 'Netting' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which season is generally considered peak wildfire season in much of the western US?', choices: [{ key: 'A', text: 'There\'s no particular season' }, { key: 'B', text: 'Winter' }, { key: 'C', text: 'Summer/early fall' }, { key: 'D', text: 'Spring' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call a small, portable stove used for cooking while camping?', choices: [{ key: 'A', text: 'A camp stove' }, { key: 'B', text: 'A furnace' }, { key: 'C', text: 'A kiln' }, { key: 'D', text: 'A hibachi' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What\'s the term for walking through untouched, trail-less wilderness?', choices: [{ key: 'A', text: 'Portaging' }, { key: 'B', text: 'Bushwhacking' }, { key: 'C', text: 'Rappelling' }, { key: 'D', text: 'Trekking' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What do you call a natural spring of hot water, popular for soaking?', choices: [{ key: 'A', text: 'A geyser' }, { key: 'B', text: 'A tide pool' }, { key: 'C', text: 'A watering hole' }, { key: 'D', text: 'A hot spring' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What best describes "glamping"?', choices: [{ key: 'A', text: 'Camping only in winter' }, { key: 'B', text: 'A type of mountain climbing' }, { key: 'C', text: 'Camping with zero gear at all' }, { key: 'D', text: 'Camping with upscale comforts and amenities' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do you call collecting edible wild plants and mushrooms outdoors?', choices: [{ key: 'A', text: 'Bushwhacking' }, { key: 'B', text: 'Portaging' }, { key: 'C', text: 'Foraging' }, { key: 'D', text: 'Spelunking' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "day pack"?', choices: [{ key: 'A', text: 'A cooler bag' }, { key: 'B', text: 'A small backpack for short day hikes' }, { key: 'C', text: 'A large multi-day expedition pack' }, { key: 'D', text: 'A waist pouch only' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these is a common outdoor recreation activity done on rivers?', choices: [{ key: 'A', text: 'Bouldering' }, { key: 'B', text: 'Rappelling' }, { key: 'C', text: 'Kayaking' }, { key: 'D', text: 'Spelunking' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the hobby of observing wild birds in their natural habitat called?', choices: [{ key: 'A', text: 'Trailblazing' }, { key: 'B', text: 'Bushwhacking' }, { key: 'C', text: 'Foraging' }, { key: 'D', text: 'Birdwatching (birding)' }], correctChoiceKey: 'D', explanation: null },
+    ],
+    medium: [
+      { questionText: 'Which US national park, established in 1872, is the world\'s oldest?', choices: [{ key: 'A', text: 'Acadia' }, { key: 'B', text: 'Sequoia' }, { key: 'C', text: 'Yellowstone' }, { key: 'D', text: 'Yosemite' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do hikers call the total amount of upward climbing on a route?', choices: [{ key: 'A', text: 'Switchback count' }, { key: 'B', text: 'Elevation gain' }, { key: 'C', text: 'Base elevation' }, { key: 'D', text: 'Trail grade' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'The outdoor layering system for staying warm is usually described as which three layers?', choices: [{ key: 'A', text: 'Base, insulating, and outer (shell)' }, { key: 'B', text: 'Two identical layers' }, { key: 'C', text: 'Just one thick jacket' }, { key: 'D', text: 'Cotton, wool, and silk' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which knot is prized for tying a secure loop that won\'t slip, useful in climbing?', choices: [{ key: 'A', text: 'Granny knot' }, { key: 'B', text: 'Bowline' }, { key: 'C', text: 'Half hitch' }, { key: 'D', text: 'Square lashing' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'The Aurora Borealis is also commonly known as what?', choices: [{ key: 'A', text: 'The Midnight Sun' }, { key: 'B', text: 'A solar flare' }, { key: 'C', text: 'The Northern Lights' }, { key: 'D', text: 'St. Elmo\'s Fire' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call a campsite with no bathrooms, running water, or other facilities?', choices: [{ key: 'A', text: 'RV camping' }, { key: 'B', text: 'Glamping' }, { key: 'C', text: 'Primitive (dispersed) camping' }, { key: 'D', text: 'Backcountry lodging' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which national park is famous for its towering redwood and giant sequoia trees?', choices: [{ key: 'A', text: 'Zion National Park' }, { key: 'B', text: 'Arches National Park' }, { key: 'C', text: 'Sequoia National Park' }, { key: 'D', text: 'Everglades National Park' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the recommended way to store food while camping in bear country?', choices: [{ key: 'A', text: 'In your car\'s trunk with the windows open' }, { key: 'B', text: 'In a bear canister or hung from a tree' }, { key: 'C', text: 'In your tent with you' }, { key: 'D', text: 'Buried underground' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the term for the imaginary line separating water flowing to different sides of a mountain range?', choices: [{ key: 'A', text: 'The fall line' }, { key: 'B', text: 'The equator' }, { key: 'C', text: 'The continental divide' }, { key: 'D', text: 'The tree line' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What\'s the elevation above which trees generally stop growing on a mountain, called?', choices: [{ key: 'A', text: 'The tree line' }, { key: 'B', text: 'The base camp' }, { key: 'C', text: 'The snow line' }, { key: 'D', text: 'The ridge line' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which US national park is known for its massive granite monolith, El Capitan?', choices: [{ key: 'A', text: 'Glacier' }, { key: 'B', text: 'Zion' }, { key: 'C', text: 'Yellowstone' }, { key: 'D', text: 'Yosemite' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "cairn," used by hikers on trails?', choices: [{ key: 'A', text: 'A stack of rocks marking a trail or route' }, { key: 'B', text: 'A type of tent' }, { key: 'C', text: 'A water filter' }, { key: 'D', text: 'A trail map app' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "wilderness first aid" training typically designed to prepare you for?', choices: [{ key: 'A', text: 'Only CPR' }, { key: 'B', text: 'Only treating minor cuts' }, { key: 'C', text: 'Only snake bites' }, { key: 'D', text: 'Treating injuries when professional help is far away' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the term for a river\'s rushing, turbulent section, popular with whitewater rafters?', choices: [{ key: 'A', text: 'Rapids' }, { key: 'B', text: 'A tributary' }, { key: 'C', text: 'An estuary' }, { key: 'D', text: 'A delta' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which US national park is the largest by total area in the contiguous 48 states?', choices: [{ key: 'A', text: 'Everglades' }, { key: 'B', text: 'Yellowstone' }, { key: 'C', text: 'Big Bend' }, { key: 'D', text: 'Death Valley National Park' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does "bushcraft" refer to?', choices: [{ key: 'A', text: 'Wilderness survival skills using natural materials' }, { key: 'B', text: 'A style of camping furniture' }, { key: 'C', text: 'A national park ranger title' }, { key: 'D', text: 'A hiking boot brand' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a switchbacked trail designed to make easier?', choices: [{ key: 'A', text: 'River crossings' }, { key: 'B', text: 'A steep climb, by zigzagging instead of going straight up' }, { key: 'C', text: 'Night hiking' }, { key: 'D', text: 'Cave exploring' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which knot is commonly used to tie two ropes of different thickness together?', choices: [{ key: 'A', text: 'Bowline' }, { key: 'B', text: 'Sheet bend' }, { key: 'C', text: 'Clove hitch' }, { key: 'D', text: 'Figure-eight' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the term for the layer of snow and ice that persists year-round on a mountain?', choices: [{ key: 'A', text: 'A crevasse field' }, { key: 'B', text: 'A cornice' }, { key: 'C', text: 'A glacier' }, { key: 'D', text: 'A moraine' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call navigating using the sun and stars without modern tools?', choices: [{ key: 'A', text: 'Dead reckoning' }, { key: 'B', text: 'Bushwhacking' }, { key: 'C', text: 'Triangulation' }, { key: 'D', text: 'Celestial navigation' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which US national park protects the largest cave system in the world, Mammoth Cave?', choices: [{ key: 'A', text: 'Zion National Park' }, { key: 'B', text: 'Mammoth Cave National Park' }, { key: 'C', text: 'Carlsbad Caverns National Park' }, { key: 'D', text: 'Sequoia National Park' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is "scree," a term hikers use on mountain trails?', choices: [{ key: 'A', text: 'Loose rock fragments covering a slope' }, { key: 'B', text: 'A type of tent stake' }, { key: 'C', text: 'A trail marker' }, { key: 'D', text: 'A water crossing' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the purpose of a "bear bag" hung from a tree while camping?', choices: [{ key: 'A', text: 'Signaling rescue teams' }, { key: 'B', text: 'Storing extra tents' }, { key: 'C', text: 'Drying wet clothes' }, { key: 'D', text: 'Keeping food away from bears and other wildlife' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does "topo map," used by hikers, stand for?', choices: [{ key: 'A', text: 'Topographic map' }, { key: 'B', text: 'Total path map' }, { key: 'C', text: 'Tourist orientation map' }, { key: 'D', text: 'Trail-only map' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which best describes "orienteering" as a sport?', choices: [{ key: 'A', text: 'Navigating between checkpoints using a map and compass' }, { key: 'B', text: 'Whitewater rafting races' }, { key: 'C', text: 'Speed hiking with no map' }, { key: 'D', text: 'Rock climbing races' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "fjord," a dramatic outdoor landscape feature?', choices: [{ key: 'A', text: 'A volcanic crater lake' }, { key: 'B', text: 'A coral reef formation' }, { key: 'C', text: 'A long, narrow inlet carved by glaciers between steep cliffs' }, { key: 'D', text: 'A type of desert canyon' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What\'s the recommended way to cross a fast-moving stream while hiking, for safety?', choices: [{ key: 'A', text: 'Always cross barefoot' }, { key: 'B', text: 'Unclip your backpack straps first, in case you fall' }, { key: 'C', text: 'Never use a hiking pole' }, { key: 'D', text: 'Cross facing downstream' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the term for camping spots reservable in advance at many national parks?', choices: [{ key: 'A', text: 'Emergency shelters' }, { key: 'B', text: 'Designated (reservation) campsites' }, { key: 'C', text: 'Free-for-all camping' }, { key: 'D', text: 'Illegal camping' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these is a well-known long-distance hiking trail spanning the US East Coast?', choices: [{ key: 'A', text: 'The John Muir Trail' }, { key: 'B', text: 'The Appalachian Trail' }, { key: 'C', text: 'The Pacific Crest Trail' }, { key: 'D', text: 'The Continental Divide Trail' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is "wildlife habituation," a concern rangers warn against?', choices: [{ key: 'A', text: 'Animals losing their natural fear of humans, often from being fed' }, { key: 'B', text: 'Animals migrating early' }, { key: 'C', text: 'Animals hibernating longer' }, { key: 'D', text: 'Animals changing color' }], correctChoiceKey: 'A', explanation: null },
+    ],
+    hard: [
+      { questionText: 'What is the name for a line on a map connecting points of equal elevation?', choices: [{ key: 'A', text: 'A contour line' }, { key: 'B', text: 'A meridian' }, { key: 'C', text: 'An isobar' }, { key: 'D', text: 'A gradient line' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which national park contains Crater Lake, the deepest lake in the US?', choices: [{ key: 'A', text: 'Crater Lake National Park' }, { key: 'B', text: 'Olympic National Park' }, { key: 'C', text: 'Denali National Park' }, { key: 'D', text: 'Glacier National Park' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What do you call a hike that starts and ends at two different points?', choices: [{ key: 'A', text: 'A there-and-back hike' }, { key: 'B', text: 'A point-to-point hike' }, { key: 'C', text: 'An out-and-back hike' }, { key: 'D', text: 'A loop hike' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the core idea behind the "Leave No Trace" outdoor ethics principle?', choices: [{ key: 'A', text: 'Minimizing human impact on the wilderness' }, { key: 'B', text: 'Hiking as fast as possible' }, { key: 'C', text: 'Avoiding all trails entirely' }, { key: 'D', text: 'Camping only at hotels' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which mountain range runs along the western edge of North America?', choices: [{ key: 'A', text: 'The Cascades' }, { key: 'B', text: 'The Appalachians' }, { key: 'C', text: 'The Sierra Nevada' }, { key: 'D', text: 'The Rocky Mountains' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the medical term for altitude sickness caused by rapid ascent?', choices: [{ key: 'A', text: 'Frostbite' }, { key: 'B', text: 'Heat exhaustion' }, { key: 'C', text: 'Acute Mountain Sickness' }, { key: 'D', text: 'Hypothermia' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Uluru (Ayers Rock) in Australia is what type of natural formation?', choices: [{ key: 'A', text: 'An extinct volcano' }, { key: 'B', text: 'A coral reef' }, { key: 'C', text: 'A salt flat' }, { key: 'D', text: 'A sandstone monolith' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do experienced hikers call checking a map against visible landmarks to confirm their location?', choices: [{ key: 'A', text: 'Dead reckoning' }, { key: 'B', text: 'Terrain association' }, { key: 'C', text: 'Bushwhacking' }, { key: 'D', text: 'Cairn-hopping' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the longest hiking trail in the world, spanning parts of Canada?', choices: [{ key: 'A', text: 'The Pacific Crest Trail' }, { key: 'B', text: 'The Trans Canada Trail' }, { key: 'C', text: 'The Appalachian Trail' }, { key: 'D', text: 'The Continental Divide Trail' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "moraine," a geological feature found near glaciers?', choices: [{ key: 'A', text: 'A ridge of rock and debris deposited by a glacier' }, { key: 'B', text: 'A glacial lake' }, { key: 'C', text: 'A type of ice cave' }, { key: 'D', text: 'A crevasse' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "karst topography," common in areas with caves and sinkholes?', choices: [{ key: 'A', text: 'Landscape shaped by wind erosion only' }, { key: 'B', text: 'Landscape shaped by glaciers only' }, { key: 'C', text: 'Landscape shaped by dissolving soluble bedrock like limestone' }, { key: 'D', text: 'Landscape shaped by volcanic activity only' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the term for a rescue technique using ropes and pulleys to lift an injured hiker?', choices: [{ key: 'A', text: 'A free-solo rescue' }, { key: 'B', text: 'A switchback rescue' }, { key: 'C', text: 'A bear crawl rescue' }, { key: 'D', text: 'A high-angle (technical) rescue' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "bivouac" ("bivy") camping?', choices: [{ key: 'A', text: 'A minimalist, often shelter-less overnight camp, typically emergency or ultralight' }, { key: 'B', text: 'A multi-week base camp' }, { key: 'C', text: 'A type of luxury glamping tent' }, { key: 'D', text: 'Camping only in designated RV parks' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "acclimatization" in high-altitude mountaineering?', choices: [{ key: 'A', text: 'Adjusting gear for cold weather only' }, { key: 'B', text: 'Adjusting to time zone changes' }, { key: 'C', text: 'Training for endurance only' }, { key: 'D', text: 'Gradually adjusting the body to lower oxygen levels at altitude' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "col," a mountaineering term?', choices: [{ key: 'A', text: 'A rope anchor' }, { key: 'B', text: 'A steep gully' }, { key: 'C', text: 'A type of ice axe' }, { key: 'D', text: 'A low point or pass between two peaks' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which explorer is credited as the first to summit Mount Everest in 1953, alongside Tenzing Norgay?', choices: [{ key: 'A', text: 'Sir Edmund Hillary' }, { key: 'B', text: 'Reinhold Messner' }, { key: 'C', text: 'George Mallory' }, { key: 'D', text: 'John Muir' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "trail magic," a term used among long-distance hikers?', choices: [{ key: 'A', text: 'Unexpected acts of kindness or supplies left for hikers by strangers' }, { key: 'B', text: 'A type of GPS trail app' }, { key: 'C', text: 'A weather phenomenon on trails' }, { key: 'D', text: 'A mandatory permit' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "duff layer" in a forest ecosystem?', choices: [{ key: 'A', text: 'The root system' }, { key: 'B', text: 'The forest canopy' }, { key: 'C', text: 'The layer of decomposing leaves and organic matter on the forest floor' }, { key: 'D', text: 'The underground water table' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "false summit," a frustrating experience for climbers?', choices: [{ key: 'A', text: 'A summit with no view' }, { key: 'B', text: 'A high point that looks like the top but isn\'t the actual summit' }, { key: 'C', text: 'A summit reached by the wrong trail' }, { key: 'D', text: 'A fake landmark placed by rangers' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the term for water that flows underground through porous rock before emerging as a spring?', choices: [{ key: 'A', text: 'Groundwater (aquifer flow)' }, { key: 'B', text: 'Runoff' }, { key: 'C', text: 'Condensation' }, { key: 'D', text: 'Precipitation' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which US national park protects the highest peak in North America, Denali?', choices: [{ key: 'A', text: 'Denali National Park' }, { key: 'B', text: 'Grand Teton National Park' }, { key: 'C', text: 'Olympic National Park' }, { key: 'D', text: 'Glacier National Park' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is officially listed as principle #1 of the seven "Leave No Trace" principles?', choices: [{ key: 'A', text: 'Travel on durable surfaces' }, { key: 'B', text: 'Pack out all trash' }, { key: 'C', text: 'Respect wildlife' }, { key: 'D', text: 'Plan ahead and prepare' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What causes "the bends" (decompression sickness)?', choices: [{ key: 'A', text: 'Nitrogen bubbles forming in the blood from rapid pressure change' }, { key: 'B', text: 'Low blood sugar' }, { key: 'C', text: 'Overexertion' }, { key: 'D', text: 'Dehydration' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "cirque," a bowl-shaped landform found in mountains?', choices: [{ key: 'A', text: 'A volcanic crater' }, { key: 'B', text: 'A basin carved out by glacial erosion' }, { key: 'C', text: 'A limestone sinkhole' }, { key: 'D', text: 'A river delta' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which desert is the driest place on Earth by measured rainfall, located in South America?', choices: [{ key: 'A', text: 'The Mojave Desert' }, { key: 'B', text: 'The Gobi Desert' }, { key: 'C', text: 'The Atacama Desert' }, { key: 'D', text: 'The Sahara Desert' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "orographic lift," a weather phenomenon common in mountainous regions?', choices: [{ key: 'A', text: 'Wind funneling through valleys' }, { key: 'B', text: 'Air forced to rise over mountains, cooling and often causing rain or snow' }, { key: 'C', text: 'Temperature inversion in canyons' }, { key: 'D', text: 'Heat rising from desert floors' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the general term for a lake formed in the crater of a dormant or extinct volcano?', choices: [{ key: 'A', text: 'A kettle lake' }, { key: 'B', text: 'A cirque lake' }, { key: 'C', text: 'A crater lake' }, { key: 'D', text: 'A tarn' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "portage," a term used by canoeists and kayakers?', choices: [{ key: 'A', text: 'Carrying a boat and gear overland between two bodies of water' }, { key: 'B', text: 'A type of paddle stroke' }, { key: 'C', text: 'Steering a canoe in rapids' }, { key: 'D', text: 'A river crossing technique' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which gas is the primary danger in poorly ventilated caves, sometimes causing "foul air"?', choices: [{ key: 'A', text: 'Helium' }, { key: 'B', text: 'Nitrogen only' }, { key: 'C', text: 'Carbon dioxide buildup' }, { key: 'D', text: 'Hydrogen' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "tarn," a small mountain landscape feature?', choices: [{ key: 'A', text: 'A dry riverbed' }, { key: 'B', text: 'A small mountain lake, often formed by glacial erosion' }, { key: 'C', text: 'A rocky outcrop' }, { key: 'D', text: 'A steep ravine' }], correctChoiceKey: 'B', explanation: null },
+    ],
+  },
+
+  curiosities: {
+    easy: [
+      { questionText: 'The Eiffel Tower actually grows taller in summer heat by about how much?', choices: [{ key: 'A', text: 'About 2 feet' }, { key: 'B', text: 'About 6 inches' }, { key: 'C', text: 'About 1 inch' }, { key: 'D', text: 'It doesn\'t change' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'A traditional "cabinet of curiosities" was historically used to display what?', choices: [{ key: 'A', text: 'Odd and rare natural or man-made objects' }, { key: 'B', text: 'Only royal jewelry' }, { key: 'C', text: 'Only paintings' }, { key: 'D', text: 'Only weapons' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the town of Centralia, Pennsylvania?', choices: [{ key: 'A', text: 'It floats on a lake' }, { key: 'B', text: 'An underground coal fire has burned beneath it since 1962' }, { key: 'C', text: 'It has no roads' }, { key: 'D', text: 'It\'s entirely underwater' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "ghost town"?', choices: [{ key: 'A', text: 'A town with no residents, ever' }, { key: 'B', text: 'A town that only exists on old maps' }, { key: 'C', text: 'A town that was abandoned, often suddenly' }, { key: 'D', text: 'A town built only for filming' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which common medicine was discovered by accident when a scientist noticed mold growing in a petri dish?', choices: [{ key: 'A', text: 'Bandages' }, { key: 'B', text: 'Penicillin' }, { key: 'C', text: 'Aspirin' }, { key: 'D', text: 'Antiseptic' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Death Valley\'s famous "Sailing Stones" are known for what strange phenomenon?', choices: [{ key: 'A', text: 'Rocks that appear to move across the ground on their own' }, { key: 'B', text: 'Rocks that are magnetic' }, { key: 'C', text: 'Rocks that glow at night' }, { key: 'D', text: 'Rocks that float' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'A "curio cabinet" is traditionally used to display what kind of items?', choices: [{ key: 'A', text: 'Only clothing' }, { key: 'B', text: 'Small, odd, or rare collectibles' }, { key: 'C', text: 'Only food' }, { key: 'D', text: 'Only books' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'A famous "monster" is said to live in a Scottish lake. Which one?', choices: [{ key: 'A', text: 'Bigfoot' }, { key: 'B', text: 'The Chupacabra' }, { key: 'C', text: 'The Kraken' }, { key: 'D', text: 'The Loch Ness Monster' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "time capsule" typically meant to do?', choices: [{ key: 'A', text: 'Measure time accurately' }, { key: 'B', text: 'Predict the future' }, { key: 'C', text: 'Store time-related data only' }, { key: 'D', text: 'Preserve objects to be discovered by future generations' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about the "Winchester Mystery House" in California?', choices: [{ key: 'A', text: 'It has no windows' }, { key: 'B', text: 'It has staircases and doors that lead nowhere, built over decades without a master plan' }, { key: 'C', text: 'It was never finished due to fire' }, { key: 'D', text: 'It\'s entirely underground' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is an "urban legend"?', choices: [{ key: 'A', text: 'A city ordinance' }, { key: 'B', text: 'A type of folk song' }, { key: 'C', text: 'A true historical event' }, { key: 'D', text: 'A popular story, often false, widely believed to be true' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about the "Crooked Forest" in Poland, a grove of oddly bent pine trees?', choices: [{ key: 'A', text: 'They never lose their leaves' }, { key: 'B', text: 'They\'re all the same exact height' }, { key: 'C', text: 'All the trees bend sharply near the base for unknown reasons' }, { key: 'D', text: 'They glow at night' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "doppelganger"?', choices: [{ key: 'A', text: 'A look-alike or double of a living person' }, { key: 'B', text: 'A twin sibling only' }, { key: 'C', text: 'A type of optical illusion' }, { key: 'D', text: 'A ghost sighting' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unique about the town of Rjukan, Norway, regarding sunlight in winter?', choices: [{ key: 'A', text: 'It installed giant mirrors to reflect sunlight into the town square' }, { key: 'B', text: 'It has no roads in winter' }, { key: 'C', text: 'It has 24-hour darkness year-round' }, { key: 'D', text: 'It floats on a lake' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "conspiracy theory"?', choices: [{ key: 'A', text: 'A type of legal case' }, { key: 'B', text: 'A government policy' }, { key: 'C', text: 'A scientifically proven fact' }, { key: 'D', text: 'An explanation for events that assumes secret, often unproven coordination' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about the "Boiling Lake" in Dominica?', choices: [{ key: 'A', text: 'It changes color hourly' }, { key: 'B', text: 'It has no bottom' }, { key: 'C', text: 'It\'s frozen year-round' }, { key: 'D', text: 'It\'s a flooded fumarole where the water actually boils' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "folk remedy"?', choices: [{ key: 'A', text: 'A prescription drug' }, { key: 'B', text: 'A vaccine' }, { key: 'C', text: 'A surgical procedure' }, { key: 'D', text: 'A traditional treatment passed down informally, not necessarily medically proven' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about "living stones" (Lithops), a real type of plant?', choices: [{ key: 'A', text: 'They can move on their own' }, { key: 'B', text: 'They glow at night' }, { key: 'C', text: 'They\'re not actually alive' }, { key: 'D', text: 'They look almost exactly like small pebbles or rocks' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "myth," in the traditional storytelling sense?', choices: [{ key: 'A', text: 'A completely modern invention' }, { key: 'B', text: 'A type of legal contract' }, { key: 'C', text: 'A scientific law' }, { key: 'D', text: 'A traditional story, often explaining natural events or featuring gods/heroes' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about "door to nowhere" architectural features sometimes found in old homes?', choices: [{ key: 'A', text: 'A secret passage door' }, { key: 'B', text: 'A door made of glass' }, { key: 'C', text: 'A door that opens to a wall, empty space, or straight drop with no stairs' }, { key: 'D', text: 'A door that\'s always locked' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "cryptid," a term used in folklore?', choices: [{ key: 'A', text: 'A type of ancient coin' }, { key: 'B', text: 'A secret code' }, { key: 'C', text: 'A hidden treasure map' }, { key: 'D', text: 'A creature whose existence is unproven or disputed, like Bigfoot' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s unusual about "moon trees," grown from seeds that orbited the Moon on Apollo 14?', choices: [{ key: 'A', text: 'They grew into completely normal trees, indistinguishable from others' }, { key: 'B', text: 'They grew unusually tall' }, { key: 'C', text: 'They glow at night' }, { key: 'D', text: 'They never lost their leaves' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "palindrome," sometimes considered a fun linguistic curiosity?', choices: [{ key: 'A', text: 'A word with no vowels' }, { key: 'B', text: 'A word in two languages at once' }, { key: 'C', text: 'A word or phrase that reads the same forwards and backwards' }, { key: 'D', text: 'A word that rhymes with itself' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "corpse flowers" (Amorphophallus titanum)?', choices: [{ key: 'A', text: 'They smell like vanilla' }, { key: 'B', text: 'They smell like rotting flesh when they bloom' }, { key: 'C', text: 'They only bloom underwater' }, { key: 'D', text: 'They\'re completely odorless' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "hoax"?', choices: [{ key: 'A', text: 'A scientific hypothesis' }, { key: 'B', text: 'A magic trick performed on stage' }, { key: 'C', text: 'An honest mistake' }, { key: 'D', text: 'A deliberate deception made to look real' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about the small town of Colma, California?', choices: [{ key: 'A', text: 'It has no roads' }, { key: 'B', text: 'It has far more people buried there than living residents, due to its many cemeteries' }, { key: 'C', text: 'It\'s entirely underwater' }, { key: 'D', text: 'It has no permanent residents at all' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "superstition"?', choices: [{ key: 'A', text: 'A proven scientific theory' }, { key: 'B', text: 'A legal requirement' }, { key: 'C', text: 'A religious commandment' }, { key: 'D', text: 'A belief in supernatural causes not based on evidence, like avoiding black cats' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s odd about "singing sand dunes," found in certain deserts?', choices: [{ key: 'A', text: 'They change color with temperature' }, { key: 'B', text: 'They glow at night' }, { key: 'C', text: 'They\'re magnetic' }, { key: 'D', text: 'They can produce a loud humming or booming sound when sand shifts' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "mystery novel" typically built around?', choices: [{ key: 'A', text: 'A historical biography' }, { key: 'B', text: 'A travel guide' }, { key: 'C', text: 'A cookbook format' }, { key: 'D', text: 'An unsolved crime or puzzle the reader tries to solve' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s unusual about the "Blood Falls" in Antarctica?', choices: [{ key: 'A', text: 'A waterfall that runs red due to iron-rich water' }, { key: 'B', text: 'It\'s the only warm spot in Antarctica' }, { key: 'C', text: 'It\'s made of lava' }, { key: 'D', text: 'It only appears once a decade' }], correctChoiceKey: 'A', explanation: null },
+    ],
+    medium: [
+      { questionText: 'The sky sometimes turns an eerie green right before a tornado. Why?', choices: [{ key: 'A', text: 'Ball lightning' }, { key: 'B', text: 'Pollution' }, { key: 'C', text: 'Light scattering through hail-heavy storm clouds' }, { key: 'D', text: 'A solar eclipse' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'The "Voynich Manuscript" is famous for being what?', choices: [{ key: 'A', text: 'An ancient treasure map' }, { key: 'B', text: 'A lost Shakespeare play' }, { key: 'C', text: 'The first printed Bible' }, { key: 'D', text: 'A centuries-old book written in an undeciphered script' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does the "Museum of Broken Relationships" in Zagreb, Croatia actually display?', choices: [{ key: 'A', text: 'Wedding dresses only' }, { key: 'B', text: 'Divorce papers' }, { key: 'C', text: 'Broken antiques' }, { key: 'D', text: 'Objects donated by people after breakups, each with a story' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about the "Door to Hell" in Turkmenistan?', choices: [{ key: 'A', text: 'It\'s a bottomless cave' }, { key: 'B', text: 'It\'s a natural gas crater that\'s been on fire since the 1970s' }, { key: 'C', text: 'It\'s always frozen' }, { key: 'D', text: 'It glows blue from bioluminescence' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What optical effect makes a spoon look "broken" when placed in a glass of water?', choices: [{ key: 'A', text: 'Diffraction' }, { key: 'B', text: 'Reflection' }, { key: 'C', text: 'Refraction' }, { key: 'D', text: 'Polarization' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the popular nickname for the "false memory" effect, where large groups misremember the same event the same way?', choices: [{ key: 'A', text: 'The Mandela Effect' }, { key: 'B', text: 'Deja Vu Syndrome' }, { key: 'C', text: 'The Butterfly Effect' }, { key: 'D', text: 'Collective Amnesia' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about "the Hum," a mysterious low-frequency sound reported in towns worldwide?', choices: [{ key: 'A', text: 'Scientists confirmed it comes from wind turbines' }, { key: 'B', text: 'Its source has never been conclusively identified' }, { key: 'C', text: 'It\'s proven to be traffic noise' }, { key: 'D', text: 'It only happens once a year' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'A curious island is home to hundreds of giant stone statues called moai. Which island?', choices: [{ key: 'A', text: 'Sicily' }, { key: 'B', text: 'Madagascar' }, { key: 'C', text: 'Fiji' }, { key: 'D', text: 'Easter Island' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the "Wow! signal," a famous mystery in the search for extraterrestrial life?', choices: [{ key: 'A', text: 'A strong, unexplained radio signal detected in 1977 that\'s never been repeated' }, { key: 'B', text: 'A satellite malfunction later explained' }, { key: 'C', text: 'A hoax admitted by its discoverer' }, { key: 'D', text: 'A confirmed alien radio broadcast' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "pareidolia," a curious quirk of human perception?', choices: [{ key: 'A', text: 'Losing track of time' }, { key: 'B', text: 'Forgetting recent memories quickly' }, { key: 'C', text: 'Seeing familiar patterns, like faces, in random objects or images' }, { key: 'D', text: 'Hearing sounds that aren\'t there' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the "Shroud of Turin" famous for?', choices: [{ key: 'A', text: 'Being the first printed book' }, { key: 'B', text: 'Being the oldest surviving map' }, { key: 'C', text: 'Being a centuries-old cloth some believe bears an image of a crucified man' }, { key: 'D', text: 'Being a medieval royal coronation robe' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about the "Nazca Lines" in Peru?', choices: [{ key: 'A', text: 'Massive ancient geoglyphs only fully visible from the air' }, { key: 'B', text: 'They mark ancient gold deposits' }, { key: 'C', text: 'They\'re a natural rock formation' }, { key: 'D', text: 'They\'re an ancient irrigation system' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "phantom limb," a curious neurological phenomenon?', choices: [{ key: 'A', text: 'The sensation that an amputated limb is still there' }, { key: 'B', text: 'A memory of a forgotten injury' }, { key: 'C', text: 'A visual hallucination of another person' }, { key: 'D', text: 'A type of sleep paralysis' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the "Georgia Guidestones," a monument that stood in the US until destroyed in 2022?', choices: [{ key: 'A', text: 'It was built by a well-known government agency' }, { key: 'B', text: 'It was over 2,000 years old' }, { key: 'C', text: 'It was proven to be a hoax from the start' }, { key: 'D', text: 'Its origin and the identity of who commissioned it were never confirmed' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "synesthesia," a rare neurological trait some people have?', choices: [{ key: 'A', text: 'Having heightened memory only' }, { key: 'B', text: 'Losing a sense entirely' }, { key: 'C', text: 'An inability to dream' }, { key: 'D', text: 'Experiencing one sense triggering another, like "seeing" sounds as colors' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the "Bermuda Triangle" most known for in popular folklore?', choices: [{ key: 'A', text: 'A perfectly triangular island' }, { key: 'B', text: 'A region where ships and planes are said to have mysteriously disappeared' }, { key: 'C', text: 'A region with no ocean currents' }, { key: 'D', text: 'A protected marine sanctuary only' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is odd about "ball lightning," a rarely documented weather phenomenon?', choices: [{ key: 'A', text: 'A glowing, floating sphere sometimes seen during thunderstorms, still not fully explained' }, { key: 'B', text: 'It\'s a fully explained, common form of lightning' }, { key: 'C', text: 'It only happens underwater' }, { key: 'D', text: 'It\'s proven to be a camera artifact' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "Taos Hum"?', choices: [{ key: 'A', text: 'A famous local music festival' }, { key: 'B', text: 'A geological survey tool' }, { key: 'C', text: 'A persistent low-frequency noise reported by residents of Taos, New Mexico, with no confirmed source' }, { key: 'D', text: 'A confirmed industrial noise' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "glossolalia," sometimes observed in religious or trance contexts?', choices: [{ key: 'A', text: 'A hearing impairment' }, { key: 'B', text: 'A memory disorder' }, { key: 'C', text: 'Speaking in fluent-sounding but unintelligible speech ("speaking in tongues")' }, { key: 'D', text: 'A type of ancient written language' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about "fairy circles" found in the Namib Desert?', choices: [{ key: 'A', text: 'Mysterious circular patches of bare earth in otherwise grassy areas, with debated causes' }, { key: 'B', text: 'They\'re man-made irrigation pits' }, { key: 'C', text: 'They only appear in winter' }, { key: 'D', text: 'They\'re proven UFO landing marks' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "Kryptos" sculpture at CIA headquarters famous for?', choices: [{ key: 'A', text: 'Containing an encrypted message that remains partially unsolved' }, { key: 'B', text: 'Being made entirely of gold' }, { key: 'C', text: 'Predicting future events accurately' }, { key: 'D', text: 'Being a gift from a foreign government' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "déjà vu," a common but still not fully understood experience?', choices: [{ key: 'A', text: 'The feeling of having already experienced a current situation before' }, { key: 'B', text: 'A type of short-term amnesia' }, { key: 'C', text: 'A dream you can control' }, { key: 'D', text: 'A fear of the future' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is odd about the "Coral Castle" in Florida?', choices: [{ key: 'A', text: 'One man reportedly built it alone from massive coral stones, and never revealed how' }, { key: 'B', text: 'It was built entirely by machines' }, { key: 'C', text: 'It floats on water' }, { key: 'D', text: 'It\'s made of ice' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "cold case," in criminal investigation terms?', choices: [{ key: 'A', text: 'An unsolved crime that has gone without new leads for a long time' }, { key: 'B', text: 'A crime with a confirmed suspect' }, { key: 'C', text: 'A crime committed in winter' }, { key: 'D', text: 'A minor, low-priority crime' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "Mothman," a famous piece of folklore from Point Pleasant, West Virginia?', choices: [{ key: 'A', text: 'A nickname for a local politician' }, { key: 'B', text: 'A species of moth discovered there' }, { key: 'C', text: 'A winged, humanoid creature reportedly sighted before a bridge collapse in 1967' }, { key: 'D', text: 'A confirmed hoax admitted by a local prankster' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "ice circles" that sometimes form on rivers?', choices: [{ key: 'A', text: 'They only form in tropical climates' }, { key: 'B', text: 'They\'re a myth with no real photos' }, { key: 'C', text: 'Large, perfectly round disks of ice that slowly rotate in the water' }, { key: 'D', text: 'They\'re always man-made' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What are the "Marfa Lights," a phenomenon reported in Texas?', choices: [{ key: 'A', text: 'A well-known local light show' }, { key: 'B', text: 'A type of firefly unique to the area' }, { key: 'C', text: 'Mysterious unexplained lights seen at night near Marfa, Texas' }, { key: 'D', text: 'A confirmed alien base' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "changeling" in old European folklore?', choices: [{ key: 'A', text: 'A fairy child secretly swapped for a human infant' }, { key: 'B', text: 'A person who changes appearance at will' }, { key: 'C', text: 'A type of witch\'s curse' }, { key: 'D', text: 'A ghost that haunts children' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is odd about the "Hessdalen lights" reported in Norway?', choices: [{ key: 'A', text: 'A confirmed drone testing site' }, { key: 'B', text: 'A proven aurora borealis effect' }, { key: 'C', text: 'A tourist light installation' }, { key: 'D', text: 'Unexplained lights recorded in a valley since the 1980s, still studied by researchers' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "cryptozoology"?', choices: [{ key: 'A', text: 'The study of venomous animals' }, { key: 'B', text: 'The study of animals whose existence is unproven, like Bigfoot or the Loch Ness Monster' }, { key: 'C', text: 'The study of animal migration patterns' }, { key: 'D', text: 'The study of ancient fossils only' }], correctChoiceKey: 'B', explanation: null },
+    ],
+    hard: [
+      { questionText: 'What is the "Baader-Meinhof phenomenon," a curious quirk of perception?', choices: [{ key: 'A', text: 'Forgetting names but remembering faces' }, { key: 'B', text: 'Losing track of time while reading' }, { key: 'C', text: 'Suddenly noticing something everywhere after first learning about it' }, { key: 'D', text: 'Seeing patterns in random noise' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'The ancient "Antikythera mechanism," found in a shipwreck, is now believed to be what?', choices: [{ key: 'A', text: 'An early musical instrument' }, { key: 'B', text: 'A navigational compass' }, { key: 'C', text: 'An ancient Greek analog astronomical calculator' }, { key: 'D', text: 'A ceremonial crown' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about the Great Blue Hole in Belize?', choices: [{ key: 'A', text: 'It\'s the deepest ocean trench' }, { key: 'B', text: 'It\'s a massive underwater sinkhole visible from space' }, { key: 'C', text: 'It\'s man-made' }, { key: 'D', text: 'It changes color seasonally' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What curious property do "Prince Rupert\'s Drops" (glass droplets) have?', choices: [{ key: 'A', text: 'They melt at room temperature' }, { key: 'B', text: 'They\'re magnetic' }, { key: 'C', text: 'The bulbous end resists a hammer, but the thin tail shatters the whole thing instantly' }, { key: 'D', text: 'They bounce like rubber' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the "Dyatlov Pass incident," a famous unsolved mystery?', choices: [{ key: 'A', text: 'The unexplained deaths of nine hikers in the Ural Mountains in 1959' }, { key: 'B', text: 'A lost expedition to Everest' }, { key: 'C', text: 'A missing ship in the Bermuda Triangle' }, { key: 'D', text: 'A UFO sighting in Roswell' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What curious illusion is the "Fata Morgana," seen at sea or in deserts?', choices: [{ key: 'A', text: 'A sandstorm pattern' }, { key: 'B', text: 'A complex mirage that distorts distant objects' }, { key: 'C', text: 'A type of desert flower' }, { key: 'D', text: 'A rare rainbow' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: '"Incorruptible" saints\' bodies, displayed in some Catholic churches, are notable for what?', choices: [{ key: 'A', text: 'Being replaced yearly' }, { key: 'B', text: 'Being mummified by law' }, { key: 'C', text: 'Being wax replicas only' }, { key: 'D', text: 'Reportedly showing little to no decomposition after death' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: '"Toynbee tiles," found embedded in city streets across the US, are mysterious for what reason?', choices: [{ key: 'A', text: 'They spell out a single repeating word' }, { key: 'B', text: 'They\'re made of a metal that doesn\'t exist naturally' }, { key: 'C', text: 'They only appear in even years' }, { key: 'D', text: 'No one knows for certain who\'s been placing them for decades' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the "Devil\'s Kettle" waterfall in Minnesota mysterious for?', choices: [{ key: 'A', text: 'It flows uphill' }, { key: 'B', text: 'It\'s frozen year-round' }, { key: 'C', text: 'Part of the river vanishes into a pothole and its outlet was never definitively found' }, { key: 'D', text: 'It changes color monthly' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What was the "Tunguska event" of 1908?', choices: [{ key: 'A', text: 'A nuclear test later declassified' }, { key: 'B', text: 'A hoax created by local media' }, { key: 'C', text: 'A massive explosion in Siberia, likely from a meteor or comet airburst, that flattened millions of trees' }, { key: 'D', text: 'A confirmed volcanic eruption' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the "Bloop," a mysterious sound recorded in the Pacific Ocean in 1997?', choices: [{ key: 'A', text: 'A confirmed whale mating call' }, { key: 'B', text: 'A submarine sonar test' }, { key: 'C', text: 'A hoax created by researchers' }, { key: 'D', text: 'An extremely loud, unexplained underwater sound, later attributed to icequakes' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about the "Longyou Caves" in China?', choices: [{ key: 'A', text: 'They were confirmed built by a known 12th-century emperor' }, { key: 'B', text: 'Massive man-made caverns carved with no historical record of who built them or why' }, { key: 'C', text: 'They\'re entirely natural formations' }, { key: 'D', text: 'They were discovered to be a modern art project' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What was the "Great Emu War," an unusual military event in 1932 Australia?', choices: [{ key: 'A', text: 'A failed military campaign against an invasive emu population' }, { key: 'B', text: 'A conflict over emu farming rights' }, { key: 'C', text: 'A war between two Australian states' }, { key: 'D', text: 'A fictional story with no historical basis' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "xenoglossy," a claimed but scientifically disputed phenomenon?', choices: [{ key: 'A', text: 'Speaking a language one has never learned' }, { key: 'B', text: 'Forgetting one\'s native language suddenly' }, { key: 'C', text: 'Dreaming exclusively in a second language' }, { key: 'D', text: 'Hearing voices in a foreign accent' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "Taman Shud case," a famous unsolved Australian mystery from 1948?', choices: [{ key: 'A', text: 'A confirmed spy caught during WWII' }, { key: 'B', text: 'An unidentified man found dead with a coded message and torn book page' }, { key: 'C', text: 'A hoax created for a novel\'s publicity' }, { key: 'D', text: 'A missing persons case later solved' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is odd about the "Zone of Silence" in the Mexican desert (Zona del Silencio)?', choices: [{ key: 'A', text: 'It\'s a scientifically proven radio dead zone' }, { key: 'B', text: 'It\'s the site of a confirmed meteor impact' }, { key: 'C', text: 'It\'s completely uninhabitable by law' }, { key: 'D', text: 'Local legend claims radio signals mysteriously fail there, though it\'s not scientifically confirmed' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What was the "Dancing Plague of 1518"?', choices: [{ key: 'A', text: 'A famous ballet premiere' }, { key: 'B', text: 'A historical event in Strasbourg where dozens of people reportedly danced uncontrollably for days' }, { key: 'C', text: 'A modern urban legend with no historical record' }, { key: 'D', text: 'A religious festival still celebrated today' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the "Phaistos Disc," an archaeological curiosity from Crete?', choices: [{ key: 'A', text: 'A modern forgery proven in court' }, { key: 'B', text: 'A solved ancient calendar' }, { key: 'C', text: 'An ancient clay disc with symbols that have never been definitively deciphered' }, { key: 'D', text: 'A confirmed ancient board game' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "fulgurites," formed when lightning strikes sand?', choices: [{ key: 'A', text: 'They\'re a type of meteorite' }, { key: 'B', text: 'They\'re a rare mineral formed underwater' }, { key: 'C', text: 'They only form in volcanic ash' }, { key: 'D', text: 'The heat fuses sand into hollow, glass-like tubes' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is notable about the "Winchcombe meteorite"?', choices: [{ key: 'A', text: 'A rare meteorite that landed in a UK driveway in 2021 and was recovered within hours' }, { key: 'B', text: 'A meteorite proven to contain alien microbes' }, { key: 'C', text: 'The largest meteorite ever recorded' }, { key: 'D', text: 'A meteorite that started a small war' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "St. Elmo\'s Fire," despite its name?', choices: [{ key: 'A', text: 'A type of forest wildfire' }, { key: 'B', text: 'A confirmed hoax with no scientific basis' }, { key: 'C', text: 'A weather phenomenon producing a visible electrical glow around pointed objects, not actual fire' }, { key: 'D', text: 'A religious ritual bonfire' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about the "Sedlec Ossuary" in the Czech Republic?', choices: [{ key: 'A', text: 'A chapel decorated with the bones of tens of thousands of people' }, { key: 'B', text: 'It\'s built entirely underwater' }, { key: 'C', text: 'It was recently proven to be a replica' }, { key: 'D', text: 'It has no historical records at all' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What are the "Baigong Pipes," a geological curiosity in China?', choices: [{ key: 'A', text: 'Confirmed ancient irrigation pipes' }, { key: 'B', text: 'A modern art installation' }, { key: 'C', text: 'Unusual iron pipe-like rock formations with a debated natural or man-made origin' }, { key: 'D', text: 'A proven meteorite impact site' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "apophenia," a broader psychological concept related to pareidolia?', choices: [{ key: 'A', text: 'The inability to recognize faces' }, { key: 'B', text: 'The tendency to perceive meaningful connections in unrelated things' }, { key: 'C', text: 'A fear of open spaces' }, { key: 'D', text: 'A memory disorder affecting names only' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the "Kensington Runestone," found in Minnesota in 1898?', choices: [{ key: 'A', text: 'A confirmed Viking-era artifact accepted by all historians' }, { key: 'B', text: 'A proven 20th-century forgery with no dissent' }, { key: 'C', text: 'A stone with runic inscriptions claiming pre-Columbian Norse presence in America, authenticity disputed' }, { key: 'D', text: 'A Native American ceremonial stone' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about the "Moving Coffins of Barbados," a 19th-century legend?', choices: [{ key: 'A', text: 'The story was proven fabricated by the family' }, { key: 'B', text: 'Sealed coffins in a crypt were reportedly found rearranged each time it was opened' }, { key: 'C', text: 'The crypt was later found empty entirely' }, { key: 'D', text: 'The coffins were confirmed stolen by grave robbers' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What was the "Rendlesham Forest incident," a famous 1980 event in England?', choices: [{ key: 'A', text: 'A confirmed weather balloon test' }, { key: 'B', text: 'A Cold War military exercise' }, { key: 'C', text: 'A hoax admitted by the witnesses' }, { key: 'D', text: 'An unexplained series of lights reported by US Air Force personnel near a military base' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the "Piri Reis map," a famous historical map curiosity?', choices: [{ key: 'A', text: 'A 1513 map some claim shows part of Antarctica\'s coastline centuries before its official discovery, a disputed claim' }, { key: 'B', text: 'The first map to show a round Earth' }, { key: 'C', text: 'A modern forgery proven in the 1990s' }, { key: 'D', text: 'A confirmed map used by Columbus' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is odd about "Naga fireballs," reported along the Mekong River in Thailand and Laos?', choices: [{ key: 'A', text: 'A proven chemical reaction fully explained by scientists' }, { key: 'B', text: 'A confirmed annual fireworks festival' }, { key: 'C', text: 'Glowing balls of light said to rise from the river, tied to local legend, cause still debated' }, { key: 'D', text: 'A type of bioluminescent fish' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the "Bell Witch legend," tied to a real Tennessee family in the early 1800s?', choices: [{ key: 'A', text: 'A reportedly malevolent spirit that tormented the Bell family for years' }, { key: 'B', text: 'A confirmed local prankster caught in the act' }, { key: 'C', text: 'A famous novel with no folklore basis' }, { key: 'D', text: 'A story invented entirely in the 20th century' }], correctChoiceKey: 'A', explanation: null },
+    ],
+  },
+
+  food_for_thought: {
+    easy: [
+      { questionText: 'What fruit allegedly keeps the doctor away if you eat one per day?', choices: [{ key: 'A', text: 'Apples' }, { key: 'B', text: 'Bananas' }, { key: 'C', text: 'Oranges' }, { key: 'D', text: 'Cherries' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these fruits does not contain a stone?', choices: [{ key: 'A', text: 'Nectarine' }, { key: 'B', text: 'Peach' }, { key: 'C', text: 'Strawberry' }, { key: 'D', text: 'Cherry' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Tandoori Chicken is a dish that is most associated with which part of the world?', choices: [{ key: 'A', text: 'India' }, { key: 'B', text: 'Scotland' }, { key: 'C', text: 'Cameroon' }, { key: 'D', text: 'Mauritius' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which Italian phrase is used to describe pasta cooked only until it offers a slight resistance when bitten?', choices: [{ key: 'A', text: 'Tartilli' }, { key: 'B', text: 'Parpa Delle' }, { key: 'C', text: 'Al dente ' }, { key: 'D', text: 'Forte Benne' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What Chinese dish extends Chop suey with the addition of stir-fried noodles?', choices: [{ key: 'A', text: 'Xiao Long Bao' }, { key: 'B', text: 'Chow mein' }, { key: 'C', text: 'Mapo doufu' }, { key: 'D', text: 'Kung Pao chicken' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the name of a long metal or wooden pin used to secure food during barbecuing?', choices: [{ key: 'A', text: 'Spatula' }, { key: 'B', text: 'Skewer' }, { key: 'C', text: 'Basting brush' }, { key: 'D', text: 'Tongs' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'In which country is guinness a popular drink?', choices: [{ key: 'A', text: 'Ireland' }, { key: 'B', text: 'Mongolia' }, { key: 'C', text: 'Finland' }, { key: 'D', text: 'Romania' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Who is McDonald\'s mascot?', choices: [{ key: 'A', text: 'Meato' }, { key: 'B', text: 'The King' }, { key: 'C', text: 'Ronald Mcdonald' }, { key: 'D', text: 'Donald Burger' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which fast food is known for a menu that mainly contains fried chicken?', choices: [{ key: 'A', text: 'Burger King' }, { key: 'B', text: 'McDonald\'s' }, { key: 'C', text: 'KFC' }, { key: 'D', text: 'Wendy\'s' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What cocktail is made with triple sec, tequila, and lime juice?', choices: [{ key: 'A', text: 'Margarita' }, { key: 'B', text: 'Martini' }, { key: 'C', text: 'Bloody Mary' }, { key: 'D', text: 'Mojito' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which fruit is typically used to make wine?', choices: [{ key: 'A', text: 'Apples' }, { key: 'B', text: 'Grapes' }, { key: 'C', text: 'Dates' }, { key: 'D', text: 'Cherries' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these dishes is most commonly found in Northern regions of Thailand?', choices: [{ key: 'A', text: 'Khao Soi' }, { key: 'B', text: 'Kentucky Fried Chicken' }, { key: 'C', text: 'Chicken Tikka Masala' }, { key: 'D', text: 'Toad in the Hole' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Food that is permitted to be eaten under Jewish dietary laws is known as what?', choices: [{ key: 'A', text: 'Kosher ' }, { key: 'B', text: 'Vegan' }, { key: 'C', text: 'Deli' }, { key: 'D', text: 'Halal' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What soft drink is advertised with the slogan, "What\'s the worst that could happen"?', choices: [{ key: 'A', text: 'Tango' }, { key: 'B', text: 'Sunny Delight' }, { key: 'C', text: 'Lucozade' }, { key: 'D', text: 'Dr Pepper ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which of these dishes would you most expect to find in Italy?', choices: [{ key: 'A', text: 'Pizza' }, { key: 'B', text: 'Kabuli Pulao' }, { key: 'C', text: 'Dim Sum' }, { key: 'D', text: 'Cou Cou and Flying Fish' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these is a major food allergen?', choices: [{ key: 'A', text: 'Black beans' }, { key: 'B', text: 'Chickpeas' }, { key: 'C', text: 'Lentils' }, { key: 'D', text: 'Peanuts' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the popular name for little baked sausages wrapped in rashers of streaky bacon?', choices: [{ key: 'A', text: 'Swine rolls' }, { key: 'B', text: 'Pigs in blankets' }, { key: 'C', text: 'Little weiners' }, { key: 'D', text: 'Porkos' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What colour is wasabi?', choices: [{ key: 'A', text: 'Green' }, { key: 'B', text: 'Purple' }, { key: 'C', text: 'Blue' }, { key: 'D', text: 'Red' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What type of food is barley?', choices: [{ key: 'A', text: 'Grain' }, { key: 'B', text: 'Cheese' }, { key: 'C', text: 'Wine' }, { key: 'D', text: 'Butter' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these fruits is not a tropical fruit?', choices: [{ key: 'A', text: 'Papaya' }, { key: 'B', text: 'Mango' }, { key: 'C', text: 'Pineapple' }, { key: 'D', text: 'Apple' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which vegetable did Popeye love to eat from a can?', choices: [{ key: 'A', text: 'Spinach' }, { key: 'B', text: 'Broccoli' }, { key: 'C', text: 'Cabbage' }, { key: 'D', text: 'Kale' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What was the name of the highly diluted rum that was once given to British sailors?', choices: [{ key: 'A', text: 'Guppy' }, { key: 'B', text: 'Roller' }, { key: 'C', text: 'Grog ' }, { key: 'D', text: 'Meal' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which US state is most associated with Chilli Con Carne?', choices: [{ key: 'A', text: 'Georgia' }, { key: 'B', text: 'Texas ' }, { key: 'C', text: 'California' }, { key: 'D', text: 'Florida' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What type of alcoholic beverage is bourbon?', choices: [{ key: 'A', text: 'Beer' }, { key: 'B', text: 'Whiskey' }, { key: 'C', text: 'Rum' }, { key: 'D', text: 'Wine' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Where in the world would you most expect to be served Haggis?', choices: [{ key: 'A', text: 'Estonia' }, { key: 'B', text: 'Hungary' }, { key: 'C', text: 'Scotland' }, { key: 'D', text: 'Thailand' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is a popular drink in The USA?', choices: [{ key: 'A', text: 'Pastis' }, { key: 'B', text: 'Becherovka' }, { key: 'C', text: 'Waragi' }, { key: 'D', text: 'Bourbon' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'In which country would you expect to be served a yoghurt-based starter called \'tzatziki\'?', choices: [{ key: 'A', text: 'Greece ' }, { key: 'B', text: 'Russia' }, { key: 'C', text: 'Pakistan' }, { key: 'D', text: 'Italy' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What name is given to an Indian deep fried triangular pastry?', choices: [{ key: 'A', text: 'Samosa' }, { key: 'B', text: 'Bhaji' }, { key: 'C', text: 'Pakora' }, { key: 'D', text: 'Curry' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Where did jerk chicken originate?', choices: [{ key: 'A', text: 'Mexico' }, { key: 'B', text: 'Cuba' }, { key: 'C', text: 'Jamaica' }, { key: 'D', text: 'Brazil' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What type of food has a version called "Lorraine"?', choices: [{ key: 'A', text: 'Frittata' }, { key: 'B', text: 'Quiche' }, { key: 'C', text: 'Pizza' }, { key: 'D', text: 'Omelette' }], correctChoiceKey: 'B', explanation: null },
+    ],
+    medium: [
+      { questionText: 'What type of pasta is ravioli?', choices: [{ key: 'A', text: 'Strand pasta' }, { key: 'B', text: 'Ribbon pasta' }, { key: 'C', text: 'Stuffed pasta' }, { key: 'D', text: 'Soup pasta' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What type of food is Port Salut?', choices: [{ key: 'A', text: 'Cheese ' }, { key: 'B', text: 'Fortified Wine' }, { key: 'C', text: 'Bread' }, { key: 'D', text: 'Confectionary' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which of these is a Northern European pastry usually shaped into a ring or knot?', choices: [{ key: 'A', text: 'Eclair' }, { key: 'B', text: 'Napoleon' }, { key: 'C', text: 'Tart' }, { key: 'D', text: 'Kringle' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the name given to the watery part of milk left after making cheese?', choices: [{ key: 'A', text: 'Oodle' }, { key: 'B', text: 'Creatine' }, { key: 'C', text: 'Whey' }, { key: 'D', text: 'Lactil' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is a thick Italian vegetable soup?', choices: [{ key: 'A', text: 'Minestrone' }, { key: 'B', text: 'Tiramisu' }, { key: 'C', text: 'Linguine' }, { key: 'D', text: 'Pesto' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Moules-Frites is a dish that is most associated with which part of the world?', choices: [{ key: 'A', text: 'Belgium' }, { key: 'B', text: 'Bahrain' }, { key: 'C', text: 'Japan' }, { key: 'D', text: 'Laos' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'How did chocolate get its name?', choices: [{ key: 'A', text: 'Cockney rhyming slang' }, { key: 'B', text: 'The Spanish imitation of an Aztec word ' }, { key: 'C', text: 'A town in Brazil' }, { key: 'D', text: 'A King of Mali' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'From which part of the world does mango originate?', choices: [{ key: 'A', text: 'Central Asia' }, { key: 'B', text: 'Central America' }, { key: 'C', text: 'India' }, { key: 'D', text: 'Southeast Asia' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Where in the world would you most expect to be served Frikadeller?', choices: [{ key: 'A', text: 'Cambodia' }, { key: 'B', text: 'Cuba' }, { key: 'C', text: 'Costa Rica' }, { key: 'D', text: 'Denmark' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Where in the world are tomatoes originally from?', choices: [{ key: 'A', text: 'China' }, { key: 'B', text: 'South America' }, { key: 'C', text: 'Europe' }, { key: 'D', text: 'Central America' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the name of a spicy, hot beverage often served to cure a cold or sore throat?', choices: [{ key: 'A', text: 'Mocha' }, { key: 'B', text: 'Latte' }, { key: 'C', text: 'Toddy' }, { key: 'D', text: 'Old Smoke' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which cooking term is used to describe vegetables cut into very thin strips?', choices: [{ key: 'A', text: 'Sharded' }, { key: 'B', text: 'Riband' }, { key: 'C', text: 'Julienne ' }, { key: 'D', text: 'Shaved' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is a Mexican tripe soup?', choices: [{ key: 'A', text: 'Gumbo' }, { key: 'B', text: 'Gazpacho' }, { key: 'C', text: 'Pho' }, { key: 'D', text: 'Menudo' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Carrots Are Rich In which Vitamin?', choices: [{ key: 'A', text: 'B' }, { key: 'B', text: 'D' }, { key: 'C', text: 'C' }, { key: 'D', text: 'A ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What Mexican dish that means "little meats" is made with shredded pork?', choices: [{ key: 'A', text: 'Tacos' }, { key: 'B', text: 'Carnitas' }, { key: 'C', text: 'Burritos' }, { key: 'D', text: 'Enchiladas' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'How would you say \'house wine\' in \'French\'', choices: [{ key: 'A', text: 'Vin chambre' }, { key: 'B', text: 'Vin dom' }, { key: 'C', text: 'Vin chateau' }, { key: 'D', text: 'Vin maison ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: ' What is Japanese "sake" made from?', choices: [{ key: 'A', text: 'Rice' }, { key: 'B', text: 'Potato' }, { key: 'C', text: 'Fish' }, { key: 'D', text: 'Corn' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does \'Garam Masala\' mean in Hindi?', choices: [{ key: 'A', text: 'Secret Flavour' }, { key: 'B', text: 'Lazy Cooking' }, { key: 'C', text: 'Strong Taste' }, { key: 'D', text: 'Hot Spice ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the common name for the fruits named casaba, crenshaw, and honeydew?', choices: [{ key: 'A', text: 'Melons' }, { key: 'B', text: 'Oranges' }, { key: 'C', text: 'Bananas' }, { key: 'D', text: 'Apples' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Where in the world are avocados originally from?', choices: [{ key: 'A', text: 'Southeast Asia' }, { key: 'B', text: 'India' }, { key: 'C', text: 'Europe' }, { key: 'D', text: 'South America' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which of these is a nickname for the avocado?', choices: [{ key: 'A', text: 'Alligator pear' }, { key: 'B', text: 'Dragon apple' }, { key: 'C', text: 'Snake banana' }, { key: 'D', text: 'Crocodile fruit' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the main difference between sparkling and still wine?', choices: [{ key: 'A', text: 'Sparkling wine contains grape skins' }, { key: 'B', text: 'Sparkling wine contains carbon dioxide' }, { key: 'C', text: 'Sparkling wine contains more oxygen' }, { key: 'D', text: 'Sparkling wine contains more alcohol' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which dessert is named after the German region in which it originated?', choices: [{ key: 'A', text: 'Apple Strudel' }, { key: 'B', text: 'Pavlova' }, { key: 'C', text: 'Black Forest Gateau' }, { key: 'D', text: 'Profiteroles' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which type of plant does vanilla come from? ', choices: [{ key: 'A', text: 'Cactus' }, { key: 'B', text: 'Lily' }, { key: 'C', text: 'Orchid' }, { key: 'D', text: 'Nightshade' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these cheeses has a blue-green vein?', choices: [{ key: 'A', text: 'Provolone' }, { key: 'B', text: 'Gouda' }, { key: 'C', text: 'Mozzarella' }, { key: 'D', text: 'Gorgonzola' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Pho is a dish that is most associated with which part of the world?', choices: [{ key: 'A', text: 'Uzbekistan' }, { key: 'B', text: 'Russia' }, { key: 'C', text: 'Thailand' }, { key: 'D', text: 'Vietnam' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What name is given to the seaweed sheets used to wrap sushi rolls?', choices: [{ key: 'A', text: 'Mirin' }, { key: 'B', text: 'Nori' }, { key: 'C', text: 'Wasabi' }, { key: 'D', text: 'Sake' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'For which beverage is the Czech town of Budweis famous?', choices: [{ key: 'A', text: 'Beer' }, { key: 'B', text: 'Absinthe' }, { key: 'C', text: 'Vodka' }, { key: 'D', text: 'Wine' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: ' At which stage of a meal would you have an hors d\'oeuvre?', choices: [{ key: 'A', text: 'With A Soup' }, { key: 'B', text: 'Between Courses' }, { key: 'C', text: 'The Beginning' }, { key: 'D', text: 'The End' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is an orange flavoured liqueur?', choices: [{ key: 'A', text: 'Midori' }, { key: 'B', text: 'Disaronno' }, { key: 'C', text: 'Limoncello' }, { key: 'D', text: 'Grand Marnier' }], correctChoiceKey: 'D', explanation: null },
+    ],
+    hard: [
+      { questionText: 'Which of these dishes would you most expect to find in Russia?', choices: [{ key: 'A', text: 'Biryani' }, { key: 'B', text: 'Pelmeni' }, { key: 'C', text: 'Khachapuri' }, { key: 'D', text: 'Larb' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which famous French chef invented the Peach Melba in 1893?', choices: [{ key: 'A', text: 'Auguste Escoffier ' }, { key: 'B', text: 'Raymond Oliver' }, { key: 'C', text: 'Marie-Antoine Carême' }, { key: 'D', text: 'Jacque Pépin' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which type of seafood has varieties called Maine and spiny, and turns a vivid red only after it\'s been cooked?', choices: [{ key: 'A', text: 'Shrimp' }, { key: 'B', text: 'Lobster' }, { key: 'C', text: 'Crab' }, { key: 'D', text: 'Clam' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'From which country Does Bull\'s Blood wine originate?', choices: [{ key: 'A', text: 'Portugal' }, { key: 'B', text: 'Hungary ' }, { key: 'C', text: 'India' }, { key: 'D', text: 'Turkey' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which two cheeses are layered in a Huntsman Cheese?', choices: [{ key: 'A', text: 'Gorgonzola & Mozzarella' }, { key: 'B', text: 'Brie & Wensleydale' }, { key: 'C', text: 'Cheddar & Red Leicester' }, { key: 'D', text: 'Double Gloucester & Stilton ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which type of cheese is used to make fondue?', choices: [{ key: 'A', text: 'Gruyère' }, { key: 'B', text: 'Mozzarella' }, { key: 'C', text: 'Gouda' }, { key: 'D', text: 'Feta' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does the HP stand for in HP sauce?', choices: [{ key: 'A', text: 'Houses Of Parliament ' }, { key: 'B', text: 'Heavy Produce' }, { key: 'C', text: 'Healing Property' }, { key: 'D', text: 'Hit Point ' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which drink made of hot milk curdled with ale, wine, etc. and often flavoured with spices, was formerly used as a cold remedy?', choices: [{ key: 'A', text: 'Posset ' }, { key: 'B', text: 'Yarg' }, { key: 'C', text: 'Bitter Buttie' }, { key: 'D', text: 'Hot Toddie' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which type of restaurant popularized the use of conveyor belts?', choices: [{ key: 'A', text: 'Sandwich' }, { key: 'B', text: 'Dessert' }, { key: 'C', text: 'Pizza' }, { key: 'D', text: 'Sushi' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What type of pasta is pastina?', choices: [{ key: 'A', text: 'Soup pasta' }, { key: 'B', text: 'Shaped pasta' }, { key: 'C', text: 'Ribbon pasta' }, { key: 'D', text: 'Strand pasta' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Where in the world are parsnips originally from?', choices: [{ key: 'A', text: 'Central Asia' }, { key: 'B', text: 'Central America' }, { key: 'C', text: 'Europe' }, { key: 'D', text: 'China' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Chicory root is used in a substitute for which drink?', choices: [{ key: 'A', text: 'Wine' }, { key: 'B', text: 'Cola' }, { key: 'C', text: 'Coffee ' }, { key: 'D', text: 'Beer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Where in the world is spinach originally from?', choices: [{ key: 'A', text: 'Africa' }, { key: 'B', text: 'The Middle East' }, { key: 'C', text: 'Central Asia' }, { key: 'D', text: 'South America' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these drinks would you associate with Canada?', choices: [{ key: 'A', text: 'Chibuku' }, { key: 'B', text: 'Ouzo' }, { key: 'C', text: 'Caesar' }, { key: 'D', text: 'Sangria' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Where in the world are watermelons originally from?', choices: [{ key: 'A', text: 'Central Asia' }, { key: 'B', text: 'Africa' }, { key: 'C', text: 'North America' }, { key: 'D', text: 'Southeast Asia' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these dishes would you most expect to find in Chile?', choices: [{ key: 'A', text: 'Moules-Frites' }, { key: 'B', text: 'Dal Bhaath' }, { key: 'C', text: 'Pelmeni' }, { key: 'D', text: 'Pastel De Choclo' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Where in the world are green beans originally from?', choices: [{ key: 'A', text: 'Europe' }, { key: 'B', text: 'Central America' }, { key: 'C', text: 'India' }, { key: 'D', text: 'Central Asia' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which country produces the wine Vinho Verdi?', choices: [{ key: 'A', text: 'Italy' }, { key: 'B', text: 'Portugal ' }, { key: 'C', text: 'France' }, { key: 'D', text: 'Spain' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which pasta\'s name means \'Rings\'?', choices: [{ key: 'A', text: 'Ravioli' }, { key: 'B', text: 'Penne' }, { key: 'C', text: 'Gomiti' }, { key: 'D', text: 'Anelli' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'From which fruit is the liqueur Kirsh made?', choices: [{ key: 'A', text: 'Plum' }, { key: 'B', text: 'Apple' }, { key: 'C', text: 'Cherry' }, { key: 'D', text: 'Apricot' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these drinks would you associate with The Czech Republic?', choices: [{ key: 'A', text: 'Becherovka' }, { key: 'B', text: 'Koskenkorva Viina' }, { key: 'C', text: 'Seco Herrerano' }, { key: 'D', text: 'Sangria' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What Type Of Fish Is A Kipper', choices: [{ key: 'A', text: 'Salmon' }, { key: 'B', text: 'Cod' }, { key: 'C', text: 'Herring ' }, { key: 'D', text: 'Tuna' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these drinks would you associate with Norway?', choices: [{ key: 'A', text: 'Akevitt' }, { key: 'B', text: 'Mama Juana' }, { key: 'C', text: 'Slivovitz' }, { key: 'D', text: 'Gin' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which cocktail shares its name with a tool?', choices: [{ key: 'A', text: 'Spanner' }, { key: 'B', text: 'Wrench' }, { key: 'C', text: 'Hammer' }, { key: 'D', text: 'Screwdriver ' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which pasta\'s name means \'Little twine\'?', choices: [{ key: 'A', text: 'Ravioli' }, { key: 'B', text: 'Linguine' }, { key: 'C', text: 'Spaghetti' }, { key: 'D', text: 'Fettuccine' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Where in the world are lemons originally from?', choices: [{ key: 'A', text: 'The Middle East' }, { key: 'B', text: 'North America' }, { key: 'C', text: 'India' }, { key: 'D', text: 'Southeast Asia' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which fruit comes in Tokay and Emperor varieties?', choices: [{ key: 'A', text: 'Oranges' }, { key: 'B', text: 'Bananas' }, { key: 'C', text: 'Apples' }, { key: 'D', text: 'Grapes' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'From which part of the world does eggplant originate?', choices: [{ key: 'A', text: 'India' }, { key: 'B', text: 'China' }, { key: 'C', text: 'Europe' }, { key: 'D', text: 'South America' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What name was given to the light, clear wine developed in medieval times along the coastal valleys of the Gironde river in the Bordeaux region?', choices: [{ key: 'A', text: 'Claret ' }, { key: 'B', text: 'Burgundy' }, { key: 'C', text: 'Shiraz' }, { key: 'D', text: 'Cabernet Sauvignon' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Where in the world are apricots originally from?', choices: [{ key: 'A', text: 'Central America' }, { key: 'B', text: 'South America' }, { key: 'C', text: 'Africa' }, { key: 'D', text: 'China' }], correctChoiceKey: 'D', explanation: null },
+    ],
+  },
+
+  after_hours: {
+    easy: [
+      { questionText: 'What spirit is traditionally the base of a Mojito?', choices: [{ key: 'A', text: 'Gin' }, { key: 'B', text: 'Vodka' }, { key: 'C', text: 'Rum' }, { key: 'D', text: 'Tequila' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What\'s the main flavor in a classic Margarita besides tequila?', choices: [{ key: 'A', text: 'Grapefruit' }, { key: 'B', text: 'Lime' }, { key: 'C', text: 'Orange' }, { key: 'D', text: 'Lemon' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What type of drink is a "flight," when ordered at a bar?', choices: [{ key: 'A', text: 'A sampler of several small pours' }, { key: 'B', text: 'A drink served on fire' }, { key: 'C', text: 'A drink with an umbrella' }, { key: 'D', text: 'A double shot' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Karaoke originated in which country?', choices: [{ key: 'A', text: 'South Korea' }, { key: 'B', text: 'United States' }, { key: 'C', text: 'Japan' }, { key: 'D', text: 'Philippines' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What\'s the garnish traditionally floated in a classic Old Fashioned?', choices: [{ key: 'A', text: 'A cherry stem' }, { key: 'B', text: 'A lime wedge' }, { key: 'C', text: 'A mint sprig' }, { key: 'D', text: 'An orange twist' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does ordering a drink "neat" mean?', choices: [{ key: 'A', text: 'Extra ice' }, { key: 'B', text: 'Shaken, not stirred' }, { key: 'C', text: 'No ice, no mixer' }, { key: 'D', text: 'With a chaser' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these is NOT a type of beer?', choices: [{ key: 'A', text: 'Pilsner' }, { key: 'B', text: 'Merlot' }, { key: 'C', text: 'Lager' }, { key: 'D', text: 'Stout' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What do you call a drink with no alcohol at all, made to look like a cocktail?', choices: [{ key: 'A', text: 'A mocktail' }, { key: 'B', text: 'A shooter' }, { key: 'C', text: 'A highball' }, { key: 'D', text: 'A nightcap' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "mocktail" typically served without?', choices: [{ key: 'A', text: 'Ice' }, { key: 'B', text: 'Alcohol' }, { key: 'C', text: 'Fruit' }, { key: 'D', text: 'Sugar' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which glass is traditionally used to serve beer with a large head of foam?', choices: [{ key: 'A', text: 'A martini glass' }, { key: 'B', text: 'A pint glass' }, { key: 'C', text: 'A shot glass' }, { key: 'D', text: 'A wine glass' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "bar crawl"?', choices: [{ key: 'A', text: 'Visiting multiple bars in one night' }, { key: 'B', text: 'A slow dance style' }, { key: 'C', text: 'A type of cocktail' }, { key: 'D', text: 'A bartending competition' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which fruit is traditionally squeezed into a classic gin and tonic?', choices: [{ key: 'A', text: 'Grapefruit' }, { key: 'B', text: 'Orange' }, { key: 'C', text: 'Lime' }, { key: 'D', text: 'Lemon' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What do you call the person who mixes and serves drinks at a bar?', choices: [{ key: 'A', text: 'A bartender' }, { key: 'B', text: 'A host' }, { key: 'C', text: 'A busser' }, { key: 'D', text: 'A sommelier' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "last call" at a bar?', choices: [{ key: 'A', text: 'A toast before dinner' }, { key: 'B', text: 'The final opportunity to order drinks before closing' }, { key: 'C', text: 'A happy hour announcement' }, { key: 'D', text: 'The first drink of the night' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which of these is a non-alcoholic beer style?', choices: [{ key: 'A', text: 'Near beer (0.5% ABV or less)' }, { key: 'B', text: 'Lager' }, { key: 'C', text: 'Pilsner' }, { key: 'D', text: 'Stout' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "shot" typically served in?', choices: [{ key: 'A', text: 'A mug' }, { key: 'B', text: 'A wine glass' }, { key: 'C', text: 'A pint glass' }, { key: 'D', text: 'A small shot glass' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s the classic garnish for a Bloody Mary?', choices: [{ key: 'A', text: 'A mint sprig' }, { key: 'B', text: 'An orange slice' }, { key: 'C', text: 'A celery stalk' }, { key: 'D', text: 'A cherry' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which spirit is traditionally used in a classic daiquiri?', choices: [{ key: 'A', text: 'Vodka' }, { key: 'B', text: 'Tequila' }, { key: 'C', text: 'Gin' }, { key: 'D', text: 'Rum' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "happy hour"?', choices: [{ key: 'A', text: 'A DJ\'s set time' }, { key: 'B', text: 'The busiest hour of the night' }, { key: 'C', text: 'Last call' }, { key: 'D', text: 'A period with discounted drinks/food, usually early evening' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does "BYOB" commonly stand for at parties or restaurants?', choices: [{ key: 'A', text: 'Bring Your Own Band' }, { key: 'B', text: 'Book Your Own Booth' }, { key: 'C', text: 'Bring Your Own Bottle' }, { key: 'D', text: 'Buy Your Own Beer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these describes a "dry" bar or venue?', choices: [{ key: 'A', text: 'One with no music' }, { key: 'B', text: 'One that\'s very crowded' }, { key: 'C', text: 'One that\'s outdoors' }, { key: 'D', text: 'One that doesn\'t serve alcohol' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "pub quiz"?', choices: [{ key: 'A', text: 'A karaoke competition' }, { key: 'B', text: 'A pool tournament' }, { key: 'C', text: 'A trivia competition held at a bar' }, { key: 'D', text: 'A drinking contest' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which classic party game involves tossing bean bags at a raised board with a hole?', choices: [{ key: 'A', text: 'Ring toss' }, { key: 'B', text: 'Cornhole' }, { key: 'C', text: 'Bocce' }, { key: 'D', text: 'Horseshoes' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "growler," used at breweries?', choices: [{ key: 'A', text: 'A type of beer glass' }, { key: 'B', text: 'A bottle opener' }, { key: 'C', text: 'A jug used to carry draft beer to-go' }, { key: 'D', text: 'A bar stool' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What\'s the traditional toast phrase before drinking, common in many cultures?', choices: [{ key: 'A', text: '"Bottoms up only"' }, { key: 'B', text: '"Encore"' }, { key: 'C', text: '"Cheers!"' }, { key: 'D', text: '"Last call"' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which game involves throwing darts at a circular target board?', choices: [{ key: 'A', text: 'Billiards' }, { key: 'B', text: 'Bowling' }, { key: 'C', text: 'Shuffleboard' }, { key: 'D', text: 'Darts' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "tab" at a bar?', choices: [{ key: 'A', text: 'A bar stool' }, { key: 'B', text: 'A drink menu' }, { key: 'C', text: 'A running total of what you owe, paid at the end' }, { key: 'D', text: 'A type of cocktail' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which of these best describes a "rooftop bar"?', choices: [{ key: 'A', text: 'A bar with no seating' }, { key: 'B', text: 'A bar that\'s completely enclosed' }, { key: 'C', text: 'A bar only open at noon' }, { key: 'D', text: 'A bar located on top of a building, often with a view' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "karaoke" most simply described as?', choices: [{ key: 'A', text: 'A bartending trick' }, { key: 'B', text: 'A type of dance competition' }, { key: 'C', text: 'A drinking game' }, { key: 'D', text: 'Singing along to instrumental music with on-screen lyrics' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which of these is a classic bar snack often served free with drinks?', choices: [{ key: 'A', text: 'Sushi' }, { key: 'B', text: 'Salad' }, { key: 'C', text: 'Steak' }, { key: 'D', text: 'Pretzels' }], correctChoiceKey: 'D', explanation: null },
+    ],
+    medium: [
+      { questionText: 'What does ordering a drink "on the rocks" mean?', choices: [{ key: 'A', text: 'Served over ice' }, { key: 'B', text: 'Served with salt' }, { key: 'C', text: 'Served flaming' }, { key: 'D', text: 'Served as a shot' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'A "speakeasy" originally referred to what?', choices: [{ key: 'A', text: 'A wine cellar' }, { key: 'B', text: 'A rooftop bar' }, { key: 'C', text: 'A loud nightclub' }, { key: 'D', text: 'An illegal bar during Prohibition' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'A classic dry Martini is mostly which spirit, with just a splash of vermouth?', choices: [{ key: 'A', text: 'Whiskey' }, { key: 'B', text: 'Vodka' }, { key: 'C', text: 'Rum' }, { key: 'D', text: 'Gin' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which decade is disco music most associated with?', choices: [{ key: 'A', text: 'The 1960s' }, { key: 'B', text: 'The 1970s' }, { key: 'C', text: 'The 1980s' }, { key: 'D', text: 'The 1990s' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is a "dive bar" generally known for?', choices: [{ key: 'A', text: 'A bar inside a hotel' }, { key: 'B', text: 'An upscale wine bar' }, { key: 'C', text: 'A rooftop pool bar' }, { key: 'D', text: 'A no-frills, unpretentious bar' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s the main spirit in a classic Negroni?', choices: [{ key: 'A', text: 'Rum' }, { key: 'B', text: 'Gin' }, { key: 'C', text: 'Whiskey' }, { key: 'D', text: 'Tequila' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'In 8-ball pool, what happens if you sink the 8-ball before clearing your group of balls?', choices: [{ key: 'A', text: 'You lose the game' }, { key: 'B', text: 'You win instantly' }, { key: 'C', text: 'You get an extra turn' }, { key: 'D', text: 'Nothing happens' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What\'s the traditional last song played at many US bars near closing time?', choices: [{ key: 'A', text: '"Piano Man" by Billy Joel' }, { key: 'B', text: '"Last Dance" by Donna Summer' }, { key: 'C', text: '"Don\'t Stop Believin\'" by Journey' }, { key: 'D', text: '"Closing Time" by Semisonic' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "highball" cocktail?', choices: [{ key: 'A', text: 'A layered shot' }, { key: 'B', text: 'A drink served flaming' }, { key: 'C', text: 'A simple mix of a spirit with a larger amount of a non-alcoholic mixer, served in a tall glass' }, { key: 'D', text: 'Any drink served with a straw' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which cocktail is traditionally made with tequila, orange liqueur, and lime, served with a salted rim?', choices: [{ key: 'A', text: 'A Margarita' }, { key: 'B', text: 'A Paloma' }, { key: 'C', text: 'A Cosmopolitan' }, { key: 'D', text: 'A Mojito' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "muddling" in bartending?', choices: [{ key: 'A', text: 'Crushing ingredients like mint or fruit to release their flavor' }, { key: 'B', text: 'Shaking a drink vigorously' }, { key: 'C', text: 'Straining a drink' }, { key: 'D', text: 'Chilling a glass' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "gastropub"?', choices: [{ key: 'A', text: 'A pub that emphasizes high-quality food alongside drinks' }, { key: 'B', text: 'A pub with no food at all' }, { key: 'C', text: 'A pub for wine only' }, { key: 'D', text: 'A pub with a gas fireplace theme' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which cocktail mixes whiskey, sweet vermouth, and bitters, often garnished with a cherry?', choices: [{ key: 'A', text: 'An Old Fashioned' }, { key: 'B', text: 'A Boulevardier' }, { key: 'C', text: 'A Sazerac' }, { key: 'D', text: 'A Manhattan' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does it mean to order a drink "on the house"?', choices: [{ key: 'A', text: 'It\'s free, given by the bar/bartender' }, { key: 'B', text: 'It\'s the bar\'s specialty drink' }, { key: 'C', text: 'It must be shared' }, { key: 'D', text: 'It\'s extra strong' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "flair bartending"?', choices: [{ key: 'A', text: 'Bartending performed with showy tricks, like bottle tossing' }, { key: 'B', text: 'Bartending done blindfolded' }, { key: 'C', text: 'Bartending competitions judged on speed only' }, { key: 'D', text: 'Bartending using only classic recipes' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which spirit is Japanese whisky most closely modeled after in style?', choices: [{ key: 'A', text: 'Scotch whisky' }, { key: 'B', text: 'Irish whiskey' }, { key: 'C', text: 'Bourbon' }, { key: 'D', text: 'Rye whiskey' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is a "pop-up bar"?', choices: [{ key: 'A', text: 'A mobile food truck bar only' }, { key: 'B', text: 'A bar inside a store' }, { key: 'C', text: 'A bar with an elevated stage' }, { key: 'D', text: 'A temporary bar, often themed, open for a limited time' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the significance of "proof" on a liquor label?', choices: [{ key: 'A', text: 'It indicates alcohol content (in the US, proof is double the ABV percentage)' }, { key: 'B', text: 'It indicates the price tier' }, { key: 'C', text: 'It indicates the distillery\'s rank' }, { key: 'D', text: 'It indicates the aging time' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does "neat" versus "up" mean when ordering a cocktail?', choices: [{ key: 'A', text: '"Neat" always means a double' }, { key: 'B', text: 'They mean the exact same thing' }, { key: 'C', text: '"Neat" is unchilled with no ice; "up" is chilled and strained with no ice' }, { key: 'D', text: '"Up" always means more alcohol' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "trivia night," typically run at bars?', choices: [{ key: 'A', text: 'A late-night comedy show' }, { key: 'B', text: 'A bar\'s weekly happy hour' }, { key: 'C', text: 'A live music showcase only' }, { key: 'D', text: 'A themed weekly event where teams answer quiz questions for prizes' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a "brewpub"?', choices: [{ key: 'A', text: 'A pub for wine tastings' }, { key: 'B', text: 'A 21-and-over dance club' }, { key: 'C', text: 'A pub that only imports beer' }, { key: 'D', text: 'A pub that brews its own beer on-site' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which cocktail mixes prosecco with peach purée, and sometimes soda?', choices: [{ key: 'A', text: 'A Mimosa' }, { key: 'B', text: 'A French 75' }, { key: 'C', text: 'A Bellini' }, { key: 'D', text: 'A Kir Royale' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "flight" at a distillery, similar to a beer or wine flight?', choices: [{ key: 'A', text: 'A single full-size drink' }, { key: 'B', text: 'A tasting sampler of several small spirit pours' }, { key: 'C', text: 'A bottle-signing event' }, { key: 'D', text: 'A cocktail class' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What does "craft" typically signify when describing a beer, cocktail, or spirit?', choices: [{ key: 'A', text: 'Made in small batches with an emphasis on quality/traditional methods' }, { key: 'B', text: 'Made without any additives ever' }, { key: 'C', text: 'Made only with local ingredients' }, { key: 'D', text: 'Made by a certified sommelier only' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is "pairing," as in "food and cocktail pairing"?', choices: [{ key: 'A', text: 'Ordering drinks in a matching set' }, { key: 'B', text: 'Splitting a tab between two people' }, { key: 'C', text: 'Serving two of the same drink together' }, { key: 'D', text: 'Matching specific drinks with specific foods to complement flavors' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What\'s the general difference in vibe between a "dive bar" and a "speakeasy"?', choices: [{ key: 'A', text: 'They\'re the exact same thing' }, { key: 'B', text: 'Speakeasies never serve cocktails' }, { key: 'C', text: 'Dive bars are casual/no-frills; speakeasies lean hidden and upscale' }, { key: 'D', text: 'Dive bars are always more expensive' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "last orders," a British term, equivalent to?', choices: [{ key: 'A', text: 'Last call' }, { key: 'B', text: 'Table service' }, { key: 'C', text: 'Open bar' }, { key: 'D', text: 'Happy hour' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does an "open bar" at an event mean?', choices: [{ key: 'A', text: 'Guests must pay per drink' }, { key: 'B', text: 'The bar is self-serve only' }, { key: 'C', text: 'Drinks are included/free for guests, often pre-paid by the host' }, { key: 'D', text: 'The bar has no walls' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "spritz," as in an Aperol Spritz?', choices: [{ key: 'A', text: 'A layered dessert drink' }, { key: 'B', text: 'A shot of hard liquor' }, { key: 'C', text: 'A light cocktail typically mixing an aperitif, prosecco, and soda water' }, { key: 'D', text: 'A type of dark beer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "corkage," a fee sometimes charged at restaurants/bars?', choices: [{ key: 'A', text: 'A fee for staying past closing' }, { key: 'B', text: 'A fee for opening and serving a bottle you brought yourself' }, { key: 'C', text: 'A fee for a private booth' }, { key: 'D', text: 'A fee for a broken glass' }], correctChoiceKey: 'B', explanation: null },
+    ],
+    hard: [
+      { questionText: 'What does the word "tapas" literally translate to in Spanish?', choices: [{ key: 'A', text: '"Small plates"' }, { key: 'B', text: '"Appetizers"' }, { key: 'C', text: '"Lids" or "covers"' }, { key: 'D', text: '"Snacks"' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which classic cocktail is traditionally garnished with three olives, per old bartender superstition (even numbers are bad luck)?', choices: [{ key: 'A', text: 'A Martini' }, { key: 'B', text: 'A Manhattan' }, { key: 'C', text: 'A Sazerac' }, { key: 'D', text: 'A Gimlet' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'The Sazerac, one of the oldest known cocktails, originated in which US city?', choices: [{ key: 'A', text: 'St. Louis' }, { key: 'B', text: 'New Orleans' }, { key: 'C', text: 'Charleston' }, { key: 'D', text: 'Savannah' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the minimum aging requirement, in years, for a whiskey to be legally labeled "Straight Bourbon"?', choices: [{ key: 'A', text: '1 year' }, { key: 'B', text: 'No minimum' }, { key: 'C', text: '2 years' }, { key: 'D', text: '4 years' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which bitters are the traditional "secret ingredient" in a classic Old Fashioned?', choices: [{ key: 'A', text: 'Peychaud\'s bitters' }, { key: 'B', text: 'Orange bitters' }, { key: 'C', text: 'Chocolate bitters' }, { key: 'D', text: 'Angostura bitters' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What does the term "mixology" formally refer to?', choices: [{ key: 'A', text: 'The chemistry of fermentation' }, { key: 'B', text: 'The history of distilling' }, { key: 'C', text: 'The study of bar design' }, { key: 'D', text: 'The art and skill of mixing cocktails' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'In craft beer, what does "IBU" measure?', choices: [{ key: 'A', text: 'Bitterness' }, { key: 'B', text: 'Carbonation' }, { key: 'C', text: 'Alcohol content' }, { key: 'D', text: 'Color' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'The mirror ("disco") ball, a nightlife staple, dates back in some form to which decade?', choices: [{ key: 'A', text: 'The 1980s' }, { key: 'B', text: 'The 1950s' }, { key: 'C', text: 'The 1920s' }, { key: 'D', text: 'The 1970s' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What did the earliest known printed definition of "cocktail," from an 1806 newspaper, say it required?', choices: [{ key: 'A', text: 'Spirits, sugar, water, and bitters' }, { key: 'B', text: 'Spirits and fruit juice only' }, { key: 'C', text: 'Spirits and carbonated water' }, { key: 'D', text: 'Spirits, cream, and sugar' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does "ABV" stand for on a drink label?', choices: [{ key: 'A', text: 'Aged Barrel Vintage' }, { key: 'B', text: 'Average Beer Volume' }, { key: 'C', text: 'Alcohol Blend Variant' }, { key: 'D', text: 'Alcohol By Volume' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What was the primary legal loophole allowing some US bars to stay open during Prohibition?', choices: [{ key: 'A', text: 'Only imported liquor was banned' }, { key: 'B', text: 'Doctors could prescribe alcohol as medicine' }, { key: 'C', text: 'Only wine was banned' }, { key: 'D', text: 'Beer under a certain strength was legal' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is "dry January," a modern trend some bars now cater to with mocktail menus?', choices: [{ key: 'A', text: 'A bartending competition held in January' }, { key: 'B', text: 'A tax-free month for bars' }, { key: 'C', text: 'A ban on serving drinks after midnight' }, { key: 'D', text: 'A month-long abstinence from alcohol, typically in January' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which classic cocktail\'s French name translates to "between the sheets"?', choices: [{ key: 'A', text: 'Between the Sheets' }, { key: 'B', text: 'Sidecar' }, { key: 'C', text: 'French 75' }, { key: 'D', text: 'Corpse Reviver' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the "Rule of Thirds" sometimes referenced in classic cocktail recipes?', choices: [{ key: 'A', text: 'A pouring speed guideline' }, { key: 'B', text: 'A rough ratio guideline of spirit, sweet, and sour components' }, { key: 'C', text: 'A bartending safety rule' }, { key: 'D', text: 'A tipping etiquette rule' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What does "session beer" refer to among craft beer drinkers?', choices: [{ key: 'A', text: 'A beer aged for exactly one year' }, { key: 'B', text: 'A beer brewed in one single session/batch' }, { key: 'C', text: 'A beer only sold seasonally' }, { key: 'D', text: 'A lower-alcohol beer designed to be enjoyed over a long session without heavy intoxication' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which cocktail is credited to bartender Jerry Thomas, the "father of American mixology," in the 1860s?', choices: [{ key: 'A', text: 'The Piña Colada' }, { key: 'B', text: 'The Mai Tai' }, { key: 'C', text: 'The Martini' }, { key: 'D', text: 'The Blue Blazer' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "the angel\'s share" in whiskey and wine aging?', choices: [{ key: 'A', text: 'A tax paid to the government' }, { key: 'B', text: 'A blend of leftover barrels' }, { key: 'C', text: 'The portion of liquid lost to evaporation during barrel aging' }, { key: 'D', text: 'The first pour of a new barrel' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What does "chill-filtered" mean on a whisky label?', choices: [{ key: 'A', text: 'The whisky was aged in a freezer' }, { key: 'B', text: 'The whisky was filtered cold to remove compounds that cause cloudiness' }, { key: 'C', text: 'The whisky is meant to be served frozen' }, { key: 'D', text: 'The whisky has no age statement' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which spirit must legally be made in a specific region of France to bear its name?', choices: [{ key: 'A', text: 'Gin' }, { key: 'B', text: 'Vodka' }, { key: 'C', text: 'Rum' }, { key: 'D', text: 'Cognac' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'In billiards, what does "English" refer to when applied to a shot?', choices: [{ key: 'A', text: 'The break shot specifically' }, { key: 'B', text: 'A type of cue stick material' }, { key: 'C', text: 'Spin applied to the cue ball to control its path after contact' }, { key: 'D', text: 'A rule variant used only in the UK' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is "solera aging," a method traditionally used for sherry and some rums?', choices: [{ key: 'A', text: 'A one-time single-batch aging process' }, { key: 'B', text: 'Blending older and younger batches in a fractional aging system' }, { key: 'C', text: 'Aging exclusively in glass' }, { key: 'D', text: 'Aging using only new oak barrels' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the legal minimum bottling proof for a spirit to be labeled "gin" in the US?', choices: [{ key: 'A', text: '120 proof' }, { key: 'B', text: '100 proof' }, { key: 'C', text: '40 proof' }, { key: 'D', text: '80 proof (40% ABV)' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which ingredient gives traditional tonic water its bitter flavor?', choices: [{ key: 'A', text: 'Juniper' }, { key: 'B', text: 'Gentian root' }, { key: 'C', text: 'Quinine' }, { key: 'D', text: 'Wormwood' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the Mai Tai traditionally credited to have been invented for, per bar legend?', choices: [{ key: 'A', text: 'Trader Vic\'s, as a showcase for aged rum' }, { key: 'B', text: 'A Cuban independence toast' }, { key: 'C', text: 'A US Navy celebration' }, { key: 'D', text: 'A Hawaiian royal wedding' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does "cask strength" mean on a whisky bottle?', choices: [{ key: 'A', text: 'The strongest whisky a distillery makes' }, { key: 'B', text: 'Bottled directly at the distillery only' }, { key: 'C', text: 'Aged in a specific type of cask only' }, { key: 'D', text: 'Bottled at the strength it came out of the barrel, without dilution' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "vermouth," used in classic cocktails like the Martini and Manhattan?', choices: [{ key: 'A', text: 'A carbonated mixer' }, { key: 'B', text: 'A type of clear spirit' }, { key: 'C', text: 'A fortified, aromatized wine' }, { key: 'D', text: 'A bitters concentrate' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which country is credited with inventing the "Moscow Mule" cocktail, despite its name?', choices: [{ key: 'A', text: 'Mexico' }, { key: 'B', text: 'England' }, { key: 'C', text: 'Russia' }, { key: 'D', text: 'The United States' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is "the Last Word," a Prohibition-era cocktail that saw a major revival decades later?', choices: [{ key: 'A', text: 'An equal-parts mix of gin, maraschino liqueur, green Chartreuse, and lime juice' }, { key: 'B', text: 'A whiskey sour variation' }, { key: 'C', text: 'A rum-based tiki drink' }, { key: 'D', text: 'A champagne cocktail' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does it mean when a bartender "double strains" a shaken cocktail?', choices: [{ key: 'A', text: 'Using two different spirits' }, { key: 'B', text: 'Pouring the drink twice for extra dilution' }, { key: 'C', text: 'Straining through both the shaker\'s strainer and a fine mesh strainer to remove ice shards or pulp' }, { key: 'D', text: 'Serving it in two separate glasses' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a "back bar" in a professional bar setup?', choices: [{ key: 'A', text: 'The seating area farthest from the bar' }, { key: 'B', text: 'The manager\'s office' }, { key: 'C', text: 'The storage room in the back of the building' }, { key: 'D', text: 'The display area behind the bartender holding bottles and glassware' }], correctChoiceKey: 'D', explanation: null },
+    ],
+  },
+
+  wtf: {
+    easy: [
+      { questionText: 'How many hearts does an octopus have?', choices: [{ key: 'A', text: '3' }, { key: 'B', text: '1' }, { key: 'C', text: '2' }, { key: 'D', text: '5' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What color is a giraffe\'s tongue?', choices: [{ key: 'A', text: 'White' }, { key: 'B', text: 'Yellow' }, { key: 'C', text: 'Pink' }, { key: 'D', text: 'Bluish-purple' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What do you call a group of flamingos?', choices: [{ key: 'A', text: 'A flamboyance' }, { key: 'B', text: 'A gaggle' }, { key: 'C', text: 'A murder' }, { key: 'D', text: 'A flock' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Which everyday toy was originally invented as a wallpaper cleaner?', choices: [{ key: 'A', text: 'Velcro' }, { key: 'B', text: 'Silly Putty' }, { key: 'C', text: 'Bubble wrap' }, { key: 'D', text: 'Play-Doh' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What was the source of the loudest sound ever recorded on Earth?', choices: [{ key: 'A', text: 'A blue whale call' }, { key: 'B', text: 'A rocket launch' }, { key: 'C', text: 'The Krakatoa volcanic eruption' }, { key: 'D', text: 'A sonic boom' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Archaeologists have found perfectly edible honey in ancient Egyptian tombs. About how old was it?', choices: [{ key: 'A', text: '10,000 years old' }, { key: 'B', text: '500 years old' }, { key: 'C', text: 'Over 3,000 years old' }, { key: 'D', text: '100 years old' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is a wombat famous for producing, unlike any other animal?', choices: [{ key: 'A', text: 'Cube-shaped poop' }, { key: 'B', text: 'Flower-scented breath' }, { key: 'C', text: 'Magnetic whiskers' }, { key: 'D', text: 'Glow-in-the-dark fur' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Bananas are, botanically speaking, classified as what?', choices: [{ key: 'A', text: 'Not a fruit at all' }, { key: 'B', text: 'A nut' }, { key: 'C', text: 'A berry' }, { key: 'D', text: 'A vegetable' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'How many hearts does an earthworm effectively have?', choices: [{ key: 'A', text: '2' }, { key: 'B', text: '5 pairs (often simplified to "5")' }, { key: 'C', text: '3' }, { key: 'D', text: '1' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What color is a polar bear\'s skin underneath its white fur?', choices: [{ key: 'A', text: 'Grey' }, { key: 'B', text: 'Black' }, { key: 'C', text: 'Pink' }, { key: 'D', text: 'White' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which everyday item was invented as a byproduct of trying to make a rubber substitute during WWII?', choices: [{ key: 'A', text: 'Velcro' }, { key: 'B', text: 'Bubble wrap' }, { key: 'C', text: 'Super Glue' }, { key: 'D', text: 'Silly Putty' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is unusual about a starfish\'s ability to regenerate?', choices: [{ key: 'A', text: 'It can regrow an entire lost arm, and some species can regrow a whole body from one arm' }, { key: 'B', text: 'It can\'t regenerate at all' }, { key: 'C', text: 'It only regrows once in its life' }, { key: 'D', text: 'It regenerates instantly' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'How many stomachs does a cow have?', choices: [{ key: 'A', text: '4 (technically one stomach with 4 chambers)' }, { key: 'B', text: '1' }, { key: 'C', text: '8' }, { key: 'D', text: '2' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about a mantis shrimp\'s punch?', choices: [{ key: 'A', text: 'It only eats plants' }, { key: 'B', text: 'It\'s one of the fastest strikes in the animal kingdom, fast enough to boil water briefly' }, { key: 'C', text: 'It\'s the slowest animal in the ocean' }, { key: 'D', text: 'It can\'t move its claws at all' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which everyday snack was originally invented as a health food?', choices: [{ key: 'A', text: 'Corn Flakes' }, { key: 'B', text: 'Cotton candy' }, { key: 'C', text: 'Potato chips' }, { key: 'D', text: 'Popcorn' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What do you call a group of owls?', choices: [{ key: 'A', text: 'A murder' }, { key: 'B', text: 'A parliament' }, { key: 'C', text: 'A colony' }, { key: 'D', text: 'A pack' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about koalas\' fingerprints?', choices: [{ key: 'A', text: 'They have no fingerprints at all' }, { key: 'B', text: 'They\'re nearly identical to human fingerprints' }, { key: 'C', text: 'They glow under UV light' }, { key: 'D', text: 'They\'re square-shaped' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'About how many hours a day do koalas typically sleep?', choices: [{ key: 'A', text: 'About 18-22 hours' }, { key: 'B', text: 'About 12 hours' }, { key: 'C', text: 'About 4 hours' }, { key: 'D', text: 'About 8 hours' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What color was the first-ever bubble gum that successfully stayed on the market?', choices: [{ key: 'A', text: 'Green' }, { key: 'B', text: 'Blue' }, { key: 'C', text: 'Yellow' }, { key: 'D', text: 'Pink, simply because that was the only dye on hand' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Which household item was invented from a failed attempt at creating a super-strong glue?', choices: [{ key: 'A', text: 'Duct tape' }, { key: 'B', text: 'The paperclip' }, { key: 'C', text: 'The Post-it Note' }, { key: 'D', text: 'The stapler' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about a chameleon\'s tongue?', choices: [{ key: 'A', text: 'It has no taste buds' }, { key: 'B', text: 'It can extend longer than the chameleon\'s entire body' }, { key: 'C', text: 'It\'s completely retractable inward only' }, { key: 'D', text: 'It\'s shorter than its body' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'About what percentage of Earth\'s animal species are estimated to be insects?', choices: [{ key: 'A', text: 'About 20%' }, { key: 'B', text: 'About 80%' }, { key: 'C', text: 'About 50%' }, { key: 'D', text: 'About 5%' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'Which vegetable is technically classified as a fruit, botanically speaking?', choices: [{ key: 'A', text: 'A tomato' }, { key: 'B', text: 'A carrot' }, { key: 'C', text: 'A celery stalk' }, { key: 'D', text: 'A potato' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about a rainbow\'s true shape, when viewed from an airplane?', choices: [{ key: 'A', text: 'It\'s a spiral' }, { key: 'B', text: 'It has no real shape' }, { key: 'C', text: 'It\'s actually a full circle' }, { key: 'D', text: 'It\'s a perfect square' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about a flamingo\'s natural feather color?', choices: [{ key: 'A', text: 'Their color never changes' }, { key: 'B', text: 'Only females are pink' }, { key: 'C', text: 'They\'re always born bright pink' }, { key: 'D', text: 'They\'re born grey/white; the pink comes from their diet' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the world\'s largest living structure, visible even from space?', choices: [{ key: 'A', text: 'The Sahara Desert' }, { key: 'B', text: 'Mount Everest' }, { key: 'C', text: 'The Great Barrier Reef' }, { key: 'D', text: 'The Amazon Rainforest' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which everyday spice is made from the dried, unripe berries of a pepper plant?', choices: [{ key: 'A', text: 'Paprika' }, { key: 'B', text: 'Black pepper' }, { key: 'C', text: 'Cinnamon' }, { key: 'D', text: 'Cumin' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about pandas socially?', choices: [{ key: 'A', text: 'They\'re mostly solitary and rarely gather in groups at all' }, { key: 'B', text: 'They can\'t climb trees' }, { key: 'C', text: 'They always travel in large herds' }, { key: 'D', text: 'They live exclusively underground' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'How many bones are in the human hand and wrist combined, per hand?', choices: [{ key: 'A', text: '27' }, { key: 'B', text: '42' }, { key: 'C', text: '14' }, { key: 'D', text: '8' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is the origin of the phrase "cloud nine" for extreme happiness?', choices: [{ key: 'A', text: 'It has no known origin' }, { key: 'B', text: 'It refers to a 9-story building' }, { key: 'C', text: 'It\'s from a 1990s song title' }, { key: 'D', text: 'A historical cloud classification system where "nine" was the highest, fluffiest cloud' }], correctChoiceKey: 'D', explanation: null },
+    ],
+    medium: [
+      { questionText: 'According to a famous (and false) popular myth, what percentage of the brain do humans actually use?', choices: [{ key: 'A', text: '90%' }, { key: 'B', text: '25%' }, { key: 'C', text: '50%' }, { key: 'D', text: '10%' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'In the early 1900s, which US company famously sold entire houses via mail-order catalog?', choices: [{ key: 'A', text: 'Sears' }, { key: 'B', text: 'Montgomery Ward' }, { key: 'C', text: 'JCPenney' }, { key: 'D', text: 'Woolworth' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What\'s unusual about a shrimp\'s heart?', choices: [{ key: 'A', text: 'It doesn\'t have one' }, { key: 'B', text: 'It\'s located in its head' }, { key: 'C', text: 'It beats once a minute' }, { key: 'D', text: 'It has two of them' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'In ancient Rome, what was commonly used as a mouthwash ingredient?', choices: [{ key: 'A', text: 'Urine' }, { key: 'B', text: 'Saltwater' }, { key: 'C', text: 'Wine' }, { key: 'D', text: 'Vinegar' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What was the first retail product ever scanned with a barcode?', choices: [{ key: 'A', text: 'A can of soup' }, { key: 'B', text: 'A candy bar' }, { key: 'C', text: 'A pack of chewing gum' }, { key: 'D', text: 'A newspaper' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which animal can sleep for up to three years at a stretch?', choices: [{ key: 'A', text: 'The snail' }, { key: 'B', text: 'The bear' }, { key: 'C', text: 'The tortoise' }, { key: 'D', text: 'The sloth' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What does the "five-second rule" for dropped food actually have backing it up?', choices: [{ key: 'A', text: 'A 1970s FDA study' }, { key: 'B', text: 'Precise bacteria growth timing' }, { key: 'C', text: 'Nothing, it\'s a myth' }, { key: 'D', text: 'A restaurant health code' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which country eats the most instant noodles per person, on average?', choices: [{ key: 'A', text: 'South Korea' }, { key: 'B', text: 'China' }, { key: 'C', text: 'Japan' }, { key: 'D', text: 'Vietnam' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the "immortal jellyfish" (Turritopsis dohrnii)?', choices: [{ key: 'A', text: 'It lives only in freshwater' }, { key: 'B', text: 'It has no natural predators at all' }, { key: 'C', text: 'It\'s the largest jellyfish species' }, { key: 'D', text: 'It can revert its cells to a younger state, essentially resetting its life cycle' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What was unusual about the shortest war in recorded history, the Anglo-Zanzibar War of 1896?', choices: [{ key: 'A', text: 'It lasted 1 week' }, { key: 'B', text: 'It lasted 6 hours' }, { key: 'C', text: 'It lasted around 38 minutes' }, { key: 'D', text: 'It lasted 3 days' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'About how many times does the average person blink per day?', choices: [{ key: 'A', text: 'About 500 times' }, { key: 'B', text: 'About 1,000 times' }, { key: 'C', text: 'About 15,000-20,000 times' }, { key: 'D', text: 'About 100,000 times' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which country has more islands than any other in the world?', choices: [{ key: 'A', text: 'Norway' }, { key: 'B', text: 'Philippines' }, { key: 'C', text: 'Sweden (over 267,000 islands)' }, { key: 'D', text: 'Indonesia' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is peculiar about the Great Wall of China\'s visibility from space?', choices: [{ key: 'A', text: 'It\'s the only man-made object visible from the Moon' }, { key: 'B', text: 'It glows at night for visibility' }, { key: 'C', text: 'It\'s actually NOT easily visible to the naked eye from space, contrary to popular belief' }, { key: 'D', text: 'It\'s visible from Mars with a telescope' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about wombat mothers\' pouches, compared to most marsupials?', choices: [{ key: 'A', text: 'They have no pouch at all' }, { key: 'B', text: 'Their pouch faces backward, so digging doesn\'t fill it with dirt' }, { key: 'C', text: 'Their pouch never closes' }, { key: 'D', text: 'Their pouch is on their back' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is odd about the world\'s shortest commercial flight, between two Scottish islands?', choices: [{ key: 'A', text: 'About 30 minutes' }, { key: 'B', text: 'About 15 minutes' }, { key: 'C', text: 'It can take under 2 minutes in the air' }, { key: 'D', text: 'About 45 minutes' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What was unusual about the original recipe for Coca-Cola in the late 1800s?', choices: [{ key: 'A', text: 'It was invented as a shampoo' }, { key: 'B', text: 'It contained trace amounts of cocaine from coca leaf extract' }, { key: 'C', text: 'It was originally a shade of green' }, { key: 'D', text: 'It contained no sugar at all' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is peculiar about a "leap second," occasionally added to global clocks?', choices: [{ key: 'A', text: 'It\'s purely symbolic with no scientific reason' }, { key: 'B', text: 'It\'s added every year on a fixed schedule' }, { key: 'C', text: 'It corrects for the Earth\'s slightly irregular rotation speed' }, { key: 'D', text: 'It only affects certain time zones' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is unusual about the world\'s oldest continuously operating restaurant, in Madrid, Spain?', choices: [{ key: 'A', text: 'It\'s been open since 1200' }, { key: 'B', text: 'It\'s been open since 1725, confirmed by Guinness World Records' }, { key: 'C', text: 'It\'s a modern recreation of a historic building' }, { key: 'D', text: 'It closed and reopened decades ago' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is odd about a "blood moon"?', choices: [{ key: 'A', text: 'The moon appears reddish during a total lunar eclipse due to sunlight filtering through Earth\'s atmosphere' }, { key: 'B', text: 'It only happens once a century' }, { key: 'C', text: 'It means the moon is closer to Earth' }, { key: 'D', text: 'It\'s caused by volcanic ash only' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'Why are koalas nearly always sluggish?', choices: [{ key: 'A', text: 'They\'re naturally low-energy regardless of diet' }, { key: 'B', text: 'They eat almost nothing at all' }, { key: 'C', text: 'Eucalyptus leaves are low in nutrients and mildly toxic, requiring huge amounts of rest to digest' }, { key: 'D', text: 'Their slow pace is purely genetic with no diet link' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is peculiar about the "dead internet theory," a modern internet conspiracy idea?', choices: [{ key: 'A', text: 'It refers to old, abandoned websites only' }, { key: 'B', text: 'It claims much of internet activity/content is now generated by bots, not humans' }, { key: 'C', text: 'It claims the internet will shut down on a specific date' }, { key: 'D', text: 'It\'s a proven fact confirmed by major tech companies' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about "Point Nemo," a location in the Pacific Ocean?', choices: [{ key: 'A', text: 'It\'s the point farthest from any land on Earth' }, { key: 'B', text: 'It\'s the deepest point in the ocean' }, { key: 'C', text: 'It\'s the site of the largest known shipwreck' }, { key: 'D', text: 'It\'s a permanently frozen ocean zone' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What was odd about the "Great Molasses Flood" of 1919 in Boston?', choices: [{ key: 'A', text: 'A burst molasses tank sent a wave of syrup through the streets, killing 21 people' }, { key: 'B', text: 'It happened in the 1800s' }, { key: 'C', text: 'It was a flood of maple syrup in Vermont' }, { key: 'D', text: 'It was caused by a hurricane' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about "brain coral"?', choices: [{ key: 'A', text: 'It\'s actually a type of algae' }, { key: 'B', text: 'It\'s not alive at all' }, { key: 'C', text: 'It\'s a living animal, not a plant or rock, despite its stationary appearance' }, { key: 'D', text: 'It\'s a man-made aquarium decoration' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'How do flamingos often sleep?', choices: [{ key: 'A', text: 'Floating on water only' }, { key: 'B', text: 'Standing on one leg' }, { key: 'C', text: 'Never sleeping at all' }, { key: 'D', text: 'Upside down' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is odd about "Mount Thor" in Canada, a notable cliff?', choices: [{ key: 'A', text: 'It\'s entirely underwater' }, { key: 'B', text: 'It has the tallest purely vertical drop on Earth' }, { key: 'C', text: 'It\'s an active volcano' }, { key: 'D', text: 'It\'s the tallest mountain in North America' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about the "world\'s loneliest tree," a spruce in New Zealand?', choices: [{ key: 'A', text: 'It\'s the only tree on its continent' }, { key: 'B', text: 'It was planted by an astronaut' }, { key: 'C', text: 'It\'s the oldest tree in the world' }, { key: 'D', text: 'The nearest tree to it is over 170 miles away' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is peculiar about a "supermoon"?', choices: [{ key: 'A', text: 'It\'s a full moon that appears larger and brighter because the moon is at its closest point to Earth in orbit' }, { key: 'B', text: 'It only happens during eclipses' }, { key: 'C', text: 'It\'s a moon visible only from one hemisphere' }, { key: 'D', text: 'It\'s a moon with two visible rings' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is odd about the world\'s smallest known reptile, discovered in Madagascar?', choices: [{ key: 'A', text: 'It\'s invisible to the naked eye' }, { key: 'B', text: 'An entire adult chameleon can fit on the tip of a matchstick' }, { key: 'C', text: 'It was later found to be a hoax' }, { key: 'D', text: 'It\'s smaller than a grain of rice' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What was unusual about the length of the Hundred Years\' War between England and France?', choices: [{ key: 'A', text: 'It actually lasted 116 years' }, { key: 'B', text: 'It lasted only 50 years' }, { key: 'C', text: 'It lasted over 200 years' }, { key: 'D', text: 'It lasted exactly 100 years' }], correctChoiceKey: 'A', explanation: null },
+    ],
+    hard: [
+      { questionText: 'What is the joking (but real, dictionary-listed) term for the fear of long words?', choices: [{ key: 'A', text: 'Sesquipedalophobia' }, { key: 'B', text: 'Verbophobia' }, { key: 'C', text: 'Logophobia' }, { key: 'D', text: 'Hippopotomonstrosesquippedaliophobia' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is a group of crows called?', choices: [{ key: 'A', text: 'A murder' }, { key: 'B', text: 'A parliament' }, { key: 'C', text: 'An unkindness' }, { key: 'D', text: 'A conspiracy' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'True or False: Napoleon Bonaparte was actually shorter than the average man of his era.', choices: [{ key: 'A', text: 'True' }, { key: 'B', text: 'False' }], correctChoiceKey: 'B', explanation: 'Napoleon was about 5\'7", roughly average height for a Frenchman of his time. The "short" myth partly comes from a units mix-up between French and English inches.' },
+      { questionText: 'Which is the only mammal capable of true, powered flight (not just gliding)?', choices: [{ key: 'A', text: 'The colugo' }, { key: 'B', text: 'The flying squirrel' }, { key: 'C', text: 'The bat' }, { key: 'D', text: 'The sugar glider' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'Which planet has a day that is longer than its year?', choices: [{ key: 'A', text: 'Mars' }, { key: 'B', text: 'Uranus' }, { key: 'C', text: 'Venus' }, { key: 'D', text: 'Mercury' }], correctChoiceKey: 'C', explanation: 'A single day on Venus (about 243 Earth days) is longer than its year (about 225 Earth days).' },
+      { questionText: 'Twinkies were originally filled with what flavor of cream, before switching due to wartime rationing?', choices: [{ key: 'A', text: 'Chocolate' }, { key: 'B', text: 'Vanilla' }, { key: 'C', text: 'Strawberry' }, { key: 'D', text: 'Banana' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'Do human babies have more or fewer bones than adults?', choices: [{ key: 'A', text: 'It varies by baby' }, { key: 'B', text: 'The same number' }, { key: 'C', text: 'More (about 300, vs. 206 in adults)' }, { key: 'D', text: 'Fewer' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What does "OK" most widely believed to originally stand for?', choices: [{ key: 'A', text: '"Order Confirmed"' }, { key: 'B', text: '"Oll Korrect" (a joking 1830s misspelling)' }, { key: 'C', text: '"Objection Killed"' }, { key: 'D', text: '"Overall Korrect"' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is the "Fermi Paradox," a famous scientific thought puzzle?', choices: [{ key: 'A', text: 'A confirmed physics law about space travel' }, { key: 'B', text: 'The contradiction between the high probability of alien life existing and the total lack of evidence for it' }, { key: 'C', text: 'A mathematical proof that aliens don\'t exist' }, { key: 'D', text: 'A NASA mission name' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about "quantum entanglement," the phenomenon Einstein called "spooky action at a distance"?', choices: [{ key: 'A', text: 'It only works at extremely cold temperatures' }, { key: 'B', text: 'It\'s a disproven 19th-century theory' }, { key: 'C', text: 'It was invented as a thought experiment with no real evidence' }, { key: 'D', text: 'Two particles can instantly affect each other\'s state regardless of distance' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is peculiar about "Boltzmann brains," a hypothetical concept in physics and cosmology?', choices: [{ key: 'A', text: 'A confirmed NASA discovery' }, { key: 'B', text: 'A type of computer AI model' }, { key: 'C', text: 'A thought experiment suggesting a fully formed conscious brain could randomly form in space via chance quantum fluctuations' }, { key: 'D', text: 'A real medical condition' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is the "Ship of Theseus," a famous philosophical thought experiment, about?', choices: [{ key: 'A', text: 'A physics experiment about buoyancy' }, { key: 'B', text: 'A legal case about property ownership' }, { key: 'C', text: 'A real historical shipwreck' }, { key: 'D', text: 'Whether an object that\'s had all its parts replaced is still the same object' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is peculiar about the "Streisand effect," a modern phenomenon named after a 2003 incident?', choices: [{ key: 'A', text: 'A marketing strategy proven to always work' }, { key: 'B', text: 'A type of internet censorship law' }, { key: 'C', text: 'Trying to hide or suppress information ends up drawing far more attention to it' }, { key: 'D', text: 'A legal loophole for celebrities' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "Schrödinger\'s cat," a famous thought experiment in quantum physics?', choices: [{ key: 'A', text: 'It illustrates a cat that\'s theoretically both alive and dead until observed' }, { key: 'B', text: 'It proves cats can\'t be harmed by radiation' }, { key: 'C', text: 'It\'s a proven method for teleportation' }, { key: 'D', text: 'It was a real experiment performed on an actual cat' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the "Mpemba effect," a debated physics phenomenon?', choices: [{ key: 'A', text: 'It only applies to saltwater' }, { key: 'B', text: 'It\'s been fully disproven with no exceptions' }, { key: 'C', text: 'It was proven false by Aristotle' }, { key: 'D', text: 'Under certain conditions, hot water can freeze faster than cold water' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about the concept of "digital immortality," an emerging modern idea?', choices: [{ key: 'A', text: 'A proven method to extend human lifespan' }, { key: 'B', text: 'A confirmed medical procedure' }, { key: 'C', text: 'A government program in several countries' }, { key: 'D', text: 'Using AI to simulate a deceased person\'s personality from their digital data' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is the "Trolley Problem," a famous ethical thought experiment?', choices: [{ key: 'A', text: 'A dilemma about whether to divert a runaway trolley to kill one person instead of five' }, { key: 'B', text: 'A physics problem about momentum' }, { key: 'C', text: 'A confirmed insurance case study' }, { key: 'D', text: 'A real historical train accident' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about "Braess\'s paradox" in traffic engineering?', choices: [{ key: 'A', text: 'It was disproven in real-world tests' }, { key: 'B', text: 'It proves more roads always reduce traffic' }, { key: 'C', text: 'It only applies to one-way streets' }, { key: 'D', text: 'Adding a new road to a network can sometimes make overall traffic congestion worse' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about the "Dunning-Kruger effect," a well-known psychological concept?', choices: [{ key: 'A', text: 'People with low ability at a task often overestimate their competence at it' }, { key: 'B', text: 'It was disproven by later research entirely' }, { key: 'C', text: 'It only applies to physical skills' }, { key: 'D', text: 'It means experts are always right' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is peculiar about "Zipf\'s Law," observed in linguistics?', choices: [{ key: 'A', text: 'It predicts the length of a language\'s alphabet' }, { key: 'B', text: 'In any language, the most frequent word appears roughly twice as often as the second most frequent, and so on' }, { key: 'C', text: 'It only applies to English' }, { key: 'D', text: 'It\'s a law requiring all languages to have exactly 26 letters' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is unusual about the "Peter Principle," a workplace observation?', choices: [{ key: 'A', text: 'It\'s a law requiring mandatory promotions every year' }, { key: 'B', text: 'It guarantees eventual success for everyone' }, { key: 'C', text: 'People tend to get promoted until they reach a role they\'re not competent at' }, { key: 'D', text: 'It only applies to government jobs' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "the paradox of the heap" (Sorites paradox)?', choices: [{ key: 'A', text: 'It\'s a proven mathematical formula' }, { key: 'B', text: 'It questions at what exact point removing grains from a heap makes it no longer a "heap"' }, { key: 'C', text: 'It\'s a real agricultural problem' }, { key: 'D', text: 'It was solved definitively in the 1800s' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is peculiar about "hyperbolic discounting," a concept in behavioral economics?', choices: [{ key: 'A', text: 'People tend to prefer smaller immediate rewards over larger future ones, more than pure logic would predict' }, { key: 'B', text: 'It applies only to financial experts' }, { key: 'C', text: 'It\'s a pricing strategy used only in retail' }, { key: 'D', text: 'It was disproven by classical economics' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the "Overview Effect," reported by astronauts?', choices: [{ key: 'A', text: 'A NASA training technique' }, { key: 'B', text: 'A hallucination caused by cabin pressure' }, { key: 'C', text: 'A physical illness caused by zero gravity' }, { key: 'D', text: 'A profound shift in perspective some astronauts feel after seeing Earth from space' }], correctChoiceKey: 'D', explanation: null },
+      { questionText: 'What is odd about "Occam\'s Razor," a principle often cited in science and philosophy?', choices: [{ key: 'A', text: 'It\'s a rule requiring the most detailed explanation always' }, { key: 'B', text: 'It\'s a mathematical proof method' }, { key: 'C', text: 'It suggests the simplest explanation, with the fewest assumptions, is usually the best one' }, { key: 'D', text: 'It\'s a specific type of surgical tool' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is peculiar about the "Barnum effect," relevant to horoscopes and personality tests?', choices: [{ key: 'A', text: 'It\'s a proven method for accurate personality testing' }, { key: 'B', text: 'It was disproven by modern psychology entirely' }, { key: 'C', text: 'People tend to see vague, general statements as highly personally accurate' }, { key: 'D', text: 'It only works on children' }], correctChoiceKey: 'C', explanation: null },
+      { questionText: 'What is odd about "Hanlon\'s Razor," a popular modern adage?', choices: [{ key: 'A', text: '"Never attribute to malice that which is adequately explained by stupidity"' }, { key: 'B', text: 'A law about workplace safety' }, { key: 'C', text: 'A rule in professional debate' }, { key: 'D', text: 'A mathematical theorem' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is odd about "confabulation," a memory phenomenon studied in psychology?', choices: [{ key: 'A', text: 'The brain unintentionally fabricates false memories, believed sincerely as true' }, { key: 'B', text: 'A dream that feels like a memory' }, { key: 'C', text: 'A memory loss with no false content' }, { key: 'D', text: 'A deliberate lie told for personal gain' }], correctChoiceKey: 'A', explanation: null },
+      { questionText: 'What is unusual about the "observer effect" and its cousin "the Hawthorne effect"?', choices: [{ key: 'A', text: 'Observation never changes outcomes in either field' }, { key: 'B', text: 'People tend to change their behavior simply because they know they\'re being observed' }, { key: 'C', text: 'It\'s a proven law only in chemistry' }, { key: 'D', text: 'It only applies to factory workers historically' }], correctChoiceKey: 'B', explanation: null },
+      { questionText: 'What is peculiar about "Goodhart\'s Law," often summarized as "when a measure becomes a target, it ceases to be a good measure"?', choices: [{ key: 'A', text: 'It applies only to Olympic scoring' }, { key: 'B', text: 'It was disproven in modern economics' }, { key: 'C', text: 'People and systems tend to game a metric once it\'s used to judge performance' }, { key: 'D', text: 'It\'s a tax law from the 1800s' }], correctChoiceKey: 'C', explanation: null },
+    ],
+  },
+};
