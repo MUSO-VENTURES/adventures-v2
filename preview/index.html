@@ -621,6 +621,36 @@
     content:""; flex:1; height:1px; background:rgba(var(--shadow-rgb),0.12);
   }
 
+  /* ---------- TRIVIA BREAK ----------
+     Correct/wrong reveal colors reuse --deep-teal/--coral, the same two-
+     outcome palette coin-flip.js already uses for its heads/tails result
+     box, so the two minigames read as visually related. */
+  .trivia-question{ font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.05rem; margin:0 0 16px; text-align:center; }
+  .trivia-choices{ display:flex; flex-direction:column; gap:8px; margin-bottom:14px; }
+  .trivia-choice-btn{
+    border:2px solid rgba(var(--shadow-rgb),0.14); background:transparent; color:var(--ink);
+    padding:12px 16px; border-radius:14px; font-family:'Nunito',sans-serif; font-weight:700;
+    font-size:0.9rem; text-align:left; cursor:pointer; transition:all .18s; width:100%; box-sizing:border-box;
+  }
+  .trivia-choice-btn:hover:not(:disabled){ border-color:var(--coral); background:rgba(232,80,63,0.08); }
+  .trivia-choice-btn:disabled{ opacity:0.5; cursor:default; }
+  .trivia-choice-btn.correct{ border-color:var(--deep-teal); background:rgba(11,110,104,0.12); color:var(--deep-teal); opacity:1; }
+  .trivia-buzzer-btn{
+    width:140px; height:140px; border-radius:50%; margin:10px auto; display:block;
+    background:radial-gradient(circle at 35% 30%, var(--tangerine), var(--coral));
+    color:#fff; font-family:'Fredoka',sans-serif; font-weight:700; font-size:1.1rem;
+    border:none; box-shadow:0 10px 26px rgba(232,80,63,0.4); cursor:pointer;
+    transition:transform .15s var(--ease-bounce);
+  }
+  .trivia-buzzer-btn:active{ transform:scale(0.92); }
+  .trivia-buzzer-btn:disabled{ opacity:0.45; box-shadow:none; cursor:default; }
+  .trivia-turn-banner{ text-align:center; font-family:'Fredoka',sans-serif; font-weight:700; color:var(--tangerine); margin-bottom:10px; }
+  .trivia-buzz-order{ display:flex; flex-direction:column; gap:4px; font-size:0.82rem; opacity:0.75; margin-bottom:12px; }
+  .trivia-outcome{ text-align:center; font-weight:700; margin:4px 0 6px; }
+  .trivia-explanation{ text-align:center; font-size:0.82rem; opacity:0.7; margin:0 0 14px; }
+  .trivia-next-btn{ width:100%; }
+  .trivia-empty{ text-align:center; opacity:0.7; padding:20px 0; }
+
   .invite-friends-cta{
     display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:16px;
   }
@@ -1914,6 +1944,22 @@
   </div>
 </div>
 
+<!-- Trivia Break — one overlay, driven entirely by assets/trivia.js's
+     render() via a state snapshot the inline functions below assemble
+     (openTriviaBreak/renderTrivia/triviaBuzzIn/triviaSubmitAnswer/
+     triviaNextQuestion). Reuses the same photobooth-overlay/-card shell as
+     every other minigame modal (flip-picker-overlay, challenge-send-overlay,
+     ...) rather than inventing new modal chrome. -->
+<div class="photobooth-overlay" id="trivia-overlay" hidden>
+  <div class="photobooth-card" style="max-width:440px; position:relative;">
+    <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeTriviaBreak()">&times;</span>
+    <div class="photobooth-header" style="justify-content:center;">
+      <span>🧠 Trivia Break</span>
+    </div>
+    <div id="trivia-body"><div class="trivia-empty">Getting your question ready…</div></div>
+  </div>
+</div>
+
 <div class="party-invite-overlay" id="party-invite-overlay" hidden>
   <div class="party-invite-card">
     <button type="button" class="party-invite-close" onclick="closeInviteModal()" aria-label="Close">&times;</button>
@@ -1999,6 +2045,12 @@
      call too — it doesn't touch the backend unlock economy, see comment
      by ALWAYS_FREE_MINIGAME_KEYS. -->
 <script src="../assets/coin-flip.js"></script>
+<!-- Trivia Break: pure renderer (assets/trivia.js), no build step, same
+     include pattern as coin-flip.js above. Unlike coin-flip.js this widget
+     owns no network/realtime of its own — see its header comment — so the
+     actual game logic (openTriviaBreak, ensurePartyRealtime's trivia_*
+     listeners, etc.) lives inline in the script block below. -->
+<script src="../assets/trivia.js"></script>
 <script>
   // Restores a query string (e.g. ?test=1&lat=..&lng=..) that
   // sendMagicLink() deliberately stripped off the magic-link redirect URL
@@ -2414,6 +2466,150 @@
   let activeFlipPick = null; // { id, isChallenger, challengerId, opponentId } for the challenge currently shown in flip-pick-overlay
   let myPendingChallenges = new Map(); // opponentId -> challengeId, for challenges *I've* sent that are still pending
 
+  // ---------- TRIVIA BREAK ----------
+  let activeTriviaRound = null;   // current round object (camelCased, see trivia/index.ts's serializeRound), or null
+  let activeTriviaBuzzes = [];    // buzz log for the current round, oldest first
+  let triviaAnswerTimer = null;   // client-side countdown driving advanceTurn on timeout
+
+  async function postTrivia(action, extra) {
+    return postEdgeFunction('trivia', { action, ...(extra || {}) });
+  }
+
+  // Realtime postgres_changes payloads are raw snake_case rows, but
+  // everywhere else (startRound/getActiveRound responses) trivia state is
+  // the camelCased shape trivia/index.ts's serializeRound() returns —
+  // normalize on the way in so renderTrivia() only ever deals with one
+  // shape regardless of where a round update came from.
+  function normalizeTriviaRound(row) {
+    return {
+      id: row.id,
+      partyId: row.party_id,
+      adventureId: row.adventure_id,
+      mode: row.mode,
+      initiatorProfileId: row.initiator_profile_id,
+      roundNumber: row.round_number,
+      questionType: row.question_type,
+      questionText: row.question_text,
+      choices: row.choices,
+      source: row.source,
+      status: row.status,
+      activeTurnProfileId: row.active_turn_profile_id ?? null,
+      triedProfileIds: row.tried_profile_ids ?? [],
+      correctChoiceKey: row.correct_choice_key ?? null,
+      explanation: row.explanation ?? null,
+      winnerProfileId: row.winner_profile_id ?? null,
+      xpAwarded: row.xp_awarded ?? null,
+      createdAt: row.created_at,
+      resolvedAt: row.resolved_at ?? null,
+    };
+  }
+
+  function armTriviaTimeout() {
+    clearTimeout(triviaAnswerTimer);
+    if (!activeTriviaRound) return;
+    const ms = activeTriviaRound.mode === 'solo' ? 15000 : 20000;
+    triviaAnswerTimer = setTimeout(() => {
+      if (activeTriviaRound && ['buzzing', 'answering'].includes(activeTriviaRound.status)) {
+        postTrivia('advanceTurn', { roundId: activeTriviaRound.id });
+      }
+    }, ms);
+  }
+
+  function renderTrivia() {
+    const container = document.getElementById('trivia-body');
+    if (!container || !window.MusoTrivia) return;
+    window.MusoTrivia.render(container, {
+      round: activeTriviaRound,
+      buzzes: activeTriviaBuzzes,
+      myProfileId: currentSession?.user?.id,
+      resolveName: memberNameById,
+    }, {
+      onBuzzRef: 'triviaBuzzIn',
+      onAnswerRef: 'triviaSubmitAnswer',
+      onNextRef: 'triviaNextQuestion',
+    });
+  }
+
+  async function startTriviaRound(mode) {
+    if (!activeAdventure) return;
+    const { res, data } = await postTrivia('startRound', {
+      partyId: activeAdventure.partyId,
+      adventureId: activeAdventure.adventureId,
+      mode,
+    });
+    if (!res.ok) {
+      document.getElementById('trivia-body').innerHTML =
+        `<div class="trivia-empty">${(data.error || 'Could not start trivia right now.').replace(/</g, '&lt;')}</div>`;
+      return;
+    }
+    activeTriviaRound = data.round;
+    activeTriviaBuzzes = [];
+    renderTrivia();
+    armTriviaTimeout();
+  }
+
+  // Trivia needs activeAdventure.routeId to generate questions (unlike The
+  // Flip, which needs no adventure context at all) — question content is
+  // generated live from whatever route the party is currently playing (see
+  // trivia/index.ts's loadRouteContent), so there's nothing to ask about
+  // without one. mode defaults to group whenever more than one party
+  // member is around, solo otherwise — same "who's actually here" signal
+  // renderPartyRoster already tracks via partyRosterCache.
+  window.openTriviaBreak = async function () {
+    if (!activeAdventure) {
+      document.getElementById('trivia-body').innerHTML =
+        '<div class="trivia-empty">Start an adventure first — Trivia Break plays off your current stops.</div>';
+      document.getElementById('trivia-overlay').removeAttribute('hidden');
+      return;
+    }
+    document.getElementById('trivia-body').innerHTML = '<div class="trivia-empty">Getting your question ready…</div>';
+    document.getElementById('trivia-overlay').removeAttribute('hidden');
+
+    const mode = (partyRosterCache.members || []).length > 1 ? 'group' : 'solo';
+    const { res, data } = await postTrivia('getActiveRound', {
+      partyId: activeAdventure.partyId,
+      adventureId: activeAdventure.adventureId,
+      mode,
+    });
+    if (res.ok && data.round) {
+      activeTriviaRound = data.round;
+      activeTriviaBuzzes = data.buzzes || [];
+      renderTrivia();
+      armTriviaTimeout();
+    } else {
+      await startTriviaRound(mode);
+    }
+  };
+
+  window.closeTriviaBreak = function () {
+    document.getElementById('trivia-overlay').setAttribute('hidden', '');
+    clearTimeout(triviaAnswerTimer);
+    activeTriviaRound = null;
+    activeTriviaBuzzes = [];
+  };
+
+  // No optimistic UI on either of these on purpose — the realtime
+  // trivia_buzzes INSERT / trivia_rounds UPDATE landing back (see
+  // ensurePartyRealtime below) is what actually drives the re-render, so
+  // every client — including the tapper's own — converges on the same
+  // server-adjudicated state, same principle handleResolvedChallenge
+  // already uses for The Flip.
+  window.triviaBuzzIn = async function () {
+    const { res, data } = await postTrivia('buzzIn', { roundId: activeTriviaRound.id });
+    if (!res.ok) showToast(data.error || 'Too slow!');
+  };
+
+  window.triviaSubmitAnswer = async function (choiceKey) {
+    const { res, data } = await postTrivia('submitAnswer', { roundId: activeTriviaRound.id, choiceKey });
+    if (!res.ok) { showToast(data.error || 'Could not submit that answer.'); return; }
+    if (data.correct && data.xpResult) refreshProfileAndBadges(); // xp just changed
+  };
+
+  window.triviaNextQuestion = function () {
+    if (!activeTriviaRound) return;
+    startTriviaRound(activeTriviaRound.mode);
+  };
+
   // A custom challenge prompt is player-typed free text landing in
   // innerHTML (flip-pick-text) — escape it the same minimal way
   // renderPartyRoster()/renderPastAdventures() already escape display
@@ -2795,6 +2991,27 @@
           if (activeFlipPick?.id === row.id) closeFlipPickOverlay();
         }
       })
+      // trivia_rounds/trivia_buzzes — see 0040_trivia_break.sql. Buzz taps
+      // are never shown optimistically (see triviaBuzzIn above); these two
+      // handlers are the only thing that actually drives the Trivia Break
+      // UI forward, same "converge via realtime landing back" principle
+      // the coin_flip_challenges handler above already uses.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trivia_rounds', filter: `party_id=eq.${partyId}` }, (payload) => {
+        const row = payload.new;
+        if (!row || !activeTriviaRound || row.id !== activeTriviaRound.id) return;
+        activeTriviaRound = normalizeTriviaRound(row);
+        renderTrivia();
+        if (['resolved', 'expired'].includes(row.status)) clearTimeout(triviaAnswerTimer);
+        else armTriviaTimeout();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trivia_buzzes', filter: `party_id=eq.${partyId}` }, (payload) => {
+        const row = payload.new;
+        if (!row || !activeTriviaRound || row.round_id !== activeTriviaRound.id) return;
+        if (activeTriviaBuzzes.some((b) => b.profileId === row.profile_id)) return;
+        activeTriviaBuzzes = [...activeTriviaBuzzes, { profileId: row.profile_id, buzzSeq: row.buzz_seq, buzzedAt: row.buzzed_at }]
+          .sort((a, b) => a.buzzSeq - b.buzzSeq);
+        renderTrivia();
+      })
       .subscribe();
 
     checkPendingChallenges();
@@ -2811,6 +3028,10 @@
     if (feed) feed.innerHTML = '<div class="party-feed-empty">No activity yet</div>';
     document.getElementById('party-roster-wrap')?.setAttribute('hidden', '');
     document.getElementById('flip-pick-overlay')?.setAttribute('hidden', '');
+    document.getElementById('trivia-overlay')?.setAttribute('hidden', '');
+    clearTimeout(triviaAnswerTimer);
+    activeTriviaRound = null;
+    activeTriviaBuzzes = [];
     activeFlipPick = null;
     myPendingChallenges = new Map();
   }
@@ -3680,6 +3901,10 @@
     }
     if (key === 'heads_or_tails') {
       openFlipPicker();
+      return;
+    }
+    if (key === 'trivia') {
+      openTriviaBreak();
       return;
     }
     const g = MINIGAMES_CONFIG.find((m) => m.key === key);

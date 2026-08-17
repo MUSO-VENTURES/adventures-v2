@@ -71,6 +71,21 @@ revoke update (xp, adventure_coins, unlocked_radius_miles, venues_search_unlocke
 alter table venues
   add column if not exists featured_position integer;
 
+-- Pre-existing gap discovered while fresh-replaying this migration chain
+-- locally (`supabase start`/`db reset`): upsert_yelp_venues() below reads/
+-- writes venues.image_url, but that column wasn't actually added until
+-- 0037_google_places_migration.sql — harmless on the live project (which
+-- only ever ran these migrations forward, accumulating the column by the
+-- time 0037 landed, so this add-column is a no-op there), but it breaks a
+-- from-scratch replay, since 0016_real_venue_adventures.sql's
+-- nearby_candidate_venues() is `language sql` and Postgres validates a SQL
+-- function's body at CREATE time (unlike plpgsql, which is opaque until
+-- first call) — so it fails immediately if the column doesn't exist yet.
+-- Adding it here, where it's first actually used, is what makes a clean
+-- `supabase db reset` work end to end.
+alter table venues
+  add column if not exists image_url text;
+
 alter table venues
   drop constraint if exists venues_featured_position_positive;
 alter table venues
