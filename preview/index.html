@@ -2565,9 +2565,17 @@
     clearTimeout(triviaAnswerTimer);
     if (!activeTriviaRound) return;
     const ms = activeTriviaRound.mode === 'solo' ? 15000 : 20000;
-    triviaAnswerTimer = setTimeout(() => {
+    triviaAnswerTimer = setTimeout(async () => {
       if (activeTriviaRound && ['buzzing', 'answering'].includes(activeTriviaRound.status)) {
-        postTrivia('advanceTurn', { roundId: activeTriviaRound.id });
+        const { data } = await postTrivia('advanceTurn', { roundId: activeTriviaRound.id });
+        // Same reasoning as triviaSubmitAnswer above — needed for freeplay,
+        // harmless mid-adventure.
+        if (data?.round && activeTriviaRound && data.round.id === activeTriviaRound.id) {
+          activeTriviaRound = data.round;
+          renderTrivia();
+          if (['resolved', 'expired'].includes(data.round.status)) clearTimeout(triviaAnswerTimer);
+          else armTriviaTimeout();
+        }
       }
     }, ms);
   }
@@ -2740,6 +2748,18 @@
     const { res, data } = await postTrivia('submitAnswer', { roundId: activeTriviaRound.id, choiceKey });
     if (!res.ok) { showToast(data.error || 'Could not submit that answer.'); return; }
     if (data.correct && data.xpResult) refreshProfileAndBadges(); // xp just changed
+    // Applied directly rather than waiting on the realtime trivia_rounds
+    // subscription — that only exists mid-adventure (ensurePartyRealtime is
+    // adventure-scoped), so a freeplay round would otherwise never
+    // visibly progress past "answering" for the player who just answered.
+    // Harmless to also apply mid-adventure: it's the same data the realtime
+    // update would've landed a moment later anyway.
+    if (data.round && activeTriviaRound && data.round.id === activeTriviaRound.id) {
+      activeTriviaRound = data.round;
+      renderTrivia();
+      if (['resolved', 'expired'].includes(data.round.status)) clearTimeout(triviaAnswerTimer);
+      else armTriviaTimeout();
+    }
   };
 
   window.triviaNextQuestion = function () {

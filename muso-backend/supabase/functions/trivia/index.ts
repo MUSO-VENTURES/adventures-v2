@@ -570,7 +570,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    return jsonResponse({ ok: true, correct: data.correct, nextProfileId: data.nextProfileId ?? null, xpResult, game });
+    // Included so the caller's own client can update its UI directly from
+    // this response, rather than depending on the realtime trivia_rounds
+    // subscription to learn its own action resolved — that subscription
+    // only exists when there's an active adventure (ensurePartyRealtime is
+    // adventure-scoped), so a freeplay round would otherwise never visibly
+    // progress past "answering" on the answerer's own screen.
+    const { data: freshRound } = await admin.from("trivia_rounds").select("*").eq("id", roundId).maybeSingle();
+
+    return jsonResponse({
+      ok: true,
+      correct: data.correct,
+      nextProfileId: data.nextProfileId ?? null,
+      xpResult,
+      game,
+      round: freshRound ? serializeRound(freshRound) : null,
+    });
   }
 
   if (action === "advanceTurn") {
@@ -597,7 +612,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    return jsonResponse({ ...data, game });
+    // Same reasoning as submitAnswer above — the caller (whoever's client
+    // timeout fired first) needs this directly, not just via realtime.
+    const { data: freshRound } = await admin.from("trivia_rounds").select("*").eq("id", roundId).maybeSingle();
+
+    return jsonResponse({ ...data, game, round: freshRound ? serializeRound(freshRound) : null });
   }
 
   if (action === "listRounds") {
