@@ -2764,7 +2764,16 @@
 
   window.triviaNextQuestion = function () {
     if (!activeTriviaRound) return;
-    startTriviaRound(activeTriviaRound.mode);
+    // Carry the category forward explicitly — without an active adventure
+    // to auto-resolve it from, the backend requires a category on every
+    // startRound call, and this was previously only ever supplied by
+    // chooseTriviaCategory() for the FIRST round. Every round after that
+    // (game 2+, or even question 2 of game 1) called this with no category
+    // at all, so freeplay play died with "category is required" the moment
+    // you tried to continue past the very first question. Passing it
+    // through unconditionally is harmless mid-adventure too — it just
+    // reconfirms the same category the adventure theme already resolved.
+    startTriviaRound(activeTriviaRound.mode, activeTriviaRound.category);
   };
 
   // A custom challenge prompt is player-typed free text landing in
