@@ -138,14 +138,17 @@
   }
   /* "Build in as it scrolls into view" — see initScrollReveal() near
      init(). Each card is revealed once, the first time it crosses the
-     viewport, with a slight overshoot bounce rather than a flat fade. */
+     viewport, with a slight overshoot bounce rather than a flat fade.
+     Slide-only, always full opacity — badges/awards/level content living
+     inside these cards must never render at anything less than 100%
+     opacity, or they read as "not actually earned yet". */
   .card.reveal-on-scroll{
-    opacity:0; transform:translateY(28px);
-    transition:opacity .7s var(--ease-bounce), transform .7s var(--ease-bounce);
+    transform:translateY(28px);
+    transition:transform .7s var(--ease-bounce);
   }
-  .card.reveal-on-scroll.revealed{ opacity:1; transform:translateY(0); }
+  .card.reveal-on-scroll.revealed{ transform:translateY(0); }
   @media (prefers-reduced-motion:reduce){
-    .card.reveal-on-scroll{ opacity:1; transform:none; transition:none; }
+    .card.reveal-on-scroll{ transform:none; transition:none; }
   }
   .card h2{ font-size:1.1rem; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
   .card h2 .soon{ font-size:0.68rem; font-weight:600; opacity:0.5; text-transform:uppercase; letter-spacing:0.04em; background:rgba(var(--shadow-rgb),0.06); padding:3px 8px; border-radius:999px; }
@@ -375,7 +378,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Progress</h2>
       <div class="xp-bar-track"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
       <div class="xp-label" id="xp-label"></div>
@@ -402,7 +405,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Badges earned</h2>
       <div id="badges-content" class="empty-note">Loading…</div>
     </div>
@@ -422,7 +425,7 @@
       <div id="photo-content" class="empty-note">Loading…</div>
     </div>
 
-    <div class="card">
+    <div class="card reveal-on-scroll">
       <h2>Trophy case</h2>
       <div id="trophy-content" class="empty-note">Loading…</div>
     </div>
