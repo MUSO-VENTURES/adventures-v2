@@ -658,6 +658,40 @@ const AFTER_HOURS_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
 ];
 const AFTER_HOURS_GENERAL_THEME: Theme = { key: "night_spot", label: "Night Out Pick", emoji: "🌙", color: "#2a3a63" };
 
+// No dedicated Table A type exists for mini golf or axe throwing (verified
+// against Google's live place-types docs) — golf_course is deliberately
+// left out since it would pull in real 18-hole country-club courses, not
+// mini golf; amusement_center is the closest broad umbrella that in
+// practice covers combo entertainment venues (mini golf, laser tag, go-
+// karts) Google doesn't split out further, and adventure_sports_center is
+// the nearest match for axe throwing. classifyTheme()'s keyword buckets
+// below still label whatever comes back by name/category text regardless
+// of which of these types actually matched it.
+const CHALLENGE_GOOGLE_TYPES = ["bowling_alley", "go_karting_venue", "video_arcade", "amusement_center", "adventure_sports_center"];
+const CHALLENGE_THEME_BUCKETS: (Theme & { keywords: string[] })[] = [
+  {
+    key: "bowling", label: "Bowling", emoji: "🎳", color: "#1f5fa8",
+    keywords: ["bowling", "bowl", "lanes"],
+  },
+  {
+    key: "mini_golf", label: "Mini Golf", emoji: "⛳", color: "#2f8f4e",
+    keywords: ["mini golf", "miniature golf", "putt putt", "putt-putt", "adventure golf"],
+  },
+  {
+    key: "axe_throwing", label: "Axe Throwing", emoji: "🪓", color: "#a1252e",
+    keywords: ["axe throwing", "axe", "hatchet"],
+  },
+  {
+    key: "go_karts", label: "Go-Karts", emoji: "🏎️", color: "#d1892f",
+    keywords: ["go kart", "go-kart", "karting", "speedway", "raceway"],
+  },
+  {
+    key: "arcade", label: "Arcade", emoji: "🕹️", color: "#7a4fa3",
+    keywords: ["arcade", "video game", "pinball"],
+  },
+];
+const CHALLENGE_GENERAL_THEME: Theme = { key: "friendly_competition", label: "Friendly Competition", emoji: "🏆", color: "#a1252e" };
+
 // A sparse market can genuinely only have 2 distinct themes worth of open,
 // rated candidates — in that case pickContrastingChoices()'s last-resort
 // backfill has to repeat one, which used to mean two cards showing the
@@ -759,6 +793,7 @@ const THEME_SET_META = new Map<(Theme & { keywords: string[] })[], ThemeSetMeta>
   [ODDITIES_THEME_BUCKETS, { generalTheme: ODDITIES_GENERAL_THEME }],
   [FOODIE_THEME_BUCKETS, { generalTheme: FOODIE_GENERAL_THEME }],
   [AFTER_HOURS_THEME_BUCKETS, { generalTheme: AFTER_HOURS_GENERAL_THEME }],
+  [CHALLENGE_THEME_BUCKETS, { generalTheme: CHALLENGE_GENERAL_THEME }],
 ]);
 
 // Keyed by routes.venue_theme — the single source of truth for every
@@ -809,6 +844,12 @@ const THEME_REGISTRY: Record<string, ThemeRegistryEntry> = {
     googleTypes: AFTER_HOURS_GOOGLE_TYPES,
     title: "After Hours Adventure",
     description: "A fork in the road at every stop. Pick your path through real, live nearby bars, lounges, and late-night spots.",
+  },
+  the_challenge: {
+    buckets: CHALLENGE_THEME_BUCKETS,
+    googleTypes: CHALLENGE_GOOGLE_TYPES,
+    title: "The Challenge Adventure",
+    description: "A fork in the road at every stop. Pick your path through real, live nearby bowling alleys, mini golf, axe throwing, go-karts, arcades, and other head-to-head challenges.",
   },
 };
 
