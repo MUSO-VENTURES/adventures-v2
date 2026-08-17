@@ -790,6 +790,22 @@
      other two shrink into a small tab row tucked below, still tappable to
      switch which one is expanded. Only one is ever expanded at a time. */
   .fork-stack{ display:flex; flex-direction:column; gap:10px; width:100%; }
+  .fork-flip-btn{
+    align-self:flex-start; display:inline-flex; align-items:center; gap:6px;
+    background:rgba(var(--shadow-rgb),0.06); border:1.5px solid rgba(var(--shadow-rgb),0.12); border-radius:999px;
+    padding:6px 14px; font-family:'Nunito',sans-serif; font-size:0.8rem; font-weight:700; color:var(--ink);
+    cursor:pointer; transition:transform .2s var(--ease-bounce), background-color .2s ease;
+  }
+  .fork-flip-btn:hover{ background:rgba(var(--shadow-rgb),0.1); transform:scale(1.03); }
+  .fork-flip-btn:active{ transform:scale(0.97); }
+  @keyframes forkFlipPickPulse{
+    0%, 100% { box-shadow:0 4px 14px rgba(var(--shadow-rgb),0.07); }
+    30% { box-shadow:0 0 0 5px rgba(var(--tangerine-rgb,242,153,74),0.4), 0 4px 14px rgba(var(--shadow-rgb),0.07); }
+  }
+  .fork-stack-card.fork-flip-pick{ animation:forkFlipPickPulse 1.8s var(--ease-smooth); }
+  @media (prefers-reduced-motion:reduce){
+    .fork-stack-card.fork-flip-pick{ animation:none; }
+  }
   .fork-stack-deck{
     display:flex; flex-direction:column; gap:0;
   }
@@ -1434,6 +1450,7 @@
       <div class="pb-controls">
         <button type="button" class="pb-btn primary" onclick="startVenueQrScan()">📷 Scan the Venue QR (+10 bonus)</button>
         <button type="button" class="pb-btn secondary" onclick="checkInWithLocation()">📍 Check In With My Location</button>
+        <button type="button" class="pb-btn secondary" id="venue-checkin-virtual-btn" hidden onclick="checkInVirtual()">🛰️ Virtual Check-In (test accounts)</button>
       </div>
     </div>
     <div id="venue-checkin-scan" hidden>
@@ -4604,6 +4621,7 @@
             <div class="is-body" style="flex:1 1 100%;">
               <div class="is-name" style="margin-bottom:10px;">${i + 1}. Choose Your Path</div>
               <div class="fork-stack" data-stop-id="${s.id}">
+                <button type="button" class="fork-flip-btn" onclick="flipForFork('${s.id}')">🪙 Flip to Decide</button>
                 <div class="fork-stack-deck${hasExpanded ? ' has-expanded' : ''}">${deckHtml}</div>
               </div>
             </div>
@@ -4816,12 +4834,25 @@
     venueCheckinStopId = routeStopId;
     document.getElementById('venue-checkin-choice').hidden = false;
     document.getElementById('venue-checkin-scan').hidden = true;
+    document.getElementById('venue-checkin-virtual-btn').hidden = !currentProfile?.is_admin;
     document.getElementById('venue-checkin-overlay').removeAttribute('hidden');
   };
 
   window.closeVenueCheckin = function () {
     stopVenueQrScan();
     document.getElementById('venue-checkin-overlay').setAttribute('hidden', '');
+  };
+
+  // Lets the handful of is_admin test accounts (see checkin/index.ts's
+  // "virtual" verifyMethod branch) check in without being at the venue, so
+  // they can exercise multi-party flows (challenges, roster, feed) solo
+  // across multiple accounts without physically visiting anywhere. The
+  // server re-checks is_admin itself — this button being hidden for
+  // everyone else is a UX nicety, not the actual gate.
+  window.checkInVirtual = function () {
+    const stopId = venueCheckinStopId;
+    closeVenueCheckin();
+    checkInStop(stopId, { verifyMethod: 'virtual' });
   };
 
   let venueScanStream = null;
@@ -5384,6 +5415,39 @@
   window.expandForkCard = function (routeStopId, idx) {
     expandedForkIndex[routeStopId] = idx;
     renderItinerary();
+  };
+
+  // "Flip to Decide" — a pure decision aid for a fork with 2-3 offered
+  // venues, no server round-trip (same spirit as expandForkCard, this is
+  // local-only). The coin's own heads/tails face is purely ceremonial
+  // here (MusoCoinFlip.flip() self-randomizes it); the actual pick is a
+  // separate uniform random draw across however many choices this stop
+  // has, since a 2-sided coin can't fairly represent 3 options. Landing
+  // just expands the picked card and gives it a brief highlight pulse —
+  // the player still taps "Choose" themselves to commit.
+  window.flipForFork = function (routeStopId) {
+    if (!window.MusoCoinFlip) return;
+    const stop = activeAdventure?.stops?.find((s) => s.id === routeStopId);
+    const choices = Array.isArray(stop?.offered_choices) ? stop.offered_choices : [];
+    if (choices.length < 2) return;
+    const pickIdx = Math.floor(Math.random() * choices.length);
+    window.MusoCoinFlip.flip({
+      title: 'The Flip',
+      prompt: "Can't decide? Let the coin choose your next stop.",
+      closeOnResult: true,
+      onResult: () => {
+        expandedForkIndex[routeStopId] = pickIdx;
+        renderItinerary();
+        requestAnimationFrame(() => {
+          const stack = document.querySelector(`.fork-stack[data-stop-id="${routeStopId}"]`);
+          const card = stack?.querySelector('.fork-stack-card.expanded');
+          if (!card) return;
+          card.classList.add('fork-flip-pick');
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => card.classList.remove('fork-flip-pick'), 1800);
+        });
+      },
+    });
   };
 
   // Drives the "cool randomizer" reveal on the expanded card during a

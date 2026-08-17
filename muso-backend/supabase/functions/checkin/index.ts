@@ -308,7 +308,7 @@ Deno.serve(async (req) => {
     routeStopId?: string;
     photoUrl?: string;
     etaMinutesOverride?: number;
-    verifyMethod?: "qr" | "geo";
+    verifyMethod?: "qr" | "geo" | "virtual";
     lat?: number;
     lng?: number;
     scannedVenueId?: string;
@@ -356,7 +356,22 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (stopForVerify?.venue_id) {
-      if (verifyMethod === "qr") {
+      if (verifyMethod === "virtual") {
+        // Lets a handful of trusted test accounts (profiles.is_admin)
+        // exercise the full multi-party flow without physically visiting
+        // every venue. No qrBonusEligible — no real venue visit happened,
+        // so no location bonus. Must be checked server-side, not just
+        // hidden client-side, since anyone could otherwise POST this
+        // verifyMethod directly.
+        const { data: profileForVerify } = await admin
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", userId)
+          .maybeSingle();
+        if (!profileForVerify?.is_admin) {
+          return jsonResponse({ error: "Virtual check-in is only available to test accounts." }, 403);
+        }
+      } else if (verifyMethod === "qr") {
         if (!scannedVenueId || scannedVenueId !== stopForVerify.venue_id) {
           return jsonResponse({ error: "That QR code doesn't match this stop's venue." }, 400);
         }
