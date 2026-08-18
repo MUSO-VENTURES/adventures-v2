@@ -154,16 +154,21 @@ function eqOrIsNull(query: any, col: string, value: string | null) {
   return value === null ? query.is(col, value) : query.eq(col, value);
 }
 
-// Scoped by mode (not just party+adventure) so solo and group play count
-// their own independent round sequences — otherwise mixing solo and group
-// play within one adventure would interleave round numbers and split
-// "games" (and the difficulty tier tied to them) across both modes.
+// Scoped by mode AND category (not just party+adventure) so solo/group play
+// count independent round sequences, and so does each category — otherwise
+// switching categories mid-adventure (the "change category" override) or in
+// freeplay (the picker) would keep incrementing round_number from wherever
+// the previous category left off instead of starting a fresh 5-question
+// game at question 1. (This used to be mode-only scoped, which is exactly
+// the bug that shipped: a freeplay category switch after 3 rounds of one
+// category started the next one at question 4/5.)
 async function nextRoundNumber(
   // deno-lint-ignore no-explicit-any
   admin: any,
   partyId: string,
   adventureId: string | null,
   mode: string,
+  category: TriviaCategory,
 ): Promise<number> {
   const { data } = await eqOrIsNull(
     admin.from("trivia_rounds").select("round_number").eq("party_id", partyId),
@@ -171,22 +176,24 @@ async function nextRoundNumber(
     adventureId,
   )
     .eq("mode", mode)
+    .eq("category", category)
     .order("round_number", { ascending: false })
     .limit(1)
     .maybeSingle();
   return ((data?.round_number as number | undefined) ?? 0) + 1;
 }
 
-// Reads the party's current difficulty tier for this adventure+mode,
-// creating the row (defaulting to 'easy') on first play — satisfies "the
-// first game should never be too hard" for free, since every new party/
-// adventure/mode combination starts here.
+// Reads the party's current difficulty tier for this adventure+mode+
+// category, creating the row (defaulting to 'easy') on first play —
+// satisfies "the first game should never be too hard" for free, since
+// every new party/adventure/mode/category combination starts here.
 async function getOrCreateProgress(
   // deno-lint-ignore no-explicit-any
   admin: any,
   partyId: string,
   adventureId: string | null,
   mode: string,
+  category: TriviaCategory,
 ): Promise<TriviaDifficulty> {
   const { data: existing } = await eqOrIsNull(
     admin.from("trivia_progress").select("difficulty").eq("party_id", partyId),
@@ -194,12 +201,13 @@ async function getOrCreateProgress(
     adventureId,
   )
     .eq("mode", mode)
+    .eq("category", category)
     .maybeSingle();
   if (existing) return existing.difficulty as TriviaDifficulty;
 
   const { data: created, error } = await admin
     .from("trivia_progress")
-    .insert({ party_id: partyId, adventure_id: adventureId, mode })
+    .insert({ party_id: partyId, adventure_id: adventureId, mode, category })
     .select("difficulty")
     .single();
   if (error) {
@@ -212,6 +220,7 @@ async function getOrCreateProgress(
       adventureId,
     )
       .eq("mode", mode)
+      .eq("category", category)
       .maybeSingle();
     return (raced?.difficulty as TriviaDifficulty) ?? "easy";
   }
@@ -240,6 +249,7 @@ async function maybeCompleteGame(
   partyId: string,
   adventureId: string | null,
   mode: string,
+  category: TriviaCategory,
   roundId: string,
   roundNumber: number,
 ): Promise<
@@ -255,6 +265,7 @@ async function maybeCompleteGame(
     adventureId,
   )
     .eq("mode", mode)
+    .eq("category", category)
     .gte("round_number", gameStart)
     .lte("round_number", roundNumber)
     .order("round_number", { ascending: true });
@@ -268,7 +279,7 @@ async function maybeCompleteGame(
   const gameCorrectCount = gameSummary.filter((s) => s.correct).length;
   const perfect = gameCorrectCount === QUESTIONS_PER_GAME;
 
-  const currentDifficulty = await getOrCreateProgress(admin, partyId, adventureId, mode);
+  const currentDifficulty = await getOrCreateProgress(admin, partyId, adventureId, mode, category);
   const gameNewDifficulty = perfect ? nextDifficulty(currentDifficulty) : currentDifficulty;
   const gameLeveledUp = perfect && gameNewDifficulty !== currentDifficulty;
 
@@ -279,7 +290,7 @@ async function maybeCompleteGame(
         .eq("party_id", partyId),
       "adventure_id",
       adventureId,
-    ).eq("mode", mode);
+    ).eq("mode", mode).eq("category", category);
   }
 
   await admin
@@ -295,6 +306,14 @@ async function maybeCompleteGame(
   return { gameCorrectCount, gameLeveledUp, gameNewDifficulty, gameSummary };
 }
 
+// category is optional: omitted, this resumes whatever round is live
+// regardless of category (openTriviaBreak's initial "did I leave off
+// somewhere" check, before the category picker even shows — deliberately
+// category-agnostic). Passed, it scopes to that one category — required
+// by startRound's own conflict-fallback below, so a race on category A
+// never gets handed back a stale live round from category B (see
+// 0049_trivia_live_round_per_category.sql for the matching DB-level fix —
+// the unique index this races against is category-scoped too now).
 async function fetchLiveRound(
   // deno-lint-ignore no-explicit-any
   admin: any,
@@ -302,6 +321,7 @@ async function fetchLiveRound(
   adventureId: string | null,
   mode: string,
   initiatorProfileId?: string,
+  category?: TriviaCategory,
 ) {
   let query = eqOrIsNull(
     admin.from("trivia_rounds").select("*").eq("party_id", partyId),
@@ -312,6 +332,9 @@ async function fetchLiveRound(
     .in("status", ["buzzing", "answering"]);
   if (mode === "solo" && initiatorProfileId) {
     query = query.eq("initiator_profile_id", initiatorProfileId);
+  }
+  if (category) {
+    query = query.eq("category", category);
   }
   const { data } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
   return data ?? null;
@@ -429,8 +452,8 @@ Deno.serve(async (req) => {
       category = requestedCategory;
     }
 
-    const roundNumber = await nextRoundNumber(admin, partyId, adventureId, mode);
-    const difficulty = await getOrCreateProgress(admin, partyId, adventureId, mode);
+    const roundNumber = await nextRoundNumber(admin, partyId, adventureId, mode, category);
+    const difficulty = await getOrCreateProgress(admin, partyId, adventureId, mode, category);
 
     // Avoid repeating a question already asked this party+adventure+mode+
     // category — scoped by category too now that it can vary within one
@@ -479,7 +502,7 @@ Deno.serve(async (req) => {
       // beat earlier) — hand back the existing live round instead of
       // erroring, so everyone converges on one shared question.
       if (insertErr.code === "23505") {
-        const existing = await fetchLiveRound(admin, partyId, adventureId, mode, userId);
+        const existing = await fetchLiveRound(admin, partyId, adventureId, mode, userId, category);
         if (existing) return jsonResponse({ round: serializeRound(existing), rejoined: true });
       }
       return jsonResponse({ error: insertErr.message }, 400);
@@ -565,6 +588,7 @@ Deno.serve(async (req) => {
         round!.party_id as string,
         round!.adventure_id as string | null,
         round!.mode as string,
+        round!.category as TriviaCategory,
         roundId,
         round!.round_number as number,
       );
@@ -607,6 +631,7 @@ Deno.serve(async (req) => {
         round!.party_id as string,
         round!.adventure_id as string | null,
         round!.mode as string,
+        round!.category as TriviaCategory,
         roundId,
         round!.round_number as number,
       );
