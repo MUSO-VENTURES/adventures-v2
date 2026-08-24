@@ -478,7 +478,7 @@
      own coin-flip artwork (assets/coin/heads.png|tails.png) — sized off
      font-size like an inline emoji would be, so it drops into any text
      context without its own layout rules. */
-  .icon-coin{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
+  .icon-inline{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
   .buy-coins-btn{
     background:transparent; border:2px solid var(--ink); color:var(--ink);
     padding:6px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -1528,7 +1528,7 @@
     <div id="venue-checkin-choice">
       <div class="pb-hint" style="margin-bottom:16px;">Verify you're actually here to lock in your check-in.</div>
       <div class="pb-controls">
-        <button type="button" class="pb-btn primary" onclick="startVenueQrScan()">📷 Scan the Venue QR (+10 bonus)</button>
+        <button type="button" class="pb-btn primary" onclick="startVenueQrScan()"><img class="icon-inline" src="../assets/icons/camera.png" alt=""> Scan the Venue QR (+10 bonus)</button>
         <button type="button" class="pb-btn secondary" onclick="checkInWithLocation()">📍 Check In With My Location</button>
         <button type="button" class="pb-btn secondary" id="venue-checkin-virtual-btn" hidden onclick="checkInVirtual()">🛰️ Virtual Check-In (test accounts)</button>
       </div>
@@ -1559,7 +1559,7 @@
 <div class="photobooth-overlay" id="nextvenue-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
-      <span id="nextvenue-title">✓ Checked in!</span>
+      <span id="nextvenue-title"><img class="icon-inline" src="../assets/icons/check.png" alt=""> Checked in!</span>
       <span class="pb-close" onclick="closeNextVenue()">&times;</span>
     </div>
     <div class="nextvenue-map-wrap"><div id="nextvenue-map"></div></div>
@@ -1573,7 +1573,7 @@
 <div class="photobooth-overlay" id="adventure-summary-overlay" hidden>
   <div class="photobooth-card summary-card">
     <div class="photobooth-header">
-      <span>🏁 Adventure Complete!</span>
+      <span><img class="icon-inline" src="../assets/icons/flag.png" alt=""> Adventure Complete!</span>
       <span class="pb-close" onclick="closeAdventureSummary()">&times;</span>
     </div>
     <div id="adventure-summary-body"></div>
@@ -1603,14 +1603,14 @@
     <h2 id="staging-name" style="font-family:'Fredoka',sans-serif; margin:10px 0 4px;"></h2>
     <div id="staging-meta" style="opacity:0.75; margin-bottom:4px;"></div>
     <div id="staging-addr" style="opacity:0.55; font-size:0.85rem; margin-bottom:20px;"></div>
-    <button type="button" class="pb-btn primary" style="width:100%;" onclick="closeStagingOverlay()">Let's Go! 🧭</button>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="closeStagingOverlay()">Let's Go! <img class="icon-inline" src="../assets/icons/compass.png" alt=""></button>
   </div>
 </div>
 
 <div class="photobooth-overlay" id="avatar-capture-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
-      <span>📷 Choose Your Profile Photo</span>
+      <span><img class="icon-inline" src="../assets/icons/camera.png" alt=""> Choose Your Profile Photo</span>
       <span class="pb-close" onclick="skipAvatarCapture()">&times;</span>
     </div>
     <div id="avatar-capture-choice">
@@ -1645,7 +1645,7 @@
 <div class="photobooth-overlay" id="onboarding-overlay" hidden>
   <div class="photobooth-card onboarding-card">
     <div class="photobooth-header">
-      <span>🧭 Set Your Preferences</span>
+      <span><img class="icon-inline" src="../assets/icons/compass.png" alt=""> Set Your Preferences</span>
       <span class="pb-close" onclick="closeOnboarding()">&times;</span>
     </div>
     <div class="pb-hint" style="margin-bottom:14px;">Saved once, reused every time you start a Real Adventure. Edit anytime from your profile.</div>
@@ -1811,7 +1811,7 @@
 
   <section class="adventure-section">
     <div class="adventure-inner">
-      <h2 id="adventure-heading">📱 Start a MUSO Adventure</h2>
+      <h2 id="adventure-heading"><img class="icon-inline" src="../assets/icons/start-adventure.png" alt=""> Start a MUSO Adventure</h2>
       <p class="adventure-sub" id="adventure-sub">Sign in above to start your first adventure and begin earning XP, badges, and unlocking your profile.</p>
       <div id="adventure-body"></div>
       <div class="progress-map-wrap" id="adventure-progress-map-wrap" hidden>
@@ -1834,7 +1834,7 @@
        engine above; loads once per view, not tied to realtime. -->
   <section class="adventure-section past-adventures-section">
     <div class="adventure-inner">
-      <h2>🗂️ Past Adventures</h2>
+      <h2><img class="icon-inline" src="../assets/icons/past-adventures.png" alt=""> Past Adventures</h2>
       <p class="adventure-sub">Everywhere you've been, who you went with, and what you found.</p>
       <div id="past-adventures-list"></div>
     </div>
@@ -1849,7 +1849,7 @@
 <div class="app-view" data-view="games" id="view-games">
   <section class="minigames-section">
     <div class="adventure-inner">
-      <h2>🎮 Games</h2>
+      <h2><img class="icon-inline" src="../assets/icons/games.png" alt=""> Games</h2>
       <p class="adventure-sub">Quick, optional games you can drop into any adventure for bonus XP and coins.</p>
       <div class="minigames-grid" id="minigames-grid"></div>
     </div>
@@ -1864,11 +1864,11 @@
 <div class="app-view" data-view="maps" id="view-maps">
   <section class="adventure-section">
     <div class="adventure-inner">
-      <h2>🗺️ Maps</h2>
+      <h2><img class="icon-inline" src="../assets/icons/maps.png" alt=""> Maps</h2>
       <p class="adventure-sub" id="maps-sub">Every adventure you've taken, mapped out.</p>
       <div class="maps-filter-row" id="maps-filter-row">
         <button type="button" class="maps-filter-pill active" data-filter="current" onclick="setMapsFilter('current')">📍 Current Adventure</button>
-        <button type="button" class="maps-filter-pill" data-filter="all" onclick="setMapsFilter('all')">🗂️ All My Adventures</button>
+        <button type="button" class="maps-filter-pill" data-filter="all" onclick="setMapsFilter('all')"><img class="icon-inline" src="../assets/icons/past-adventures.png" alt=""> All My Adventures</button>
         <button type="button" class="maps-filter-pill" data-filter="master" onclick="setMapsFilter('master')">🌎 Master View</button>
       </div>
       <div class="maps-map-wrap"><div id="maps-map"></div></div>
@@ -2004,7 +2004,7 @@
   <div class="photobooth-card" style="max-width:440px; position:relative;">
     <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeTriviaBreak()">&times;</span>
     <div class="photobooth-header" style="justify-content:space-between; padding-right:30px;">
-      <span>🧠 Trivia Break</span>
+      <span><img class="icon-inline" src="../assets/icons/trivia.png" alt=""> Trivia Break</span>
       <button type="button" class="trivia-change-category-btn" onclick="renderTriviaCategoryPicker()">🔀 Category</button>
     </div>
     <div id="trivia-body"><div class="trivia-empty">Getting your question ready…</div></div>
@@ -3458,7 +3458,7 @@
     el.innerHTML = `
       <div class="account-chip">
         <span class="level-pill">Lv ${level}</span>
-        <span class="coin-pill"><img class="icon-coin" src="../assets/icons/coin.png" alt="coins"> ${coins}</span>
+        <span class="coin-pill"><img class="icon-inline" src="../assets/icons/coin.png" alt="coins"> ${coins}</span>
         <button type="button" class="buy-coins-btn" onclick="openBuyCoins()">Buy Coins</button>
         <span class="signout-link" onclick="signOut()">Sign out</span>
       </div>
@@ -3589,7 +3589,7 @@
     } else {
       ctaEl.innerHTML = `
         <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 ${g.lockedHint}</div>
-        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-coin" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
+        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
       `;
     }
     document.getElementById('minigame-detail-overlay').removeAttribute('hidden');
@@ -3750,7 +3750,7 @@
 
       const headerIcon = theme?.icon
         ? `<img class="adv-acc-icon" src="${theme.icon}" alt="">`
-        : '<span class="adv-acc-emoji">🏁</span>';
+        : '<span class="adv-acc-emoji"><img class="icon-inline" src="../assets/icons/flag.png" alt=""></span>';
 
       return `
         <div class="past-adv-item adv-acc-item ${theme?.colorClass || ''}">
@@ -3963,7 +3963,7 @@
           <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
           <div class="minigame-status">🔒 ${g.lockedHint}</div>
-          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-coin" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
+          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
         </div>
       `;
     }).join('');
@@ -4317,7 +4317,7 @@
   async function renderRoutePicker() {
     const body = document.getElementById('adventure-body');
     const headingEl = document.getElementById('adventure-heading');
-    if (headingEl) headingEl.textContent = '📱 Start a MUSO Adventure';
+    if (headingEl) headingEl.innerHTML = '<img class="icon-inline" src="../assets/icons/start-adventure.png" alt=""> Start a MUSO Adventure';
     // owner_party_id is null for curated/global routes — explicitly filtered
     // here so a player's own ad-hoc real-venue route (owner_party_id set,
     // readable to them under the 0016 RLS policy) never leaks into this
@@ -4915,8 +4915,8 @@
     // your MUSO Wine Country Adventure" once one is under way.
     const headingEl = document.getElementById('adventure-heading');
     if (headingEl && route?.title) {
-      const emoji = /wine country/i.test(route.title) ? '🍷' : activeAdventure.mode === 'real_venue' ? '🍀' : '📱';
-      headingEl.textContent = `${emoji} Start your MUSO ${route.title}`;
+      const emoji = /wine country/i.test(route.title) ? '🍷' : activeAdventure.mode === 'real_venue' ? '🍀' : '<img class="icon-inline" src="../assets/icons/start-adventure.png" alt="">';
+      headingEl.innerHTML = `${emoji} Start your MUSO ${route.title}`;
     }
     const firstIncompleteIdx = stops.findIndex(s => !doneIds.has(s.id));
     const allVisibleDone = firstIncompleteIdx === -1;
@@ -4943,7 +4943,7 @@
       const locked = !isDone && !isCurrent;
       let status;
       const isRealVenue = activeAdventure.mode === 'real_venue';
-      if (isDone) status = `<span class="is-status" style="color:var(--deep-teal);">✓ Checked in</span>`;
+      if (isDone) status = `<span class="is-status" style="color:var(--deep-teal);"><img class="icon-inline" src="../assets/icons/check.png" alt=""> Checked in</span>`;
       else if (isCurrent && isRealVenue && s.is_mystery) {
         // advance() (real-venue-adventure edge function) hasn't successfully
         // revealed this stop yet — best-effort, so offer a manual retry
@@ -5111,7 +5111,7 @@
 
     body.innerHTML = `
       ${allDone ? `
-        <div class="adventure-complete-banner">🏁 Adventure complete! Great work.</div>
+        <div class="adventure-complete-banner"><img class="icon-inline" src="../assets/icons/flag.png" alt=""> Adventure complete! Great work.</div>
         <div style="text-align:center; margin-bottom:16px;"><button type="button" class="start-adv-btn" onclick="clearActiveAdventure()">Start Another Adventure</button></div>
       ` : ''}
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;">
@@ -5656,7 +5656,7 @@
     clearNextVenueMap();
 
     const nextLabel = nextStop.is_mystery ? 'a surprise location' : nextStop.name;
-    document.getElementById('nextvenue-title').textContent = '✓ Checked in!';
+    document.getElementById('nextvenue-title').innerHTML = '<img class="icon-inline" src="../assets/icons/check.png" alt=""> Checked in!';
     document.getElementById('nextvenue-hint').innerHTML = `Next stop: <strong>${nextLabel}</strong>. Here's the path to get there.`;
     document.getElementById('nextvenue-btn').textContent = `Continue to ${nextLabel}`;
     document.getElementById('nextvenue-overlay').removeAttribute('hidden');
