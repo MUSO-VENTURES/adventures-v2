@@ -474,6 +474,11 @@
     background:var(--tangerine); color:var(--ink); font-weight:700; font-family:'Fredoka',sans-serif;
     padding:4px 10px; border-radius:999px; font-size:0.76rem; display:flex; align-items:center; gap:4px;
   }
+  /* Custom coin icon, replacing the 🪙 emoji everywhere except The Flip's
+     own coin-flip artwork (assets/coin/heads.png|tails.png) — sized off
+     font-size like an inline emoji would be, so it drops into any text
+     context without its own layout rules. */
+  .icon-coin{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
   .buy-coins-btn{
     background:transparent; border:2px solid var(--ink); color:var(--ink);
     padding:6px 14px; border-radius:999px; font-weight:700; font-family:'Fredoka',sans-serif;
@@ -3453,7 +3458,7 @@
     el.innerHTML = `
       <div class="account-chip">
         <span class="level-pill">Lv ${level}</span>
-        <span class="coin-pill">🪙 ${coins}</span>
+        <span class="coin-pill"><img class="icon-coin" src="../assets/icons/coin.png" alt="coins"> ${coins}</span>
         <button type="button" class="buy-coins-btn" onclick="openBuyCoins()">Buy Coins</button>
         <span class="signout-link" onclick="signOut()">Sign out</span>
       </div>
@@ -3584,7 +3589,7 @@
     } else {
       ctaEl.innerHTML = `
         <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 ${g.lockedHint}</div>
-        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');">🪙 Unlock for ${g.cost}</button>` : ''}
+        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-coin" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
       `;
     }
     document.getElementById('minigame-detail-overlay').removeAttribute('hidden');
@@ -3958,7 +3963,7 @@
           <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
           <div class="minigame-status">🔒 ${g.lockedHint}</div>
-          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')">🪙 Unlock for ${g.cost}</button>` : ''}
+          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-coin" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
         </div>
       `;
     }).join('');
