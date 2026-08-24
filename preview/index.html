@@ -474,10 +474,12 @@
     background:var(--tangerine); color:var(--ink); font-weight:700; font-family:'Fredoka',sans-serif;
     padding:4px 10px; border-radius:999px; font-size:0.76rem; display:flex; align-items:center; gap:4px;
   }
-  /* Custom coin icon, replacing the 🪙 emoji everywhere except The Flip's
-     own coin-flip artwork (assets/coin/heads.png|tails.png) — sized off
-     font-size like an inline emoji would be, so it drops into any text
-     context without its own layout rules. */
+  /* Generic inline-icon sizing, used for the custom coin icon and every
+     other emoji-replacement icon in the app (except The Flip's own
+     coin-flip artwork, assets/coin/heads.png|tails.png, which stays as
+     real photographic art) — sized off font-size like an inline emoji
+     would be, so it drops into any text context without its own layout
+     rules. */
   .icon-inline{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
   .buy-coins-btn{
     background:transparent; border:2px solid var(--ink); color:var(--ink);
@@ -1899,7 +1901,7 @@
   <div class="photobooth-card" style="text-align:center; position:relative;">
     <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeFlipPicker()">&times;</span>
     <div class="photobooth-header" style="justify-content:center;">
-      <span>🪙 The Flip</span>
+      <span><img class="icon-inline" src="../assets/icons/coin.png" alt=""> The Flip</span>
     </div>
     <p style="opacity:0.75; font-size:0.9rem; margin:0 0 16px;">Pick what's on the line, or name your own.</p>
     <div class="flip-picker-chips">
@@ -1914,8 +1916,8 @@
     <input type="text" id="flip-picker-custom-prompt" maxlength="200" placeholder="Name your own, e.g. &quot;Who gets a back rub?&quot;"
       style="width:100%; box-sizing:border-box; background:rgba(var(--shadow-rgb),0.06); border:2px solid rgba(var(--shadow-rgb),0.14); color:var(--ink);
       padding:10px 14px; border-radius:14px; font-family:'Nunito',sans-serif; font-size:0.88rem; margin-bottom:6px;">
-    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 14px;">Keep it PG-13. Costs 🪙10 to name your own.</p>
-    <button type="button" class="pb-btn primary" style="width:100%;" onclick="nameMyFlip()">✏️ Name It &amp; Flip (🪙10)</button>
+    <p style="opacity:0.55; font-size:0.74rem; margin:0 0 14px;">Keep it PG-13. Costs <img class="icon-inline" src="../assets/icons/coin.png" alt="">10 to name your own.</p>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="nameMyFlip()">✏️ Name It &amp; Flip (<img class="icon-inline" src="../assets/icons/coin.png" alt="">10)</button>
   </div>
 </div>
 
@@ -1982,14 +1984,14 @@
 <div class="photobooth-overlay" id="flip-paywall-overlay" hidden>
   <div class="photobooth-card" style="text-align:center;">
     <div class="photobooth-header" style="justify-content:center;">
-      <span>🪙 Out of Free Flips</span>
+      <span><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Out of Free Flips</span>
     </div>
     <p style="opacity:0.75; font-size:0.9rem; margin:0 0 18px;">
       You've used your free flips for this adventure. Check in at your next stop for another, or buy 5 more right now.
     </p>
     <div style="display:flex; gap:10px;">
       <button type="button" class="pb-btn secondary" style="flex:1;" onclick="closeFlipPaywall()">Not now</button>
-      <button type="button" class="pb-btn primary" style="flex:1;" onclick="buyMoreFlips()">🪙 Buy 5 for 50</button>
+      <button type="button" class="pb-btn primary" style="flex:1;" onclick="buyMoreFlips()"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Buy 5 for 50</button>
     </div>
   </div>
 </div>
@@ -3575,7 +3577,7 @@
       // the ⚔️ roster badge already uses, just reached from the Games page
       // instead of requiring an active adventure's roster panel first.
       ctaEl.innerHTML = `
-        <button type="button" class="pb-btn primary" style="width:100%; margin-bottom:8px;" onclick="closeMinigameDetail(); playMinigame('${key}');">🪙 Solo Flip</button>
+        <button type="button" class="pb-btn primary" style="width:100%; margin-bottom:8px;" onclick="closeMinigameDetail(); playMinigame('${key}');"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Solo Flip</button>
         <button type="button" class="pb-btn secondary" style="width:100%;" onclick="closeMinigameDetail(); openFlipChallengePicker();">⚔️ Challenge a Friend</button>
         <p style="opacity:0.6; font-size:0.74rem; margin:10px 0 0;">Challenge mode: you both race to call heads or tails, first pick wins that side.</p>
       `;
@@ -3741,7 +3743,7 @@
             const opponentName = esc(nameByProfileId.get(g.opponent_id) || 'Explorer');
             const winnerName = esc(nameByProfileId.get(g.winner_id) || 'Explorer');
             return `<div class="past-adv-game-item">
-              <span class="past-adv-game-name">🪙 The Flip</span>
+              <span class="past-adv-game-name"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> The Flip</span>
               <span class="past-adv-game-players">${challengerName} vs ${opponentName}</span>
               <span class="past-adv-game-winner">🏆 ${winnerName} won (${esc(g.result)})</span>
             </div>`;
@@ -5035,7 +5037,7 @@
             <div class="is-body" style="flex:1 1 100%;">
               <div class="is-name" style="margin-bottom:10px;">${i + 1}. Choose Your Path</div>
               <div class="fork-stack" data-stop-id="${s.id}">
-                <button type="button" class="fork-flip-btn" onclick="flipForFork('${s.id}')">🪙 Flip to Decide</button>
+                <button type="button" class="fork-flip-btn" onclick="flipForFork('${s.id}')"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Flip to Decide</button>
                 <div class="fork-stack-deck${hasExpanded ? ' has-expanded' : ''}">${deckHtml}</div>
               </div>
             </div>
