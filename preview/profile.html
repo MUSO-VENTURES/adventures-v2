@@ -131,6 +131,7 @@
   .level-pill{ background:var(--plum); color:#fff; font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
   .coin-pill{ background:var(--tangerine); color:var(--ink); font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
   .icon-inline{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
+  .icon-inline-coin{ height:1.5em; width:auto; vertical-align:-0.225em; display:inline-block; }
   .radius-pill{ background:rgba(14,165,160,0.15); color:var(--deep-teal); font-weight:700; font-family:'Fredoka',sans-serif; padding:5px 12px; border-radius:999px; font-size:0.8rem; }
 
   .card{
@@ -369,7 +370,7 @@
         <div class="member-since" id="member-since-el"></div>
         <div class="badge-row">
           <span class="level-pill" id="level-pill">Lv 1</span>
-          <span class="coin-pill" id="coin-pill"><img class="icon-inline" src="../assets/icons/coin-v2.png" alt="coins"> 0</span>
+          <span class="coin-pill" id="coin-pill"><img class="icon-inline-coin" src="../assets/icons/coin-v2.png" alt="coins"> 0</span>
           <span class="radius-pill" id="radius-pill">25 mi</span>
         </div>
       </div>
@@ -579,7 +580,7 @@
       ? `Exploring since ${new Date(profile.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
       : '';
     document.getElementById('level-pill').textContent = `Lv ${profile.level ?? 1}`;
-    document.getElementById('coin-pill').innerHTML = `<img class="icon-inline" src="../assets/icons/coin-v2.png" alt="coins"> ${profile.adventure_coins ?? 0}`;
+    document.getElementById('coin-pill').innerHTML = `<img class="icon-inline-coin" src="../assets/icons/coin-v2.png" alt="coins"> ${profile.adventure_coins ?? 0}`;
     document.getElementById('radius-pill').textContent = `${profile.unlocked_radius_miles ?? 25} mi`;
 
     const level = profile.level ?? 1;
@@ -936,7 +937,7 @@
             <span class="trophy-item-title">${title}</span>
             <span class="trophy-item-date">${date}</span>
           </div>
-          <div class="trophy-item-stats"><img class="icon-inline" src="../assets/icons/coin-v2.png" alt=""> ${coins >= 0 ? '+' : ''}${coins} coins earned</div>
+          <div class="trophy-item-stats"><img class="icon-inline-coin" src="../assets/icons/coin-v2.png" alt=""> ${coins >= 0 ? '+' : ''}${coins} coins earned</div>
           ${badgeRowHtml}
           ${gamesHtml}
           ${photoGridHtml}
