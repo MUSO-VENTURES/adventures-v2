@@ -764,9 +764,9 @@
     const el = document.getElementById('upcoming-content');
     const rows = [];
     const bday = nextOccurrence(profile.birth_date);
-    if (bday) rows.push({ emoji: '🎂', label: 'Birthday', when: bday });
+    if (bday) rows.push({ emoji: '<img class="icon-inline" src="../assets/icons/birthday-cake.png" alt="">', label: 'Birthday', when: bday });
     const anniv = nextOccurrence(profile.anniversary_date);
-    if (anniv) rows.push({ emoji: '💛', label: 'Anniversary', when: anniv });
+    if (anniv) rows.push({ emoji: '<img class="icon-inline" src="../assets/icons/yellow-heart.png" alt="">', label: 'Anniversary', when: anniv });
     rows.sort((a, b) => a.when - b.when);
     if (!rows.length) {
       el.textContent = 'Add a birthday or anniversary below to see them here. Team outings and reunions are coming soon.';
