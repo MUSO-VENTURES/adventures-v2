@@ -923,7 +923,7 @@
             const opponentName = esc(opponentNameById[opponentId] || 'Explorer');
             const won = g.winner_id === session.user.id;
             return `<div class="trophy-game-item">
-              <span class="trophy-game-name"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> The Flip vs ${opponentName}</span>
+              <span class="trophy-game-name">🪙 The Flip vs ${opponentName}</span>
               <span class="trophy-game-result">${won ? '🏆 Won' : 'Lost'} (${esc(g.result)})</span>
             </div>`;
           }).join('')}</div>`
