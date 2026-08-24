@@ -1458,7 +1458,7 @@
       </div>
       <div class="dob-wheel-summary" id="dob-wheel-summary" aria-live="polite"></div>
       <input type="hidden" id="gate-birthdate">
-      <span class="gate-field-hint">Unlocks 21+ venues when you're eligible, and lets us send you something for your birthday 🎂</span>
+      <span class="gate-field-hint">Unlocks 21+ venues when you're eligible, and lets us send you something for your birthday <img class="icon-inline" src="../assets/icons/birthday-cake.png" alt=""></span>
     </div>
     <div class="gate-field-row">
       <label for="gate-email" class="gate-field-label">Email <span class="gate-field-optional">(optional, for birthday specials)</span></label>
@@ -1675,7 +1675,7 @@
         </div>
         <div class="onboarding-radius-tier-markers">
           <div class="onboarding-radius-tier-marker reached">≤30mi Free</div>
-          <div class="onboarding-radius-tier-marker">🔓 ≤50mi</div>
+          <div class="onboarding-radius-tier-marker"><img class="icon-inline" src="../assets/icons/unlocked.png" alt=""> ≤50mi</div>
           <div class="onboarding-radius-tier-marker"><img class="icon-inline" src="../assets/icons/star.png" alt=""> ≤100mi</div>
         </div>
       </div>
@@ -1683,17 +1683,17 @@
       <div class="form-group">
         <span class="form-label">Content Rating</span>
         <div class="pill-group" id="onb-rating-group">
-          <div class="pill-option selected" data-value="G-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟢 G-Rated</span><span class="pill-desc">Family-friendly, zero surprises</span></div>
-          <div class="pill-option" data-value="PG-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟡 PG-Rated</span><span class="pill-desc">A little flirty, nothing wild</span></div>
-          <div class="pill-option" data-value="NC-17" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🟠 NC-17<span class="age-badge">18+</span></span><span class="pill-desc">Adult humor, still tasteful</span></div>
-          <div class="pill-option" data-value="Adults Only" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title">🔴 Adults Only<span class="age-badge">21+</span></span><span class="pill-desc">No limits</span></div>
+          <div class="pill-option selected" data-value="G-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/green-circle.png" alt=""> G-Rated</span><span class="pill-desc">Family-friendly, zero surprises</span></div>
+          <div class="pill-option" data-value="PG-Rated" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/yellow-circle.png" alt=""> PG-Rated</span><span class="pill-desc">A little flirty, nothing wild</span></div>
+          <div class="pill-option" data-value="NC-17" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/orange-circle.png" alt=""> NC-17<span class="age-badge">18+</span></span><span class="pill-desc">Adult humor, still tasteful</span></div>
+          <div class="pill-option" data-value="Adults Only" onclick="onbSelectPill(this,'onb-rating-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/red-circle.png" alt=""> Adults Only<span class="age-badge">21+</span></span><span class="pill-desc">No limits</span></div>
         </div>
       </div>
 
       <div class="form-group">
         <span class="form-label">Alcohol</span>
         <div class="pill-group" id="onb-alcohol-group">
-          <div class="pill-option selected" data-value="Alcohol-Friendly" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title">🍷 Alcohol-Friendly</span><span class="pill-desc">Bars and drinks are fair game</span></div>
+          <div class="pill-option selected" data-value="Alcohol-Friendly" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/wine-glass.png" alt=""> Alcohol-Friendly</span><span class="pill-desc">Bars and drinks are fair game</span></div>
           <div class="pill-option" data-value="Sober / Alcohol-Free" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> Sober / Alcohol-Free</span><span class="pill-desc">Keep the whole route dry</span></div>
         </div>
       </div>
@@ -1708,19 +1708,19 @@
           <span class="form-label">Interests</span>
           <span class="form-hint">Pick as many as apply</span>
           <div class="chip-multiselect" id="onb-interests-group">
-            <div class="multiselect-chip" data-value="Food & Drink" onclick="onbToggleChip(this)">🍽️ Food & Drink</div>
-            <div class="multiselect-chip" data-value="Outdoors" onclick="onbToggleChip(this)">🌲 Outdoors</div>
-            <div class="multiselect-chip" data-value="Arts & Culture" onclick="onbToggleChip(this)">🎨 Arts & Culture</div>
-            <div class="multiselect-chip" data-value="Games & Competition" onclick="onbToggleChip(this)">🎮 Games & Competition</div>
-            <div class="multiselect-chip" data-value="Live Music" onclick="onbToggleChip(this)">🎵 Live Music</div>
-            <div class="multiselect-chip" data-value="Wellness" onclick="onbToggleChip(this)">🧘 Wellness</div>
-            <div class="multiselect-chip" data-value="Nightlife" onclick="onbToggleChip(this)">🌃 Nightlife</div>
-            <div class="multiselect-chip" data-value="Shopping" onclick="onbToggleChip(this)">🛍️ Shopping</div>
-            <div class="multiselect-chip" data-value="Pet-Friendly" onclick="onbToggleChip(this)">🐾 Pet-Friendly</div>
-            <div class="multiselect-chip" data-value="Comedy" onclick="onbToggleChip(this)">😂 Comedy</div>
-            <div class="multiselect-chip" data-value="Cultured" onclick="onbToggleChip(this)">🎭 Cultured</div>
-            <div class="multiselect-chip" data-value="Oddities & Curiosities" onclick="onbToggleChip(this)">🔮 Oddities & Curiosities</div>
-            <div class="multiselect-chip" id="onb-smoke-cigar-chip" data-value="Smoke & Cigar" onclick="onbToggleChip(this)">💨 Smoke &amp; Cigar<span class="age-badge">21+</span></div>
+            <div class="multiselect-chip" data-value="Food & Drink" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/fork-plate.png" alt=""> Food & Drink</div>
+            <div class="multiselect-chip" data-value="Outdoors" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/evergreen-tree.png" alt=""> Outdoors</div>
+            <div class="multiselect-chip" data-value="Arts & Culture" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/palette.png" alt=""> Arts & Culture</div>
+            <div class="multiselect-chip" data-value="Games & Competition" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/games.png" alt=""> Games & Competition</div>
+            <div class="multiselect-chip" data-value="Live Music" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/musical-note.png" alt=""> Live Music</div>
+            <div class="multiselect-chip" data-value="Wellness" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/lotus-person.png" alt=""> Wellness</div>
+            <div class="multiselect-chip" data-value="Nightlife" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/night-stars.png" alt=""> Nightlife</div>
+            <div class="multiselect-chip" data-value="Shopping" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/shopping-bags.png" alt=""> Shopping</div>
+            <div class="multiselect-chip" data-value="Pet-Friendly" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/paw-prints.png" alt=""> Pet-Friendly</div>
+            <div class="multiselect-chip" data-value="Comedy" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/laughing-face.png" alt=""> Comedy</div>
+            <div class="multiselect-chip" data-value="Cultured" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/performing-arts.png" alt=""> Cultured</div>
+            <div class="multiselect-chip" data-value="Oddities & Curiosities" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/crystal-ball.png" alt=""> Oddities & Curiosities</div>
+            <div class="multiselect-chip" id="onb-smoke-cigar-chip" data-value="Smoke & Cigar" onclick="onbToggleChip(this)"><img class="icon-inline" src="../assets/icons/dashing-away.png" alt=""> Smoke &amp; Cigar<span class="age-badge">21+</span></div>
           </div>
         </div>
 
