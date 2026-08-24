@@ -3458,7 +3458,7 @@
     el.innerHTML = `
       <div class="account-chip">
         <span class="level-pill">Lv ${level}</span>
-        <span class="coin-pill"><img class="icon-inline" src="../assets/icons/coin.png" alt="coins"> ${coins}</span>
+        <span class="coin-pill"><img class="icon-inline" src="../assets/icons/coin-v2.png" alt="coins"> ${coins}</span>
         <button type="button" class="buy-coins-btn" onclick="openBuyCoins()">Buy Coins</button>
         <span class="signout-link" onclick="signOut()">Sign out</span>
       </div>
@@ -3589,7 +3589,7 @@
     } else {
       ctaEl.innerHTML = `
         <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> ${g.lockedHint}</div>
-        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
+        ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-inline" src="../assets/icons/coin-v2.png" alt=""> Unlock for ${g.cost}</button>` : ''}
       `;
     }
     document.getElementById('minigame-detail-overlay').removeAttribute('hidden');
@@ -3963,7 +3963,7 @@
           <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
           <div class="minigame-status"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> ${g.lockedHint}</div>
-          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
+          ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-inline" src="../assets/icons/coin-v2.png" alt=""> Unlock for ${g.cost}</button>` : ''}
         </div>
       `;
     }).join('');
