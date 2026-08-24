@@ -399,8 +399,8 @@
           <p id="profile-qr-hint">Loading your invite code…</p>
           <div class="qr-share-row">
             <button type="button" class="qr-share-btn" onclick="shareProfileQr()">Share my link</button>
-            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('text')">💬 Text</button>
-            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('email')">✉️ Email</button>
+            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('text')"><img class="icon-inline" src="../assets/icons/speech-bubble.png" alt=""> Text</button>
+            <button type="button" class="qr-share-btn secondary" onclick="shareProfileQrVia('email')"><img class="icon-inline" src="../assets/icons/envelope.png" alt=""> Email</button>
           </div>
         </div>
       </div>
@@ -912,7 +912,7 @@
       const reviewsHtml = reviews.length
         ? `<div class="trophy-review-list">${reviews.map((r) => `
             <div class="trophy-review-item">
-              <div class="trophy-review-header"><span>${esc(r.stopName)}</span><span class="trophy-review-rating">🎯 ${r.rating}/10</span></div>
+              <div class="trophy-review-header"><span>${esc(r.stopName)}</span><span class="trophy-review-rating"><img class="icon-inline" src="../assets/icons/dart.png" alt=""> ${r.rating}/10</span></div>
               ${r.review_text ? `<div class="trophy-review-text">${esc(r.review_text)}</div>` : ''}
             </div>
           `).join('')}</div>`

@@ -1495,7 +1495,7 @@
 <div class="photobooth-overlay" id="photobooth-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
-      <span>📸 Check-in Photo</span>
+      <span><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Check-in Photo</span>
       <span class="pb-close" onclick="closePhotoBooth()">&times;</span>
     </div>
     <div class="pb-stage">
@@ -1509,8 +1509,8 @@
       here; once you check in (or move on to the next stop) this photo window closes.
     </div>
     <div class="pb-controls" id="pb-controls-live">
-      <button type="button" class="pb-btn secondary" onclick="switchCamera()">🔄 Flip Camera</button>
-      <button type="button" class="pb-btn primary" onclick="capturePhoto()">📸 Capture</button>
+      <button type="button" class="pb-btn secondary" onclick="switchCamera()"><img class="icon-inline" src="../assets/icons/flip-camera.png" alt=""> Flip Camera</button>
+      <button type="button" class="pb-btn primary" onclick="capturePhoto()"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Capture</button>
     </div>
     <div class="pb-controls" id="pb-controls-preview" style="display:none;">
       <button type="button" class="pb-btn secondary" onclick="retakePhoto()">&#8617; Retake</button>
@@ -1522,15 +1522,15 @@
 <div class="photobooth-overlay" id="venue-checkin-overlay" hidden>
   <div class="photobooth-card">
     <div class="photobooth-header">
-      <span>📍 Check In</span>
+      <span><img class="icon-inline" src="../assets/icons/pin.png" alt=""> Check In</span>
       <span class="pb-close" onclick="closeVenueCheckin()">&times;</span>
     </div>
     <div id="venue-checkin-choice">
       <div class="pb-hint" style="margin-bottom:16px;">Verify you're actually here to lock in your check-in.</div>
       <div class="pb-controls">
         <button type="button" class="pb-btn primary" onclick="startVenueQrScan()"><img class="icon-inline" src="../assets/icons/camera.png" alt=""> Scan the Venue QR (+10 bonus)</button>
-        <button type="button" class="pb-btn secondary" onclick="checkInWithLocation()">📍 Check In With My Location</button>
-        <button type="button" class="pb-btn secondary" id="venue-checkin-virtual-btn" hidden onclick="checkInVirtual()">🛰️ Virtual Check-In (test accounts)</button>
+        <button type="button" class="pb-btn secondary" onclick="checkInWithLocation()"><img class="icon-inline" src="../assets/icons/pin.png" alt=""> Check In With My Location</button>
+        <button type="button" class="pb-btn secondary" id="venue-checkin-virtual-btn" hidden onclick="checkInVirtual()"><img class="icon-inline" src="../assets/icons/satellite.png" alt=""> Virtual Check-In (test accounts)</button>
       </div>
     </div>
     <div id="venue-checkin-scan" hidden>
@@ -1583,10 +1583,10 @@
 
 <div class="photobooth-overlay" id="adventure-ready-overlay" hidden>
   <div class="photobooth-card" style="text-align:center;">
-    <div style="font-size:3rem; margin-bottom:8px;">🎉</div>
+    <div style="margin-bottom:8px;"><img class="icon-inline" style="height:3rem;" src="../assets/icons/party-popper.png" alt=""></div>
     <h2 style="font-family:'Fredoka',sans-serif; margin-bottom:10px;">You're All Set!</h2>
     <p style="opacity:0.75; margin-bottom:24px;">Your preferences are saved. Ready to see where the night takes you?</p>
-    <button type="button" class="pb-btn primary" style="width:100%;" onclick="beginAdventureCountdown()">🚀 Start Your MUSO Adventure</button>
+    <button type="button" class="pb-btn primary" style="width:100%;" onclick="beginAdventureCountdown()"><img class="icon-inline" src="../assets/icons/rocket.png" alt=""> Start Your MUSO Adventure</button>
   </div>
 </div>
 
@@ -1616,8 +1616,8 @@
     <div id="avatar-capture-choice">
       <div class="pb-hint" style="margin-bottom:16px;">This photo shows up as your avatar throughout the game.</div>
       <div class="pb-controls">
-        <label class="pb-btn secondary" for="avatar-file-input" style="text-align:center; display:flex; align-items:center; justify-content:center;">🖼️ Choose from Library</label>
-        <button type="button" class="pb-btn primary" onclick="startAvatarCamera()">📸 Use Camera</button>
+        <label class="pb-btn secondary" for="avatar-file-input" style="text-align:center; display:flex; align-items:center; justify-content:center;"><img class="icon-inline" src="../assets/icons/picture.png" alt=""> Choose from Library</label>
+        <button type="button" class="pb-btn primary" onclick="startAvatarCamera()"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Use Camera</button>
       </div>
       <input type="file" id="avatar-file-input" accept="image/*" hidden>
       <div style="text-align:center; margin-top:14px;">
@@ -1631,8 +1631,8 @@
       </div>
       <canvas id="avatar-cam-canvas" hidden></canvas>
       <div class="pb-controls" id="avatar-cam-controls-live">
-        <button type="button" class="pb-btn secondary" onclick="avatarSwitchCamera()">🔄 Flip Camera</button>
-        <button type="button" class="pb-btn primary" onclick="avatarCapturePhoto()">📸 Capture</button>
+        <button type="button" class="pb-btn secondary" onclick="avatarSwitchCamera()"><img class="icon-inline" src="../assets/icons/flip-camera.png" alt=""> Flip Camera</button>
+        <button type="button" class="pb-btn primary" onclick="avatarCapturePhoto()"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Capture</button>
       </div>
       <div class="pb-controls" id="avatar-cam-controls-preview" style="display:none;">
         <button type="button" class="pb-btn secondary" onclick="avatarRetakePhoto()">&#8617; Retake</button>
@@ -1676,7 +1676,7 @@
         <div class="onboarding-radius-tier-markers">
           <div class="onboarding-radius-tier-marker reached">≤30mi Free</div>
           <div class="onboarding-radius-tier-marker">🔓 ≤50mi</div>
-          <div class="onboarding-radius-tier-marker">⭐ ≤100mi</div>
+          <div class="onboarding-radius-tier-marker"><img class="icon-inline" src="../assets/icons/star.png" alt=""> ≤100mi</div>
         </div>
       </div>
 
@@ -1694,7 +1694,7 @@
         <span class="form-label">Alcohol</span>
         <div class="pill-group" id="onb-alcohol-group">
           <div class="pill-option selected" data-value="Alcohol-Friendly" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title">🍷 Alcohol-Friendly</span><span class="pill-desc">Bars and drinks are fair game</span></div>
-          <div class="pill-option" data-value="Sober / Alcohol-Free" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title">🚫 Sober / Alcohol-Free</span><span class="pill-desc">Keep the whole route dry</span></div>
+          <div class="pill-option" data-value="Sober / Alcohol-Free" onclick="onbSelectPill(this,'onb-alcohol-group')"><span class="pill-title"><img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> Sober / Alcohol-Free</span><span class="pill-desc">Keep the whole route dry</span></div>
         </div>
       </div>
 
@@ -1820,7 +1820,7 @@
       </div>
       <div class="party-roster-wrap" id="party-roster-wrap" hidden>
         <div class="party-roster-header">
-          <span class="party-roster-title">🎉 Who's Playing</span>
+          <span class="party-roster-title"><img class="icon-inline" src="../assets/icons/party-popper.png" alt=""> Who's Playing</span>
           <button type="button" class="party-invite-btn" onclick="openInviteModal()">+ Invite</button>
         </div>
         <div class="party-roster-list" id="party-roster-list"></div>
@@ -1867,7 +1867,7 @@
       <h2><img class="icon-inline" src="../assets/icons/maps.png" alt=""> Maps</h2>
       <p class="adventure-sub" id="maps-sub">Every adventure you've taken, mapped out.</p>
       <div class="maps-filter-row" id="maps-filter-row">
-        <button type="button" class="maps-filter-pill active" data-filter="current" onclick="setMapsFilter('current')">📍 Current Adventure</button>
+        <button type="button" class="maps-filter-pill active" data-filter="current" onclick="setMapsFilter('current')"><img class="icon-inline" src="../assets/icons/pin.png" alt=""> Current Adventure</button>
         <button type="button" class="maps-filter-pill" data-filter="all" onclick="setMapsFilter('all')"><img class="icon-inline" src="../assets/icons/past-adventures.png" alt=""> All My Adventures</button>
         <button type="button" class="maps-filter-pill" data-filter="master" onclick="setMapsFilter('master')">🌎 Master View</button>
       </div>
@@ -2005,7 +2005,7 @@
     <span class="pb-close" style="position:absolute; top:14px; right:14px;" onclick="closeTriviaBreak()">&times;</span>
     <div class="photobooth-header" style="justify-content:space-between; padding-right:30px;">
       <span><img class="icon-inline" src="../assets/icons/trivia.png" alt=""> Trivia Break</span>
-      <button type="button" class="trivia-change-category-btn" onclick="renderTriviaCategoryPicker()">🔀 Category</button>
+      <button type="button" class="trivia-change-category-btn" onclick="renderTriviaCategoryPicker()"><img class="icon-inline" src="../assets/icons/shuffle.png" alt=""> Category</button>
     </div>
     <div id="trivia-body"><div class="trivia-empty">Getting your question ready…</div></div>
   </div>
@@ -2023,8 +2023,8 @@
       <div id="invite-qr-canvas-wrap"></div>
       <div class="party-invite-hint" id="invite-code-hint">Generating your invite code…</div>
       <div class="party-invite-share-row">
-        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('text')">💬 Text a Friend</button>
-        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('email')">✉️ Email a Friend</button>
+        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('text')"><img class="icon-inline" src="../assets/icons/speech-bubble.png" alt=""> Text a Friend</button>
+        <button type="button" class="party-invite-share-btn" onclick="shareInviteVia('email')"><img class="icon-inline" src="../assets/icons/envelope.png" alt=""> Email a Friend</button>
       </div>
     </div>
     <div class="party-invite-panel" id="invite-panel-scan" hidden>
@@ -2242,7 +2242,7 @@
         card.querySelector('.fork-choice-actions')?.insertAdjacentElement('beforebegin', note);
       }
       if (note) {
-        if (blocked) { note.textContent = !gate.open ? '🚫 Currently closed' : '⏰ Closing soon'; note.style.display = ''; }
+        if (blocked) { note.innerHTML = !gate.open ? '<img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> Currently closed' : '<img class="icon-inline" src="../assets/icons/alarm-clock.png" alt=""> Closing soon'; note.style.display = ''; }
         else note.style.display = 'none';
       }
     });
@@ -2260,7 +2260,7 @@
         btn.insertAdjacentElement('beforebegin', note);
       }
       if (note) {
-        if (blocked) { note.textContent = !gate.open ? '🚫 This venue is currently closed' : '⏰ Closing soon'; note.style.display = ''; }
+        if (blocked) { note.innerHTML = !gate.open ? '<img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> This venue is currently closed' : '<img class="icon-inline" src="../assets/icons/alarm-clock.png" alt=""> Closing soon'; note.style.display = ''; }
         else note.style.display = 'none';
       }
     });
@@ -3123,7 +3123,7 @@
         const row = payload.new;
         const who = memberNameById(row.checked_in_by);
         const where = stopNameById(row.route_stop_id);
-        const photoNote = row.photo_url ? ' 📸' : '';
+        const photoNote = row.photo_url ? ' <img class="icon-inline" src="../assets/icons/checkin-photo.png" alt="">' : '';
         addPartyFeedItem(`<strong>${who}</strong>&nbsp;checked in at ${where}${photoNote}`);
         loadPartyRoster();
         // A teammate's check-in can reveal the next stop (advance()) or
@@ -3567,7 +3567,7 @@
     document.getElementById('minigame-detail-desc').textContent = g.desc;
     const ctaEl = document.getElementById('minigame-detail-cta');
     if (g.comingSoon) {
-      ctaEl.innerHTML = `<div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 Coming soon</div>`;
+      ctaEl.innerHTML = `<div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> Coming soon</div>`;
     } else if (unlocked && key === 'heads_or_tails') {
       // First card-open for The Flip offers both modes up front: the
       // existing solo prompt-picker flow, or challenging a party member —
@@ -3580,15 +3580,15 @@
         <p style="opacity:0.6; font-size:0.74rem; margin:10px 0 0;">Challenge mode: you both race to call heads or tails, first pick wins that side.</p>
       `;
     } else if (unlocked) {
-      ctaEl.innerHTML = `<button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); playMinigame('${key}');">▶ Play ${g.title}</button>`;
+      ctaEl.innerHTML = `<button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); playMinigame('${key}');"><img class="icon-inline" src="../assets/icons/play.png" alt=""> Play ${g.title}</button>`;
     } else if (!currentSession) {
       ctaEl.innerHTML = `
-        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 Sign in to play</div>
+        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> Sign in to play</div>
         <button type="button" class="pb-btn primary" style="width:100%;" onclick="closeMinigameDetail(); document.getElementById('signin-email')?.focus();">Sign in</button>
       `;
     } else {
       ctaEl.innerHTML = `
-        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;">🔒 ${g.lockedHint}</div>
+        <div style="opacity:0.7; margin-bottom:12px; font-size:0.88rem;"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> ${g.lockedHint}</div>
         ${g.cost ? `<button type="button" class="pb-btn primary" style="width:100%;" onclick="unlockMinigame('${key}');"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
       `;
     }
@@ -3709,7 +3709,7 @@
       }).join('');
 
       const venuesHtml = venues.length
-        ? `<div class="past-adv-venues">${venues.map((v) => `<span class="past-adv-venue-chip">📍 ${esc(v)}</span>`).join('')}</div>`
+        ? `<div class="past-adv-venues">${venues.map((v) => `<span class="past-adv-venue-chip"><img class="icon-inline" src="../assets/icons/pin.png" alt=""> ${esc(v)}</span>`).join('')}</div>`
         : '';
 
       const badgesHtml = badges.length
@@ -3720,7 +3720,7 @@
         ? `<div class="past-adv-reviews">${reviews.map((r) => `
             <div class="past-adv-review-item">
               <span class="past-adv-review-stop">${esc(r.stopName)}</span>
-              <span class="past-adv-review-rating">🎯 ${r.rating}/10</span>
+              <span class="past-adv-review-rating"><img class="icon-inline" src="../assets/icons/dart.png" alt=""> ${r.rating}/10</span>
               ${r.review_text ? `<div class="past-adv-review-text">${esc(r.review_text)}</div>` : ''}
             </div>
           `).join('')}</div>`
@@ -3922,7 +3922,7 @@
     grid.innerHTML = MINIGAMES_CONFIG.map((g) => {
       const unlocked = !g.comingSoon && !!currentSession && unlockedMinigameKeys.has(g.key);
       const featuredCls = g.featured ? ' featured' : '';
-      const featuredBadge = g.featured ? '<div class="minigame-featured-badge">⭐ Featured</div>' : '';
+      const featuredBadge = g.featured ? '<div class="minigame-featured-badge"><img class="icon-inline" src="../assets/icons/star.png" alt=""> Featured</div>' : '';
       if (g.comingSoon) {
         return `
           <div class="minigame-card locked${featuredCls}">
@@ -3930,7 +3930,7 @@
             <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
             <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
-            <div class="minigame-status">🔒 Coming soon</div>
+            <div class="minigame-status"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> Coming soon</div>
           </div>
         `;
       }
@@ -3941,7 +3941,7 @@
             <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
             <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
-            <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')">▶ Play</button>
+            <button type="button" class="minigame-play-btn" onclick="event.stopPropagation(); playMinigame('${g.key}')"><img class="icon-inline" src="../assets/icons/play.png" alt=""> Play</button>
           </div>
         `;
       }
@@ -3952,7 +3952,7 @@
             <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
             <div class="minigame-title">${g.tagline}</div>
             <div class="minigame-desc">${g.desc}</div>
-            <div class="minigame-status">🔒 Sign in to play</div>
+            <div class="minigame-status"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> Sign in to play</div>
           </div>
         `;
       }
@@ -3962,7 +3962,7 @@
           <img class="minigame-icon" src="../assets/minigames/${g.icon}" alt="${g.title}">
           <div class="minigame-title">${g.tagline}</div>
           <div class="minigame-desc">${g.desc}</div>
-          <div class="minigame-status">🔒 ${g.lockedHint}</div>
+          <div class="minigame-status"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> ${g.lockedHint}</div>
           ${g.cost ? `<button type="button" class="minigame-unlock-btn" onclick="event.stopPropagation(); unlockMinigame('${g.key}')"><img class="icon-inline" src="../assets/icons/coin.png" alt=""> Unlock for ${g.cost}</button>` : ''}
         </div>
       `;
@@ -4341,7 +4341,7 @@
     // works even for a player who's never started anything yet).
     const inviteFriendsCta = `
       <div class="invite-friends-cta">
-        <button type="button" class="party-invite-btn" onclick="openInviteModal()">👥 Invite Friends</button>
+        <button type="button" class="party-invite-btn" onclick="openInviteModal()"><img class="icon-inline" src="../assets/icons/people.png" alt=""> Invite Friends</button>
         <div class="rvc-desc">Explore together, or go solo, your call.</div>
       </div>
     `;
@@ -4385,7 +4385,7 @@
         kindClass: 'curated',
         bodyHtml: `
           <div class="rp-desc">${r.description || ''}</div>
-          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, 🔒 unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
+          <div class="rp-meta">${capped ? `${unlockedStopCount} of ${total} stops, <img class="icon-inline" src="../assets/icons/lock.png" alt=""> unlock the rest once you're on the adventure` : `${total} stop${total === 1 ? '' : 's'}`}</div>
           <button type="button" class="start-adv-btn" onclick="startAdventure('${r.id}')">Start This Adventure</button>
         `,
       };
@@ -4403,7 +4403,7 @@
         <div class="adv-acc-header featured-header">
           ${advIconOrEmoji(item)}
           <span class="adv-acc-name">${item.name}</span>
-          <span class="featured-badge">⭐ Featured</span>
+          <span class="featured-badge"><img class="icon-inline" src="../assets/icons/star.png" alt=""> Featured</span>
         </div>
         <div class="adv-acc-body-wrap"><div class="adv-acc-body">${item.bodyHtml}</div></div>
       </div>
@@ -4616,7 +4616,7 @@
     const cIdArg = containerId ? `'${containerId}'` : 'null';
     return [2, 3, 4, 5].map((n) => {
       if (n > unlockedStopCount) {
-        return `<button type="button" class="rvc-sc-pill locked" onclick="handleLockedStopPill('${key}', ${n}, ${cIdArg})" title="Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock up to ${EXTRA_STOPS_STOP_COUNT} stops">🔒${n}</button>`;
+        return `<button type="button" class="rvc-sc-pill locked" onclick="handleLockedStopPill('${key}', ${n}, ${cIdArg})" title="Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock up to ${EXTRA_STOPS_STOP_COUNT} stops"><img class="icon-inline" src="../assets/icons/lock.png" alt="">${n}</button>`;
       }
       return `<button type="button" class="rvc-sc-pill${chosen === n ? ' active' : ''}" onclick="setStopCountChoice('${key}', ${n}, this, ${cIdArg})" title="${n} stops">${n}</button>`;
     }).join('');
@@ -4709,7 +4709,7 @@
     const body = document.getElementById('adventure-body');
     body.innerHTML = themeEntry
       ? `<div class="empty-state">${themeEntry.emoji} Finding your first stop for your ${themeEntry.title}…</div>`
-      : '<div class="empty-state">🎲 Chancing your luck, finding your first real venue…</div>';
+      : '<div class="empty-state"><img class="icon-inline" src="../assets/icons/dice.png" alt=""> Chancing your luck, finding your first real venue…</div>';
     // beginAdventureCountdown() already scrolled to #adventure-section
     // before the countdown played, but the full-screen countdown overlay
     // sitting on top for ~2.6s gives plenty of time for scroll position to
@@ -4979,7 +4979,7 @@
         const expandedCardHtml = (c) => {
           const theme = c.theme || { key: 'local', label: 'Local Pick', emoji: '📍', color: '#2a2438' };
           const safeName = (c.name || '').replace(/'/g, "\\'");
-          const meta = [c.rating != null ? `⭐ ${c.rating}` : '', musoBadgeText(c), c.category || ''].filter(Boolean).join(' · ');
+          const meta = [c.rating != null ? `<img class="icon-inline" src="../assets/icons/star.png" alt=""> ${c.rating}` : '', musoBadgeText(c), c.category || ''].filter(Boolean).join(' · ');
           const photoHtml = c.image_url
             ? `<div class="fork-choice-photo-wrap"><img src="${attrEsc(c.image_url)}" alt="" onerror="this.parentElement.style.display='none';"></div>`
             : '';
@@ -4992,7 +4992,7 @@
           const shouldBlock = !gate.open || gate.closingSoon;
           const disabledAttr = shouldBlock ? 'disabled' : '';
           const noteHtml = shouldBlock
-            ? `<div class="venue-hours-note">${!gate.open ? '🚫 Currently closed' : '⏰ Closing soon'}</div>`
+            ? `<div class="venue-hours-note">${!gate.open ? '<img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> Currently closed' : '<img class="icon-inline" src="../assets/icons/alarm-clock.png" alt=""> Closing soon'}</div>`
             : '';
           return `
             <div class="fork-stack-card expanded" style="--theme-color:${theme.color};" ${cardAttrs(c, theme)}>
@@ -5004,7 +5004,7 @@
               ${noteHtml}
               <div class="fork-choice-actions">
                 <button type="button" class="fork-choose-btn" ${disabledAttr} onclick="chooseStop('${s.id}', '${c.id}')">Choose ${safeName}</button>
-                <button type="button" class="fork-spin-btn" data-stop-id="${s.id}" onclick="spinForkCard('${s.id}')">🎲 Spin</button>
+                <button type="button" class="fork-spin-btn" data-stop-id="${s.id}" onclick="spinForkCard('${s.id}')"><img class="icon-inline" src="../assets/icons/dice.png" alt=""> Spin</button>
               </div>
             </div>
           `;
@@ -5050,17 +5050,17 @@
         const safeName = (s.name || 'this stop').replace(/'/g, "\\'");
         const hasPhoto = !!pendingPhotoCaptures[s.id];
         const photoControl = hasPhoto
-          ? `<span class="photo-ready-badge" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Photo ready &check;</span>`
-          : `<button type="button" class="photo-add-btn" onclick="openPhotoBooth('${s.id}', '${safeName}')">📸 Add photo (+${CHECKIN_PHOTO_COINS} coins)</button>`;
+          ? `<span class="photo-ready-badge" onclick="openPhotoBooth('${s.id}', '${safeName}')"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Photo ready &check;</span>`
+          : `<button type="button" class="photo-add-btn" onclick="openPhotoBooth('${s.id}', '${safeName}')"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Add photo (+${CHECKIN_PHOTO_COINS} coins)</button>`;
         const testControl = TEST_MODE
-          ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')">🧪 Test check-in (skip photo)</span>`
+          ? `<span class="test-mode-link" onclick="checkInStop('${s.id}')"><img class="icon-inline" src="../assets/icons/test-tube.png" alt=""> Test check-in (skip photo)</span>`
           : '';
         // Staff-only: lets whoever's onboarding a venue actually produce the
         // physical QR code it needs to post, without a separate admin tool —
         // generates the same payload venueScanTick()/handleScannedVenueQr()
         // decode, right from the stop that's currently pointed at that venue.
         const adminQrControl = (currentProfile?.is_admin && s.venue_id)
-          ? `<span class="test-mode-link" onclick="openVenueQrAdmin('${s.venue_id}', '${safeName}')">🖨️ Get venue QR</span>`
+          ? `<span class="test-mode-link" onclick="openVenueQrAdmin('${s.venue_id}', '${safeName}')"><img class="icon-inline" src="../assets/icons/printer.png" alt=""> Get venue QR</span>`
           : '';
         // Hours gating only applies to real-venue/Wine Country stops —
         // curated venues have no hours data at all (s.hours is always
@@ -5070,7 +5070,7 @@
         const checkinGate = isRealVenue ? isOpenOrClosingSoon(s.hours) : { open: true, closingSoon: false };
         const checkinBlocked = !checkinGate.open || checkinGate.closingSoon;
         const checkinNoteHtml = checkinBlocked
-          ? `<div class="venue-hours-note">${!checkinGate.open ? '🚫 This venue is currently closed' : '⏰ Closing soon'}</div>`
+          ? `<div class="venue-hours-note">${!checkinGate.open ? '<img class="icon-inline" src="../assets/icons/no-entry.png" alt=""> This venue is currently closed' : '<img class="icon-inline" src="../assets/icons/alarm-clock.png" alt=""> Closing soon'}</div>`
           : '';
         status = `
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;" data-hours="${(s.hours ? JSON.stringify(s.hours) : '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
@@ -5082,7 +5082,7 @@
           </div>
         `;
       }
-      else status = `<span class="is-status" style="opacity:0.5;">🔒 Locked</span>`;
+      else status = `<span class="is-status" style="opacity:0.5;"><img class="icon-inline" src="../assets/icons/lock.png" alt=""> Locked</span>`;
       return `
         <div class="itinerary-stop ${isDone ? 'done' : ''} ${locked ? 'locked' : ''}">
           <div class="is-emoji">${s.emoji || '📍'}</div>
@@ -5100,7 +5100,7 @@
     // tier-level cap on how many stops this adventure includes at all.
     const tierLockHtml = stopsLocked ? `
       <div class="stop-tier-lock">
-        <div class="stop-tier-lock-icon">🔒</div>
+        <div class="stop-tier-lock-icon"><img class="icon-inline" src="../assets/icons/lock.png" alt=""></div>
         <div class="stop-tier-lock-body">
           <div class="stop-tier-lock-title">${totalStops - unlockedStopCount} more stop${totalStops - unlockedStopCount === 1 ? '' : 's'} available</div>
           <div class="stop-tier-lock-desc">Your free adventure includes ${unlockedStopCount} stops. Reach Level ${EXTRA_STOPS_LEVEL} or spend ${EXTRA_STOPS_COST} Adventure Coins to unlock all ${EXTRA_STOPS_STOP_COUNT}.</div>
@@ -5178,7 +5178,7 @@
         <div class="summary-stat"><div class="num">${sessionBadges.length}</div><div class="label">New badge${sessionBadges.length === 1 ? '' : 's'}</div></div>
       </div>
       ${badgesHtml}
-      <div style="font-family:'Fredoka',sans-serif; font-weight:700; margin:16px 0 8px;">📸 Your adventure</div>
+      <div style="font-family:'Fredoka',sans-serif; font-weight:700; margin:16px 0 8px;"><img class="icon-inline" src="../assets/icons/checkin-photo.png" alt=""> Your adventure</div>
       ${photoGridHtml}
     `;
   }
@@ -5339,7 +5339,7 @@
       alert("This browser doesn't support location. Try scanning the venue's QR code instead.");
       return;
     }
-    choiceEl.innerHTML = '<div class="pb-hint">📍 Finding your location…</div>';
+    choiceEl.innerHTML = '<div class="pb-hint"><img class="icon-inline" src="../assets/icons/pin.png" alt=""> Finding your location…</div>';
     const stopId = venueCheckinStopId;
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -5910,7 +5910,7 @@
       spinBtn.blur();
       spinBtn.disabled = true;
       spinBtn.classList.add('spinning');
-      spinBtn.textContent = '🎲 Spinning…';
+      spinBtn.innerHTML = '<img class="icon-inline" src="../assets/icons/dice.png" alt=""> Spinning…';
     }
     const chooseBtn = expandedCard?.querySelector('.fork-choose-btn');
     if (chooseBtn) {
