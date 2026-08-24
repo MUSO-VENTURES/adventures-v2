@@ -168,6 +168,11 @@
   }
   .u-cost.subscriber-only{ color:var(--plum); }
   .icon-inline{ height:1em; width:auto; vertical-align:-0.15em; display:inline-block; }
+  /* Section heading icons (e.g. the coin next to "What can coins actually
+     do?") get their own fixed size instead of 1em — at heading font-size
+     the wreath/star detail in the custom icons disappears and they read
+     as a plain dot. */
+  .section-heading h2 .icon-inline{ height:44px; vertical-align:-10px; }
 
   /* ---------- COIN PACKS ---------- */
   .pack-grid{
